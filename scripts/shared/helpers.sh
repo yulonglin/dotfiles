@@ -2157,6 +2157,9 @@ parse_args() {
             --ascii=*)
                 DEPLOY_ASCII_FILE="${1#*=}"
                 ;;
+            --claude-memory=*)
+                DEPLOY_CLAUDE_MEMORY="${1#*=}"
+                ;;
             --aliases=*)
                 IFS=',' read -r -a DEPLOY_ALIASES <<< "${1#*=}"
                 ;;

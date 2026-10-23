@@ -125,6 +125,10 @@ COMPONENTS:
     --append          Append to existing configs instead of overwrite
     --ascii=NAME      Shell-startup art from config/ascii_arts/ (balloon_girl, cat, cat2, corgi, dog, paw, paw3, stars, waves3);
                       none removes it. Off by default; the choice persists across deploys
+    --claude-memory=MODE
+                      Global Claude memory tier for claude() launches: full (default),
+                      minimal (no ~/.claude/rules), none (no rules, no global
+                      CLAUDE.md, no auto memory). Persists; `claude-memory` flips it later
     --no-<component>  Disable a component (e.g., --no-editor)
     --allow-worktree  Deploy even though DOT_DIR is a git worktree. Refused by
                       default: it repoints ~/.claude and ~20 other user symlinks
@@ -977,7 +981,17 @@ else:
     fi
 fi
 
-# ─── Codex ────────────────────────────────────────────────────────────────────
+# Per-machine state like --ascii: only an explicit --claude-memory touches it,
+# and it runs whichever components are selected, since it only writes a state file.
+if [[ -n "$DEPLOY_CLAUDE_MEMORY" ]]; then
+    if "$DOT_DIR/custom_bins/claude-memory" "$DEPLOY_CLAUDE_MEMORY"; then
+        log_info "Claude memory tier: $DEPLOY_CLAUDE_MEMORY (claude-memory status for sizes)"
+    else
+        log_warning "Unknown --claude-memory '$DEPLOY_CLAUDE_MEMORY' — want full, minimal or none"
+    fi
+fi
+
+# ─── Codex────────────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_CODEX" == "true" ]]; then
     log_section "DEPLOYING CODEX CLI CONFIGURATION"
