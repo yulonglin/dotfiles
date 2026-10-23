@@ -49,7 +49,11 @@ prompt-legend() {
   $row $untracked             "?N untracked"      "files git has never tracked: not staged, in no commit"
   $row $conflicted            "~N conflicts"      "files with merge conflicts to fix"
   $row "${in_repo:+$VCS_STATUS_ACTION}" "<op> in progress" "a merge, rebase or cherry-pick is not finished"
-  $row ""                     "wip"               "the last commit message says WIP"
+  local lines=
+  [[ -n $in_repo && -n $_my_git_diffstat && $_my_git_diffstat_dir == ${VCS_STATUS_WORKDIR:A} ]] &&
+    (( staged + unstaged )) && lines="+${_my_git_diffstat[(w)1]} −${_my_git_diffstat[(w)2]}"
+  $row "$lines"               "+N −M lines"       "lines added/removed vs last commit, like GitHub (untracked not counted)"
+  $row ""                     "wip"              "the last commit message says WIP"
   $row ""                     "─ unknown"         "repo too big to count changes"
   $row ""                     ":other-branch"     "the remote branch, when its name differs from yours"
   $row ""                     "#tag  @1a2b3c4d"   "shown instead of a branch when HEAD is detached"

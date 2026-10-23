@@ -465,12 +465,53 @@
     # in this case.
     (( VCS_STATUS_HAS_UNSTAGED == -1 )) && parts+=("${modified}─${w:+ unknown}")
 
+    # +108 −27 lines: diff size against HEAD (staged + modified, not untracked), as
+    # GitHub counts it. Wide terminals only; computed by _my_git_diffstat_start below.
+    if [[ -n $w && -n $_my_git_diffstat && $_my_git_diffstat_dir == ${VCS_STATUS_WORKDIR:A} ]] &&
+       (( VCS_STATUS_NUM_STAGED + VCS_STATUS_NUM_UNSTAGED )); then
+      parts+=("${clean}+${_my_git_diffstat[(w)1]} ${conflicted}−${_my_git_diffstat[(w)2]} ${meta}lines")
+    fi
+
     local sep=" ${w:+${meta}· }"
     (( $#parts )) && res+="${sep}${(pj:$sep:)parts}"
 
     typeset -g my_git_format=$res
   }
   functions -M my_git_formatter 2>/dev/null
+
+  # Lines changed for my_git_formatter. gitstatus counts files, not lines, and a
+  # synchronous `git diff` would stall every prompt in a big repo, so after each
+  # command the diff runs in the background and the prompt redraws when it lands.
+  # The result is "INSERTIONS DELETIONS" for the repo in _my_git_diffstat_dir.
+  typeset -g _my_git_diffstat= _my_git_diffstat_dir=
+  typeset -gi _my_git_diffstat_fd=0
+  function _my_git_diffstat_start() {
+    # Words (and so line counts) only show at 100+ columns; one diff at a time.
+    (( COLUMNS >= 100 && ! _my_git_diffstat_fd )) || return
+    exec {_my_git_diffstat_fd}< <(
+      command git rev-parse --show-toplevel 2>/dev/null || print
+      GIT_OPTIONAL_LOCKS=0 command git diff --shortstat HEAD 2>/dev/null
+    )
+    zle -F $_my_git_diffstat_fd _my_git_diffstat_done
+  }
+  function _my_git_diffstat_done() {
+    emulate -L zsh
+    local fd=$1 dir stat ins=0 del=0
+    zle -F $fd
+    IFS= read -r -u $fd dir
+    IFS= read -r -u $fd stat
+    exec {fd}<&-
+    _my_git_diffstat_fd=0
+    [[ $stat =~ '([0-9]+) insertion' ]] && ins=$match[1]
+    [[ $stat =~ '([0-9]+) deletion' ]] && del=$match[1]
+    local new=${stat:+$ins $del}
+    dir=${dir:+${dir:A}}  # symlink-free, to compare with ${VCS_STATUS_WORKDIR:A}
+    [[ $new == $_my_git_diffstat && $dir == $_my_git_diffstat_dir ]] && return
+    typeset -g _my_git_diffstat=$new _my_git_diffstat_dir=$dir
+    p10k display -r
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _my_git_diffstat_start
 
   # Don't count the number of unstaged, untracked and conflicted files in Git repositories with
   # more than this many files in the index. Negative value means infinity.
