@@ -45,7 +45,7 @@ prompt-legend() {
   $row $ahead                 "⇡N to push"        "your commits not on the remote yet (git push)"
   $row $(( pbehind + pahead )) "⇠N / ⇢N"           "the same, against a separate push remote (a fork)"
   $row $staged                "+N staged"         "files staged: they go into the next commit"
-  $row $unstaged              "!N edited"         "tracked files changed but not staged (git add)"
+  $row $unstaged              "!N modified"       "tracked files changed but not staged (git add)"
   $row $untracked             "?N untracked"      "files git has never tracked: not staged, in no commit"
   $row $conflicted            "~N conflicts"      "files with merge conflicts to fix"
   $row "${in_repo:+$VCS_STATUS_ACTION}" "<op> in progress" "a merge, rebase or cherry-pick is not finished"

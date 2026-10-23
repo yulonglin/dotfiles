@@ -358,7 +358,7 @@
 
   # Formatter for Git status.
   #
-  # Example output: main · ⇡2 to push · +1 staged · !3 edited · ?1 untracked.
+  # Example output: main · ⇡2 to push · +1 staged · !3 modified · ?1 untracked.
   #
   # You can edit the function to customize how Git status looks.
   #
@@ -452,8 +452,8 @@
     (( VCS_STATUS_NUM_CONFLICTED )) && parts+=("${conflicted}~${VCS_STATUS_NUM_CONFLICTED}${w:+ conflict${${VCS_STATUS_NUM_CONFLICTED:#1}:+s}}")
     # +42 staged if have staged changes.
     (( VCS_STATUS_NUM_STAGED     )) && parts+=("${modified}+${VCS_STATUS_NUM_STAGED}${w:+ staged}")
-    # !42 edited if have unstaged changes to tracked files.
-    (( VCS_STATUS_NUM_UNSTAGED   )) && parts+=("${modified}!${VCS_STATUS_NUM_UNSTAGED}${w:+ edited}")
+    # !42 modified if have unstaged changes to tracked files.
+    (( VCS_STATUS_NUM_UNSTAGED   )) && parts+=("${modified}!${VCS_STATUS_NUM_UNSTAGED}${w:+ modified}")
     # ?42 untracked if have untracked files. It's really a question mark, your font isn't broken.
     # See POWERLEVEL9K_VCS_UNTRACKED_ICON above if you want to use a different icon.
     # Remove the next line if you don't want to see untracked files at all.
