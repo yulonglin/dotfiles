@@ -486,6 +486,7 @@
   typeset -g _my_git_diffstat= _my_git_diffstat_dir=
   typeset -gi _my_git_diffstat_fd=0
   function _my_git_diffstat_start() {
+    emulate -L zsh -o extended_glob
     # Words (and so line counts) only show at 100+ columns; one diff at a time.
     (( COLUMNS >= 100 && ! _my_git_diffstat_fd )) || return
     # One write at the end: zle -F fires once the fd is readable, so printing the
@@ -495,7 +496,10 @@
     # fsmonitor hook, external diff, textconv. Filter drivers have no such flag:
     # a clean filter defined at repo level is replaced by `cat` for this diff, and
     # a repo-level long-running process filter makes us skip the repo. Global and
-    # system filters (git-lfs) are yours and stay trusted.
+    # system filters (git-lfs) are yours and stay trusted. A filter name that a
+    # `-c key=value` override cannot spell exactly is treated like a process filter.
+    # Submodules are ignored (their own config would apply inside them), and lazy
+    # fetches are off, so a partial clone never starts a transport from its config.
     exec {_my_git_diffstat_fd}< <(
       local top stat line key
       local -a filters overrides
@@ -506,11 +510,12 @@
           --get-regexp '^filter\..*\.(clean|process)$' 2>/dev/null)"})
         for line in ${filters:#(global|system)$'\t'*}; do
           key=${${line#*$'\t'}%% *}
-          [[ $key == *.process ]] && { print -r -- "$top"$'\n'; exit }
+          [[ $key == filter.[A-Za-z0-9._-]##.clean ]] || { print -r -- "$top"$'\n'; exit }
           overrides+=(-c "$key=cat")
         done
-        stat=$(GIT_OPTIONAL_LOCKS=0 command git -c core.fsmonitor=false $overrides \
-          diff --no-ext-diff --no-textconv --shortstat HEAD 2>/dev/null)
+        stat=$(GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 command git \
+          -c core.fsmonitor=false -c protocol.allow=never $overrides \
+          diff --no-ext-diff --no-textconv --ignore-submodules=all --shortstat HEAD 2>/dev/null)
       fi
       print -r -- "$top"$'\n'"$stat"
     )
