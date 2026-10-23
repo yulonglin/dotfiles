@@ -358,7 +358,7 @@
 
   # Formatter for Git status.
   #
-  # Example output: master wip ⇣42⇡42 *42 merge ~42 +42 !42 ?42.
+  # Example output: main · ⇡2 to push · +1 staged · !3 edited · ?1 new.
   #
   # You can edit the function to customize how Git status looks.
   #
@@ -424,41 +424,45 @@
       res+="${meta}:${clean}${(V)VCS_STATUS_REMOTE_BRANCH//\%/%%}"
     fi
 
-    # Display "wip" if the latest commit's summary contains "wip" or "WIP".
+    # Status parts: a symbol to scan plus a word to read, joined by " · "; only the
+    # non-zero ones show. `prompt-legend` (config/aliases/prompt.sh) explains each
+    # one against the live prompt, so keep its key in step with this list.
+    local -a parts
+
+    # 'wip' if the latest commit's summary contains "wip" or "WIP".
     if [[ $VCS_STATUS_COMMIT_SUMMARY == (|*[^[:alnum:]])(wip|WIP)(|[^[:alnum:]]*) ]]; then
-      res+=" ${modified}wip"
+      parts+=("${modified}wip")
     fi
 
-    # ⇣42 if behind the remote.
-    (( VCS_STATUS_COMMITS_BEHIND )) && res+=" ${clean}⇣${VCS_STATUS_COMMITS_BEHIND}"
-    # ⇡42 if ahead of the remote; no leading space if also behind the remote: ⇣42⇡42.
-    (( VCS_STATUS_COMMITS_AHEAD && !VCS_STATUS_COMMITS_BEHIND )) && res+=" "
-    (( VCS_STATUS_COMMITS_AHEAD  )) && res+="${clean}⇡${VCS_STATUS_COMMITS_AHEAD}"
-    # ⇠42 if behind the push remote.
-    (( VCS_STATUS_PUSH_COMMITS_BEHIND )) && res+=" ${clean}⇠${VCS_STATUS_PUSH_COMMITS_BEHIND}"
-    (( VCS_STATUS_PUSH_COMMITS_AHEAD && !VCS_STATUS_PUSH_COMMITS_BEHIND )) && res+=" "
-    # ⇢42 if ahead of the push remote; no leading space if also behind: ⇠42⇢42.
-    (( VCS_STATUS_PUSH_COMMITS_AHEAD  )) && res+="${clean}⇢${VCS_STATUS_PUSH_COMMITS_AHEAD}"
+    # ⇣42 to pull / ⇡42 to push against the upstream branch.
+    (( VCS_STATUS_COMMITS_BEHIND )) && parts+=("${clean}⇣${VCS_STATUS_COMMITS_BEHIND} to pull")
+    (( VCS_STATUS_COMMITS_AHEAD  )) && parts+=("${clean}⇡${VCS_STATUS_COMMITS_AHEAD} to push")
+    # ⇠42 / ⇢42 against the push remote, when it differs from the upstream (a fork).
+    (( VCS_STATUS_PUSH_COMMITS_BEHIND )) && parts+=("${clean}⇠${VCS_STATUS_PUSH_COMMITS_BEHIND} behind push remote")
+    (( VCS_STATUS_PUSH_COMMITS_AHEAD  )) && parts+=("${clean}⇢${VCS_STATUS_PUSH_COMMITS_AHEAD} ahead of push remote")
     # *42 if have stashes (disabled — not useful for this workflow).
-    # (( VCS_STATUS_STASHES        )) && res+=" ${clean}*${VCS_STATUS_STASHES}"
-    # 'merge' if the repo is in an unusual state.
-    [[ -n $VCS_STATUS_ACTION     ]] && res+=" ${conflicted}${VCS_STATUS_ACTION}"
-    # ~42 if have merge conflicts.
-    (( VCS_STATUS_NUM_CONFLICTED )) && res+=" ${conflicted}~${VCS_STATUS_NUM_CONFLICTED}"
-    # +42 if have staged changes.
-    (( VCS_STATUS_NUM_STAGED     )) && res+=" ${modified}+${VCS_STATUS_NUM_STAGED}"
-    # !42 if have unstaged changes.
-    (( VCS_STATUS_NUM_UNSTAGED   )) && res+=" ${modified}!${VCS_STATUS_NUM_UNSTAGED}"
-    # ?42 if have untracked files. It's really a question mark, your font isn't broken.
+    # (( VCS_STATUS_STASHES        )) && parts+=("${clean}*${VCS_STATUS_STASHES} stashed")
+    # 'merge in progress', 'rebase-i in progress' etc. if the repo is in an unusual state.
+    [[ -n $VCS_STATUS_ACTION     ]] && parts+=("${conflicted}${VCS_STATUS_ACTION} in progress")
+    # ~42 conflicts if have merge conflicts.
+    (( VCS_STATUS_NUM_CONFLICTED )) && parts+=("${conflicted}~${VCS_STATUS_NUM_CONFLICTED} conflict${${VCS_STATUS_NUM_CONFLICTED:#1}:+s}")
+    # +42 staged if have staged changes.
+    (( VCS_STATUS_NUM_STAGED     )) && parts+=("${modified}+${VCS_STATUS_NUM_STAGED} staged")
+    # !42 edited if have unstaged changes to tracked files.
+    (( VCS_STATUS_NUM_UNSTAGED   )) && parts+=("${modified}!${VCS_STATUS_NUM_UNSTAGED} edited")
+    # ?42 new if have untracked files. It's really a question mark, your font isn't broken.
     # See POWERLEVEL9K_VCS_UNTRACKED_ICON above if you want to use a different icon.
     # Remove the next line if you don't want to see untracked files at all.
-    (( VCS_STATUS_NUM_UNTRACKED  )) && res+=" ${untracked}${(g::)POWERLEVEL9K_VCS_UNTRACKED_ICON}${VCS_STATUS_NUM_UNTRACKED}"
-    # "─" if the number of unstaged files is unknown. This can happen due to
+    (( VCS_STATUS_NUM_UNTRACKED  )) && parts+=("${untracked}${(g::)POWERLEVEL9K_VCS_UNTRACKED_ICON}${VCS_STATUS_NUM_UNTRACKED} new")
+    # "─ unknown" if the number of unstaged files is unknown. This can happen due to
     # POWERLEVEL9K_VCS_MAX_INDEX_SIZE_DIRTY (see below) being set to a non-negative number lower
     # than the number of files in the Git index, or due to bash.showDirtyState being set to false
     # in the repository config. The number of staged and untracked files may also be unknown
     # in this case.
-    (( VCS_STATUS_HAS_UNSTAGED == -1 )) && res+=" ${modified}─"
+    (( VCS_STATUS_HAS_UNSTAGED == -1 )) && parts+=("${modified}─ unknown")
+
+    local sep=" ${meta}· "
+    (( $#parts )) && res+="${sep}${(pj:$sep:)parts}"
 
     typeset -g my_git_format=$res
   }

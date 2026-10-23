@@ -58,8 +58,10 @@ Patterns support wildcards (`prod*` matches `prod1`, `prod-web`, etc.); the `def
 | --------------- | -------------------------------------------------------- |
 | **Remote host** | Machine name + emoji (SSH sessions only)                 |
 | **Directory**   | Current path with git root highlighting                  |
-| **Git status**  | Branch, dirty indicator, stash count                     |
+| **Git status**  | Branch, then each non-zero count as symbol plus word: `main · ⇡1 to push · +2 staged · !1 edited · ?3 new` |
 | **Right side**  | Exit code, command duration, Python venv, cloud contexts |
+
+Run `prompt-legend` (`config/aliases/prompt.sh`) to see what each part of the current prompt means: rows the prompt shows now are lit with their live value, the rest of the key is grey. `p10k configure` overwrites `my_git_formatter` in `config/p10k.zsh`, so re-apply the symbol-plus-word parts after reconfiguring.
 
 ### SSH-Aware Machine Identification
 
