@@ -490,13 +490,28 @@
     (( COLUMNS >= 100 && ! _my_git_diffstat_fd )) || return
     # One write at the end: zle -F fires once the fd is readable, so printing the
     # toplevel before the diff ends would leave the handler blocked in read.
-    # The -c/--no-* flags stop a cloned repo's config from running commands
-    # (fsmonitor hook, external diff, textconv) just because you cd'd into it.
+    # The -c/--no-* flags stop an untrusted repo's own config (say, a .git from an
+    # extracted archive) from running commands just because you cd'd into it:
+    # fsmonitor hook, external diff, textconv. Filter drivers have no such flag:
+    # a clean filter defined at repo level is replaced by `cat` for this diff, and
+    # a repo-level long-running process filter makes us skip the repo. Global and
+    # system filters (git-lfs) are yours and stay trusted.
     exec {_my_git_diffstat_fd}< <(
-      local top stat
+      local top stat line key
+      local -a filters overrides
       top=$(command git -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null)
-      stat=$(GIT_OPTIONAL_LOCKS=0 command git -c core.fsmonitor=false \
-        diff --no-ext-diff --no-textconv --shortstat HEAD 2>/dev/null)
+      if [[ -n $top ]]; then
+        # Lines look like "local<TAB>filter.NAME.clean COMMAND".
+        filters=(${(f)"$(command git -c core.fsmonitor=false config --show-scope --includes \
+          --get-regexp '^filter\..*\.(clean|process)$' 2>/dev/null)"})
+        for line in ${filters:#(global|system)$'\t'*}; do
+          key=${${line#*$'\t'}%% *}
+          [[ $key == *.process ]] && { print -r -- "$top"$'\n'; exit }
+          overrides+=(-c "$key=cat")
+        done
+        stat=$(GIT_OPTIONAL_LOCKS=0 command git -c core.fsmonitor=false $overrides \
+          diff --no-ext-diff --no-textconv --shortstat HEAD 2>/dev/null)
+      fi
       print -r -- "$top"$'\n'"$stat"
     )
     zle -F $_my_git_diffstat_fd _my_git_diffstat_done
