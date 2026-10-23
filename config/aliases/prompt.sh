@@ -20,6 +20,7 @@ prompt-legend() {
   local row=_prompt_legend_row
 
   print -P -- "%BGit%b  %244F(colours: %76Fgreen%244F branch and sync · %178Fyellow%244F your uncommitted work · %39Fblue%244F new files · %196Fred%244F conflict · grey = still loading)%f"
+  print -P -- "  %244F(below 100 columns the words drop and only the symbols show: main !1 ?3)%f"
   local in_repo=
   if [[ $VCS_STATUS_RESULT == ok-* && $PWD/ == ${VCS_STATUS_WORKDIR}/* ]]; then
     in_repo=1
@@ -40,12 +41,12 @@ prompt-legend() {
     unstaged=$VCS_STATUS_NUM_UNSTAGED untracked=$VCS_STATUS_NUM_UNTRACKED
   fi
   $row "${in_repo:+$VCS_STATUS_LOCAL_BRANCH}" "<branch>"         "the branch you are on"
-  $row $behind                "⇣N to pull"        "commits on the remote you do not have yet (git pull)"
+  $row $behind                "⇣N to pull"        "remote commits you lack, as of the last fetch (git pull)"
   $row $ahead                 "⇡N to push"        "your commits not on the remote yet (git push)"
   $row $(( pbehind + pahead )) "⇠N / ⇢N"           "the same, against a separate push remote (a fork)"
   $row $staged                "+N staged"         "files staged: they go into the next commit"
   $row $unstaged              "!N edited"         "tracked files changed but not staged (git add)"
-  $row $untracked             "?N new"            "new files git does not track yet"
+  $row $untracked             "?N untracked"      "files git has never tracked: not staged, in no commit"
   $row $conflicted            "~N conflicts"      "files with merge conflicts to fix"
   $row "${in_repo:+$VCS_STATUS_ACTION}" "<op> in progress" "a merge, rebase or cherry-pick is not finished"
   $row ""                     "wip"               "the last commit message says WIP"
