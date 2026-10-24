@@ -240,7 +240,10 @@ slow_quit_and_wait() {
 # Apps whose windows have no clickable close button, learned the only way there
 # is: by trying once. Keyed by app NAME, because that is all the AX API and the
 # keystroke path agree on. Lives beside the idle job's state - one system.
-AX_CAPABILITY_FILE="${HOME}/.cache/hide-idle-apps/ax-capability"
+# The `.v2` suffix discards every record written before 2026-10-24: until then
+# the click script named a variable `before`, an AppleScript reserved word, so it
+# never compiled and every app with a window was branded keystroke-only.
+AX_CAPABILITY_FILE="${HOME}/.cache/hide-idle-apps/ax-capability.v2"
 # Every System Events call below discards stderr, so a run that failed because
 # osascript was refused Accessibility (-25211) looked exactly like an app that
 # kept a window open. Each run truncates this log and appends the AppleScript
@@ -326,18 +329,20 @@ ax_close_app_windows() {
                 set attempts to 0
                 set stalls to 0
                 repeat while (count of windows) > 0 and attempts < 20
-                    set before to count of windows
+                    -- Not `before`: that is an AppleScript reserved word, and
+                    -- the script then fails to compile at all.
+                    set countBefore to count of windows
                     click (first button of window 1 whose subrole is \"AXCloseButton\")
                     -- Spotify, Bear and Things were each branded keystroke-only by a manual
                     -- run on three separate days with only a 0.6s window to show progress;
                     -- poll up to 1s per click before calling it a stall.
                     set pollAttempts to 0
-                    repeat while (count of windows) >= before and pollAttempts < 5
+                    repeat while (count of windows) >= countBefore and pollAttempts < 5
                         delay 0.2
                         set pollAttempts to pollAttempts + 1
                     end repeat
                     set attempts to attempts + 1
-                    if (count of windows) < before then
+                    if (count of windows) < countBefore then
                         set stalls to 0
                     else
                         set stalls to stalls + 1
@@ -797,7 +802,7 @@ main() {
         # --only narrows the candidate list BEFORE classification, so config
         # still gets to veto. It can only ever make us do less, never more.
         if (( ${#ONLY_APPS} > 0 )); then
-            local wanted matched=false
+            local wanted= matched=false
             for wanted in "${ONLY_APPS[@]}"; do
                 [[ "${(L)name}" == "${(L)wanted}" ]] && { matched=true; break }
             done

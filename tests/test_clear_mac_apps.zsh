@@ -64,6 +64,21 @@ cat > "$ROOT/bin/osascript" <<'STUB'
 #!/usr/bin/env zsh
 script="$*"
 [[ -z "$script" ]] && script="$(cat)"
+# Answering by pattern never parses the AppleScript, so a script that cannot
+# compile passes here and fails on every real run: the AX close script named a
+# variable `before`, a reserved word, from 2026-07-28 to 2026-10-24, and every
+# app it met was branded keystroke-only. Compile each System Events script where
+# osacompile exists - those carry the logic. Others are left out: a fixture's
+# fake bundle id cannot resolve, and Standard Additions such as `display
+# notification` do not load under an agent sandbox, so both fail for reasons
+# that are not bugs.
+if [[ -n "${STUB_COMPILE_ERR:-}" && "$script" == *'"System Events"'* ]] \
+        && command -v osacompile >/dev/null 2>&1; then
+    src="$script"
+    [[ "${1:-}" == -e ]] && src="$2"   # the source, without osascript's own flag
+    osacompile -o "${STUB_COMPILE_ERR:h}/compiled.$$.scpt" -e "$src" 2>>"$STUB_COMPILE_ERR" \
+        || print -r -- "  in: ${src[1,160]//$'\n'/ }" >> "$STUB_COMPILE_ERR"
+fi
 # The close paths come first: their scripts name the process too, so a Chrome
 # close would otherwise be answered with Chrome's tab list.
 case "$script" in
@@ -133,6 +148,7 @@ fi
 # Three fields, as the real inventory emits: name|bundle id|unix id. The ids are
 # arbitrary but distinct, so every rung below addresses a process the way a real
 # run does rather than through the name fallback.
+export STUB_COMPILE_ERR="$WORK/compile-errors.log"
 export STUB_APP_LIST="Ghostty|com.mitchellh.ghostty|101
 Bear|net.shinyfrog.bear|102
 Mouseless|com.sinusoid.mouseless|103
@@ -144,7 +160,7 @@ export STUB_CHROME_TABS="1|Inbox (3) - Gmail
 2|Google Meet - standup
 "
 
-AXCAP="$ROOT/home/.cache/hide-idle-apps/ax-capability"
+AXCAP="$ROOT/home/.cache/hide-idle-apps/ax-capability.v2"
 
 run() {  # run [args...]; sets OUT / ERR / RC
     [[ -n "${STUB_AX_LOG:-}" ]]     && : > "$STUB_AX_LOG"
@@ -731,6 +747,13 @@ run --dry-run
 check     "exits non-zero"                 "$(( RC != 0 ))" "1"
 check     "names the offending key"        "$ERR" "close_after"
 check_not "acts on nothing"                "$OUT" "Would QUIT"
+
+print -r -- "22. every AppleScript the suite sent compiles"
+if command -v osacompile >/dev/null 2>&1; then
+    check_eq "no compile errors" "$(cat "$STUB_COMPILE_ERR" 2>/dev/null)" ""
+else
+    print -r -- "  skip no osacompile on this platform"
+fi
 
 print -r -- ""
 print -r -- "PASS=$PASS FAIL=$FAIL"
