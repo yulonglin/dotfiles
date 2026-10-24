@@ -8,7 +8,9 @@
 _prompt_legend_row() {
   local now=$1 key=$2 meaning=$3
   if [[ -n $now && $now != 0 ]]; then
-    print -rP -- "  %B${(r:18:)key}%b ${meaning}  %178F← ${now//\%/%%}%f"
+    # (V) shows control characters visibly, so a branch, tag or venv path cannot
+    # smuggle terminal escape sequences into the output.
+    print -rP -- "  %B${(r:18:)key}%b ${meaning}  %178F← ${${(V)now}//\%/%%}%f"
   else
     print -rP -- "  %244F${(r:18:)key} ${meaning}%f"
   fi
