@@ -326,12 +326,7 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     log_section "INSTALLING AI CLI TOOLS"
 
     # Rust toolchain (needed for claude-tools build in deploy.sh)
-    if ! is_installed cargo; then
-        log_info "Installing Rust toolchain (user-level, no root needed)..."
-        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
-            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
-    fi
-    source "$HOME/.cargo/env" 2>/dev/null || true
+    install_rust_toolchain
 
     # Pre-set PATH for subshells
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
