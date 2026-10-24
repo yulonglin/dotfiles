@@ -23,6 +23,11 @@ CONFIG_HELPER="${SCRIPT_DIR}/app-lifecycle-config"
 REGISTRY_FILE="${SCRIPT_DIR}/../config/safari_web_apps.local"
 DRY_RUN=false
 MAX_ACTION=quit
+# Off for the manual run: an app whose windows cannot be closed by clicking is
+# hidden instead of activated and typed at, which used to cycle the desktop
+# through every such app for several seconds while you were working in another.
+# The idle job turns it on, since it closes only after the user has gone idle.
+ALLOW_FOCUS_STEAL=false
 typeset -a ONLY_APPS=()
 # Every action that did not do what it said, as "<rung>: <app>". main()'s exit
 # status is derived from this, and the manual path reads it back to say which
@@ -48,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             esac
             shift 2
             ;;
+        --allow-focus-steal)
+            ALLOW_FOCUS_STEAL=true
+            shift
+            ;;
         --migrate-config)
             # Takes the source path explicitly: this is a one-shot conversion,
             # and after it runs the old file no longer lives in config/ (the
@@ -66,6 +75,9 @@ while [[ $# -gt 0 ]]; do
             echo "                    vetoes, so this can never act on a skipped app."
             echo "  --max-action ACT  Cap the action at close or quit (default: quit)."
             echo "                    Only ever does less than a bare run would."
+            echo "  --allow-focus-steal"
+            echo "                    Let close fall back to activating an app and typing"
+            echo "                    Cmd+W. Without it, such an app is hidden instead."
             echo "  --migrate-config FILE"
             echo "                    Print an old clear_mac_apps.conf converted to YAML"
             exit 0
@@ -228,7 +240,10 @@ slow_quit_and_wait() {
 # Apps whose windows have no clickable close button, learned the only way there
 # is: by trying once. Keyed by app NAME, because that is all the AX API and the
 # keystroke path agree on. Lives beside the idle job's state - one system.
-AX_CAPABILITY_FILE="${HOME}/.cache/hide-idle-apps/ax-capability"
+# The `.v2` suffix discards every record written before 2026-10-24: until then
+# the click script named a variable `before`, an AppleScript reserved word, so it
+# never compiled and every app with a window was branded keystroke-only.
+AX_CAPABILITY_FILE="${HOME}/.cache/hide-idle-apps/ax-capability.v2"
 # Every System Events call below discards stderr, so a run that failed because
 # osascript was refused Accessibility (-25211) looked exactly like an app that
 # kept a window open. Each run truncates this log and appends the AppleScript
@@ -314,18 +329,20 @@ ax_close_app_windows() {
                 set attempts to 0
                 set stalls to 0
                 repeat while (count of windows) > 0 and attempts < 20
-                    set before to count of windows
+                    -- Not `before`: that is an AppleScript reserved word, and
+                    -- the script then fails to compile at all.
+                    set countBefore to count of windows
                     click (first button of window 1 whose subrole is \"AXCloseButton\")
                     -- Spotify, Bear and Things were each branded keystroke-only by a manual
                     -- run on three separate days with only a 0.6s window to show progress;
                     -- poll up to 1s per click before calling it a stall.
                     set pollAttempts to 0
-                    repeat while (count of windows) >= before and pollAttempts < 5
+                    repeat while (count of windows) >= countBefore and pollAttempts < 5
                         delay 0.2
                         set pollAttempts to pollAttempts + 1
                     end repeat
                     set attempts to attempts + 1
-                    if (count of windows) < before then
+                    if (count of windows) < countBefore then
                         set stalls to 0
                     else
                         set stalls to stalls + 1
@@ -343,6 +360,8 @@ ax_close_app_windows() {
 #             keystroke fallback, so one knob sets how stubborn closing is
 # Tries the focus-free AX close first, and falls back to keystrokes for apps
 # that cannot do it - remembering which those are so the probe happens once.
+# Keystrokes reach only the frontmost app, so that fallback must activate it;
+# without --allow-focus-steal the app is hidden instead, which needs no focus.
 close_app_windows() {
     local entry="$1"
     local patience="${2:-3}"
@@ -360,6 +379,11 @@ close_app_windows() {
             return 0
         fi
         record_ax_unsupported "$app"
+    fi
+    if ! $ALLOW_FOCUS_STEAL; then
+        echo "  $app: windows cannot be closed without taking focus - hiding it instead"
+        hide_app "$entry"
+        return
     fi
     close_app_windows_keystroke "$app" "$pid" "$patience"
 }
@@ -384,6 +408,9 @@ close_app_windows_keystroke() {
     # app whose windows are still open - the one case that must not happen.
     remaining=$(osascript -e "
         tell application \"System Events\"
+            -- Focus goes back to whatever had it, so a close does not leave the
+            -- user in an app they never chose.
+            set prevFrontPid to unix id of first process whose frontmost is true
             tell ${ref}
                 set frontmost to true
                 -- Activation from a Shortcuts-spawned process can lag; a keystroke
@@ -422,8 +449,12 @@ close_app_windows_keystroke() {
                     end if
                     set lastCount to currentCount
                 end repeat
-                return (count of windows) as text
+                set leftOver to (count of windows) as text
             end tell
+            try
+                set frontmost of (first process whose unix id is prevFrontPid) to true
+            end try
+            return leftOver
         end tell
     " 2>>"$AX_TRACE_LOG") || return 1
     # An empty reply means osascript succeeded but told us nothing, which is not
@@ -771,7 +802,7 @@ main() {
         # --only narrows the candidate list BEFORE classification, so config
         # still gets to veto. It can only ever make us do less, never more.
         if (( ${#ONLY_APPS} > 0 )); then
-            local wanted matched=false
+            local wanted= matched=false
             for wanted in "${ONLY_APPS[@]}"; do
                 [[ "${(L)name}" == "${(L)wanted}" ]] && { matched=true; break }
             done
