@@ -22,7 +22,7 @@ prompt-legend() {
   print -P -- "%BGit%b  %244F(colours: %76Fgreen%244F branch and sync · %178Fyellow%244F your uncommitted work · %39Fblue%244F new files · %196Fred%244F conflict · grey = still loading)%f"
   print -P -- "  %244F(below 100 columns the words drop and only the symbols show: main !1 ?3)%f"
   local in_repo=
-  if [[ $VCS_STATUS_RESULT == ok-* && $PWD/ == ${VCS_STATUS_WORKDIR}/* ]]; then
+  if [[ $VCS_STATUS_RESULT == ok-* && ${PWD:A}/ == ${VCS_STATUS_WORKDIR:A}/* ]]; then
     in_repo=1
     if (( $+functions[my_git_formatter] )); then
       # p10k leaves the last-drawn segment in this global; the formatter returns it if set.
@@ -53,10 +53,19 @@ prompt-legend() {
   [[ -n $in_repo && -n $_my_git_diffstat && $_my_git_diffstat_dir == ${VCS_STATUS_WORKDIR:A} ]] &&
     (( staged + unstaged )) && lines="+${_my_git_diffstat[(w)1]} −${_my_git_diffstat[(w)2]}"
   $row "$lines"               "+N −M lines"       "lines added/removed vs last commit, like GitHub (untracked not counted)"
-  $row ""                     "wip"              "the last commit message says WIP"
-  $row ""                     "─ unknown"         "repo too big to count changes"
-  $row ""                     ":other-branch"     "the remote branch, when its name differs from yours"
-  $row ""                     "#tag  @1a2b3c4d"   "shown instead of a branch when HEAD is detached"
+  # Same conditions as my_git_formatter, so these rows light when the prompt shows them.
+  local wip= unknown= remote= detached=
+  if [[ -n $in_repo ]]; then
+    [[ $VCS_STATUS_COMMIT_SUMMARY == (|*[^[:alnum:]])(wip|WIP)(|[^[:alnum:]]*) ]] && wip=yes
+    (( VCS_STATUS_HAS_UNSTAGED == -1 )) && unknown=yes
+    remote=${VCS_STATUS_REMOTE_BRANCH:#$VCS_STATUS_LOCAL_BRANCH}
+    [[ -z $VCS_STATUS_LOCAL_BRANCH ]] && detached=${VCS_STATUS_TAG:+#$VCS_STATUS_TAG}
+    [[ -z $VCS_STATUS_LOCAL_BRANCH && -z $VCS_STATUS_TAG ]] && detached=@${VCS_STATUS_COMMIT[1,8]}
+  fi
+  $row "$wip"                 "wip"               "the last commit message says WIP"
+  $row "$unknown"             "─ unknown"         "repo too big to count changes"
+  $row "$remote"              ":other-branch"     "the remote branch, when its name differs from yours"
+  $row "$detached"            "#tag  @1a2b3c4d"   "shown instead of a branch when HEAD is detached"
 
   print -P -- "%BRight side%b"
   local duration=

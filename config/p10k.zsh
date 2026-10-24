@@ -483,12 +483,20 @@
   # synchronous `git diff` would stall every prompt in a big repo, so after each
   # command the diff runs in the background and the prompt redraws when it lands.
   # The result is "INSERTIONS DELETIONS" for the repo in _my_git_diffstat_dir.
-  typeset -g _my_git_diffstat= _my_git_diffstat_dir=
-  typeset -gi _my_git_diffstat_fd=0
+  # No initial values: a re-source (p10k reload) keeps a diff in flight and its fd.
+  typeset -g _my_git_diffstat _my_git_diffstat_dir
+  typeset -gi _my_git_diffstat_fd _my_git_diffstat_want
   function _my_git_diffstat_start() {
     emulate -L zsh -o extended_glob
-    # Words (and so line counts) only show at 100+ columns; one diff at a time.
-    (( COLUMNS >= 100 && ! _my_git_diffstat_fd )) || return
+    # Words (and so line counts) only show at 100+ columns.
+    (( COLUMNS >= 100 )) || return
+    # One diff at a time. A prompt that arrives mid-diff may postdate its numbers,
+    # so it asks for a rerun when the diff lands. (A hung diff leaves the counts
+    # off for this shell; `exec zsh` clears it.)
+    if (( _my_git_diffstat_fd )); then
+      _my_git_diffstat_want=1
+      return
+    fi
     # One write at the end: zle -F fires once the fd is readable, so printing the
     # toplevel before the diff ends would leave the handler blocked in read.
     # The -c/--no-* flags stop an untrusted repo's own config (say, a .git from an
@@ -497,25 +505,34 @@
     # a clean filter defined at repo level is replaced by `cat` for this diff, and
     # a repo-level long-running process filter makes us skip the repo. Global and
     # system filters (git-lfs) are yours and stay trusted. A filter name that a
-    # `-c key=value` override cannot spell exactly is treated like a process filter.
-    # Submodules are ignored (their own config would apply inside them), and lazy
-    # fetches are off, so a partial clone never starts a transport from its config.
+    # `-c key=value` override cannot spell exactly is treated like a process filter,
+    # and so is a git too old to report config scopes (< 2.26). Submodules are
+    # ignored (their own config would apply inside them). GIT_ALLOW_PROTOCOL=none
+    # overrides any repo protocol.*.allow, so a partial clone cannot start a
+    # transport from its config even on a git without GIT_NO_LAZY_FETCH (< 2.44).
+    # The diff runs from the toplevel so diff.relative cannot shrink the total,
+    # and in C locale so the English shortstat parses. $HOME as a repo is skipped,
+    # or every prompt outside another repo would diff the whole home directory.
     exec {_my_git_diffstat_fd}< <(
-      local top stat line key
+      exec </dev/null
+      local top stat line key out
       local -a filters overrides
       top=$(command git -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null)
-      if [[ -n $top ]]; then
-        # Lines look like "local<TAB>filter.NAME.clean COMMAND".
-        filters=(${(f)"$(command git -c core.fsmonitor=false config --show-scope --includes \
-          --get-regexp '^filter\..*\.(clean|process)$' 2>/dev/null)"})
-        for line in ${filters:#(global|system)$'\t'*}; do
-          key=${${line#*$'\t'}%% *}
-          [[ $key == filter.[A-Za-z0-9._-]##.clean ]] || { print -r -- "$top"$'\n'; exit }
-          overrides+=(-c "$key=cat")
-        done
-        stat=$(GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 command git \
-          -c core.fsmonitor=false -c protocol.allow=never $overrides \
-          diff --no-ext-diff --no-textconv --ignore-submodules=all --shortstat HEAD 2>/dev/null)
+      if [[ -n $top && ${top:A} != ${HOME:A} ]] && cd -q -- $top; then
+        # Lines look like "local<TAB>filter.NAME.clean COMMAND"; exit 1 = no match.
+        out=$(command git -c core.fsmonitor=false config --show-scope --includes \
+          --get-regexp '^filter\..*\.(clean|process)$' 2>/dev/null)
+        if (( $? <= 1 )); then
+          filters=(${(f)out})
+          for line in ${filters:#(global|system)$'\t'*}; do
+            key=${${line#*$'\t'}%% *}
+            [[ $key == filter.[A-Za-z0-9._-]##.clean ]] || { print -r -- "$top"$'\n'; exit }
+            overrides+=(-c "$key=cat")
+          done
+          stat=$(LC_ALL=C GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL=none \
+            GIT_TERMINAL_PROMPT=0 command git -c core.fsmonitor=false $overrides \
+            diff --no-ext-diff --no-textconv --ignore-submodules=all --shortstat HEAD 2>/dev/null)
+        fi
       fi
       print -r -- "$top"$'\n'"$stat"
     )
@@ -528,9 +545,17 @@
     IFS= read -r -u $fd dir
     IFS= read -r -u $fd stat
     exec {fd}<&-
+    # Only the current diff may free the slot.
+    (( fd == _my_git_diffstat_fd )) || return
     _my_git_diffstat_fd=0
+    if (( _my_git_diffstat_want )); then
+      _my_git_diffstat_want=0
+      _my_git_diffstat_start
+      return
+    fi
     [[ $stat =~ '([0-9]+) insertion' ]] && ins=$match[1]
     [[ $stat =~ '([0-9]+) deletion' ]] && del=$match[1]
+    (( ins + del )) || stat=  # mode-only or binary changes: no lines to count
     local new=${stat:+$ins $del}
     dir=${dir:+${dir:A}}  # symlink-free, to compare with ${VCS_STATUS_WORKDIR:A}
     [[ $new == $_my_git_diffstat && $dir == $_my_git_diffstat_dir ]] && return
