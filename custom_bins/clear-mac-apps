@@ -329,7 +329,7 @@ ax_close_app_windows() {
                 set attempts to 0
                 set stalls to 0
                 repeat while (count of windows) > 0 and attempts < 20
-                    -- Not `before`: that is an AppleScript reserved word, and
+                    -- Not "before": that is an AppleScript reserved word, and
                     -- the script then fails to compile at all.
                     set countBefore to count of windows
                     click (first button of window 1 whose subrole is \"AXCloseButton\")

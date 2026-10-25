@@ -287,6 +287,9 @@ print -r -- "9. closing windows clicks the close button rather than typing"
 export STUB_WINDOW_COUNT=2 STUB_AX_RC=0
 run --only Bear
 check    "Bear's windows are closed"        "$OUT" "Closing windows: Bear"
+# The AppleScript sits in a zsh double-quoted string, so a backtick in one of
+# its comments is command substitution: a note about `before` ran `before`.
+check_not "and zsh ran nothing it shouldn't" "$OUT$ERR" "command not found"
 check    "by clicking the close button"     "$(cat "$STUB_AX_LOG" 2>/dev/null)" "AXCloseButton"
 check_eq "no keystroke, so no focus stolen" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
 check_eq "and nothing is remembered"        "$(cat "$AXCAP" 2>/dev/null)" ""
