@@ -23,6 +23,15 @@ for _brew_prefix in /opt/homebrew/bin /usr/local/bin /home/linuxbrew/.linuxbrew/
 done
 unset _brew_prefix
 
+# uv's bin dir holds the global python3 (install.sh), so non-interactive shells
+# need it too, or python3 falls back to Apple's /usr/bin/python3 (3.9).
+if [[ -d "$HOME/.local/bin" ]]; then
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+  esac
+fi
+
 # Homebrew's rustup is keg-only, so its cargo/rustc proxies live in the keg bin,
 # which must outrank ~/.cargo/bin (left holding only `cargo install` binaries).
 # Moved to the front even when present: ~/.zshenv sources ~/.cargo/env first.

@@ -243,6 +243,15 @@ if cmd_exists uv; then
     fi
 fi
 
+# Global python3 is uv's default Python (python and python3 in ~/.local/bin), so
+# one tool owns every Python on the machine. A Homebrew python@3.x appears only
+# as a dependency of a formula or cask (gcloud-cli pulls python@3.13).
+if cmd_exists uv && [[ ! -x "$HOME/.local/bin/python3" ]]; then
+    log_info "Installing uv's default Python (global python3)..."
+    run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" uv python install --default \
+        || log_warning "uv python install --default failed"
+fi
+
 # ─── Python Dev Tools (uv ecosystem) ────────────────────────────────────────
 
 if cmd_exists uv; then
