@@ -64,6 +64,21 @@ cat > "$ROOT/bin/osascript" <<'STUB'
 #!/usr/bin/env zsh
 script="$*"
 [[ -z "$script" ]] && script="$(cat)"
+# Answering by pattern never parses the AppleScript, so a script that cannot
+# compile passes here and fails on every real run: the AX close script named a
+# variable `before`, a reserved word, from 2026-07-28 to 2026-10-24, and every
+# app it met was branded keystroke-only. Compile each System Events script where
+# osacompile exists - those carry the logic. Others are left out: a fixture's
+# fake bundle id cannot resolve, and Standard Additions such as `display
+# notification` do not load under an agent sandbox, so both fail for reasons
+# that are not bugs.
+if [[ -n "${STUB_COMPILE_ERR:-}" && "$script" == *'"System Events"'* ]] \
+        && command -v osacompile >/dev/null 2>&1; then
+    src="$script"
+    [[ "${1:-}" == -e ]] && src="$2"   # the source, without osascript's own flag
+    osacompile -o "${STUB_COMPILE_ERR:h}/compiled.$$.scpt" -e "$src" 2>>"$STUB_COMPILE_ERR" \
+        || print -r -- "  in: ${src[1,160]//$'\n'/ }" >> "$STUB_COMPILE_ERR"
+fi
 # The close paths come first: their scripts name the process too, so a Chrome
 # close would otherwise be answered with Chrome's tab list.
 case "$script" in
@@ -133,6 +148,7 @@ fi
 # Three fields, as the real inventory emits: name|bundle id|unix id. The ids are
 # arbitrary but distinct, so every rung below addresses a process the way a real
 # run does rather than through the name fallback.
+export STUB_COMPILE_ERR="$WORK/compile-errors.log"
 export STUB_APP_LIST="Ghostty|com.mitchellh.ghostty|101
 Bear|net.shinyfrog.bear|102
 Mouseless|com.sinusoid.mouseless|103
@@ -144,7 +160,7 @@ export STUB_CHROME_TABS="1|Inbox (3) - Gmail
 2|Google Meet - standup
 "
 
-AXCAP="$ROOT/home/.cache/hide-idle-apps/ax-capability"
+AXCAP="$ROOT/home/.cache/hide-idle-apps/ax-capability.v2"
 
 run() {  # run [args...]; sets OUT / ERR / RC
     [[ -n "${STUB_AX_LOG:-}" ]]     && : > "$STUB_AX_LOG"
@@ -271,22 +287,37 @@ print -r -- "9. closing windows clicks the close button rather than typing"
 export STUB_WINDOW_COUNT=2 STUB_AX_RC=0
 run --only Bear
 check    "Bear's windows are closed"        "$OUT" "Closing windows: Bear"
+# The AppleScript sits in a zsh double-quoted string, so a backtick in one of
+# its comments is command substitution: a note about `before` ran `before`.
+check_not "and zsh ran nothing it shouldn't" "$OUT$ERR" "command not found"
 check    "by clicking the close button"     "$(cat "$STUB_AX_LOG" 2>/dev/null)" "AXCloseButton"
 check_eq "no keystroke, so no focus stolen" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
 check_eq "and nothing is remembered"        "$(cat "$AXCAP" 2>/dev/null)" ""
 
+# The keystroke fallback activates the app, so only the idle job - which closes
+# only once the user has gone idle - is allowed it. Every run below that stands
+# in for that job passes --allow-focus-steal, as escalate() in hide-idle-apps does.
 print -r -- "10. an app with no close button falls back to keystrokes"
 export STUB_AX_RC=1
-run --only Bear
+run --only Bear --allow-focus-steal
 check "the click is attempted first" "$(cat "$STUB_AX_LOG" 2>/dev/null)"  "AXCloseButton"
 check "keystrokes take over"         "$(cat "$STUB_KEY_LOG" 2>/dev/null)" "keystroke"
 check "and the app is remembered"    "$(cat "$AXCAP" 2>/dev/null)"        "Bear"
 
 print -r -- "11. a remembered app is never probed again"
-run --only Bear
+run --only Bear --allow-focus-steal
 check_eq "no second probe"        "$(cat "$STUB_AX_LOG" 2>/dev/null)" ""
 check    "straight to keystrokes" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" "keystroke"
 check_eq "recorded exactly once"  "$(grep -c $'^Bear\t' "$AXCAP")" "1"
+
+# The manual run is what you trigger while working in another app. Activating
+# each keystroke-only app in turn cycled the desktop for several seconds, so
+# without the flag the app is hidden instead - no focus needed.
+print -r -- "11a. without the flag, a keystroke-only app is hidden instead of focused"
+run --only Bear
+check_eq "no keystroke, so no focus stolen" "$(cat "$STUB_KEY_LOG" 2>/dev/null)" ""
+check    "says it hid the app instead"      "$OUT" "Bear: windows cannot be closed without taking focus - hiding it instead"
+check    "and the run counts as clean"      "$(( RC == 0 ))" "1"
 
 # The record is only consulted when there IS one, so without expiry nothing would
 # ever revisit it: an app that gained a close button in an update would be typed
@@ -405,12 +436,12 @@ check "and still exits 0 once a slow app is listed"          "$(( RC == 0 ))" "1
 # nothing, which is not evidence the windows went away. Exported, because the
 # stub reads it from the environment two processes down.
 export STUB_AX_RC=1
-run --only Bear
+run --only Bear --allow-focus-steal
 check "a close that left windows behind exits non-zero"      "$(( RC != 0 ))" "1"
 check "and says which app"                                   "$OUT" "Bear still has windows"
 
 print -r -- "$CONFIG_NO_SLOW" > "$ROOT/config/app-lifecycle.yaml"
-run --only Bear
+run --only Bear --allow-focus-steal
 check "failure is reported without a slow app too"           "$(( RC != 0 ))" "1"
 unset STUB_AX_RC
 
@@ -520,7 +551,7 @@ unset STUB_AX_LOG
 # Same path, but the close genuinely fails: AX click errors, the keystroke
 # fallback tells us nothing, so the windows are still there.
 export STUB_AX_RC=1
-run --only "Google Chrome" --max-action close
+run --only "Google Chrome" --max-action close --allow-focus-steal
 check     "a close that failed exits non-zero"   "$(( RC != 0 ))" "1"
 unset STUB_AX_RC STUB_CHROME_TABS_2 STUB_CHROME_CALLS
 
@@ -533,7 +564,8 @@ print -r -- "19. a manual run notifies; only the idle job's --only run exits non
 export STUB_APP_LIST="Bear|net.shinyfrog.bear
 "
 export STUB_NOTIFY_LOG="$WORK/notify.log"
-export STUB_WINDOW_COUNT=2 STUB_AX_RC=1   # AX fails, keystrokes prove nothing
+# AX fails, keystrokes prove nothing, and the manual run's hide fallback fails too
+export STUB_WINDOW_COUNT=2 STUB_AX_RC=1 STUB_HIDE_RC=1
 : > "$AXCAP"
 print -r -- "defaults:
   manual: quit
@@ -547,10 +579,10 @@ check     "and posts a notification"               "$(cat "$STUB_NOTIFY_LOG")" "
 check     "naming the rung and the app"            "$(cat "$STUB_NOTIFY_LOG")" "close: Bear"
 check     "while still saying so on stdout"        "$OUT" "Failed actions: close: Bear"
 
-run --only Bear
+run --only Bear --allow-focus-steal
 check     "the idle job's run still exits non-zero" "$(( RC != 0 ))" "1"
 check_not "and does not notify"                     "$(cat "$STUB_NOTIFY_LOG")" "display notification"
-unset STUB_AX_RC STUB_NOTIFY_LOG
+unset STUB_AX_RC STUB_HIDE_RC STUB_NOTIFY_LOG
 
 # --- defaults.manual reaches apps the config never names -------------------
 # Test 6 pins the `quit` default, which is also what an unlisted app got when
@@ -718,6 +750,13 @@ run --dry-run
 check     "exits non-zero"                 "$(( RC != 0 ))" "1"
 check     "names the offending key"        "$ERR" "close_after"
 check_not "acts on nothing"                "$OUT" "Would QUIT"
+
+print -r -- "22. every AppleScript the suite sent compiles"
+if command -v osacompile >/dev/null 2>&1; then
+    check_eq "no compile errors" "$(cat "$STUB_COMPILE_ERR" 2>/dev/null)" ""
+else
+    print -r -- "  skip no osacompile on this platform"
+fi
 
 print -r -- ""
 print -r -- "PASS=$PASS FAIL=$FAIL"
