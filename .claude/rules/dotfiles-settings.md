@@ -25,6 +25,14 @@ Claude Code rewrites this file itself — `/model`, `/plugin` and any other sett
 
 > Gating a hook off compact is only safe when EVERYTHING it does is redundant after a compaction, and that is a property of the hook body, not of the source. show_auth_account.sh was tried here and moved back above: it recomputes a near-limit warning from a mutable usage cache — a side effect, not display — and now suppresses only its static output when source=compact, which recovers the noise without dropping live work. check_git_root.sh is left because it is purely a warning; the accepted cost is that a mid-session CWD change stops being re-warned after a compact. WARNING, this matcher IS a four-value allowlist despite reading like an exclusion of compact: SessionStart currently emits exactly startup, resume, clear, compact and fork, so today it excludes compact and nothing else, but a source added in a future release would be silently skipped here with no error and must be added by hand. Said explicitly because a comment asserting a safety property the code does not have is what hid the consent bug in issue #55.
 
+## The advisor reminder reads the transcript and never blocks
+
+The `Stop` group ends with `nudge_advisor_skipped.py`, which warns the user once per session when a substantive session never called the advisor. **The advisor is a server-side tool, and the transcript records each call**: an assistant content block `{"type":"server_tool_use","name":"advisor","id":"srvtoolu_..."}` followed by an `advisor_tool_result` block, measured on Claude Code 2.1.296 on 2026-10-12 in a live session's own JSONL and in two transcripts from 2026-10-08. Availability is the `{"type":"advisor_tool","available":true,...}` attachment. An earlier draft of this hook (2026-09-20) found no such rows and relied on a `PostToolUse` marker instead; that marker is gone, and whether `PostToolUse` fires for a server-side tool was never shown and no longer matters. If a future release stops recording the call, the reminder fires on every substantive session, which is visible and harmless because it only prints. Turn it off with `nudges.advisor-skipped = off` in `claude/hooks/features.conf`.
+
+**It is a user-facing `systemMessage`, not a block.** Switching it to `hookSpecificOutput.additionalContext` hands the reminder to the model and continues the turn once; do that only after the message has proven accurate in daily use.
+
+**The before-work leg is deliberately not enforced.** The advisor is meant to be consulted before substantive work as well as before declaring done, but no event can observe that leg without firing on every session: a `PreToolUse` gate on the first `Write`/`Edit` cannot tell a one-line fix from a day's work.
+
 ## Scope
 
 - Applies to: `claude/settings.json` (global source — gets symlinked to `~/.claude/`)
