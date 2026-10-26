@@ -19,6 +19,7 @@ state_*.sqlite
 installation_id
 computer-use/
 memories/
+memories_v2/
 ambient-suggestions/
 process_manager/
 app-server-control/
@@ -30,3 +31,4 @@ chrome-native-hosts-v2.json
 mcp-oauth-locks/
 packages/
 thread-writer-locks/
+plugins/.remote-plugin-install-staging/
