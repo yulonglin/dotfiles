@@ -174,5 +174,18 @@ def test_bundled_skills_enabled_but_claude_api_off():
     # via the per-skill override, which the resolver honors pre-injection.
     # Exact-match on the whole map: a later "artifact-design": "off" entry
     # would recreate the same silent breakage while a key-wise check passes.
+    # The other entries are local skills switched off in /skills (synced
+    # 2026-10-20, 34d6fb68); none is one the Artifact tool or /simplify needs.
     assert settings["disableBundledSkills"] is False
-    assert settings["skillOverrides"] == {"claude-api": "off"}
+    assert settings["skillOverrides"] == {
+        "claude-api": "off",
+        "learn-quiz": "off",
+        "deslop": "off",
+        "docs-search": "off",
+        "review-pr-queue": "off",
+        "mv-repo": "off",
+        "setup-channel": "off",
+        "ship": "off",
+        "auto-mode-probe": "off",
+        "update-auto-mode": "off",
+    }
