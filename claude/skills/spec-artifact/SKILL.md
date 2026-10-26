@@ -29,7 +29,7 @@ Implementation plans come from sessions running the superpowers `writing-plans` 
 
 A spec exists to be argued with, and a file in a folder cannot be argued with — you cannot select a paragraph and say "no, not this". Since layer v2, the published page takes **suggested edits** as well as comments: select text, propose the replacement in place, and the export carries both. So every spec and reviewable plan runs this loop:
 
-1. Write the source under `artifacts/<slug>/`, build with `md2artifact`, **commit source and built HTML together** (`artifacts/README.md` has the layout), publish, record the row per `artifacts-sync`. The closing reply carries the link, not only a path.
+1. Build the skeleton and dispatch the prose to the writer — a Claude session does not write the sentences (`write-prose`). Write the source under `artifacts/<slug>/`, build with `md2artifact`, **commit source and built HTML together** (`artifacts/README.md` has the layout), publish, record the row per `artifacts-sync`. The closing reply carries the link, not only a path.
 2. Yulong reviews on the page — comments and suggested edits — and pastes the Copy-all export back into a session.
 3. The session applies the export to the committed source. Exported quotes are **rendered text**, not Markdown: locate each in the source and adapt the markup by judgment, never mechanically — a sed loop over the export corrupts the file.
 4. Rebuild, update the committed HTML in the same commit, republish at the **same URL**. One spec keeps one link; warn before republishing over a page with unexported annotations.

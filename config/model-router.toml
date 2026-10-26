@@ -60,7 +60,10 @@
 #                   (low|medium|high|xhigh) for models that honour it; false = none
 #   writer-priority optional positive integer: eligible writers, lowest first.
 #                   Used by write-prose, not emitted into generated router files.
-#                   Only enabled models with an agent qualify; omit to opt out.
+#                   Only enabled models with an agent qualify, plus a Claude
+#                   model (provider "anthropic"), which has no agent: it writes
+#                   inline when the session runs it, else through an Agent with
+#                   `model: opus` (assumed to resolve to Opus 5.5). Omit to opt out.
 #
 # Writer fallback: try the next eligible priority on quota or cooldown failure.
 # All provider = "codex" models use the same OAuth account and share its quota;
@@ -104,6 +107,7 @@ base-url = "https://openrouter.ai/api/v1"
 
 [[models]]
 id = "claude-opus-5-5"
+writer-priority = 3     # allowed, but after Sol and Astra (Yulong, 2026-10-12)
 name = "Opus 5.5"
 provider = "anthropic"
 
@@ -208,7 +212,7 @@ agent = false
 [[models]]
 id = "kimi-k3"
 aliases = ["kimi"]
-writer-priority = 3
+writer-priority = 4
 name = "Kimi K3"
 provider = "openrouter"
 slug = "moonshotai/kimi-k3"

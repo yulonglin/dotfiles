@@ -35,7 +35,6 @@ class WriterPolicyTests(unittest.TestCase):
             priority = model["writer-priority"]
             self.assertIs(type(priority), int)
             self.assertGreater(priority, 0)
-            self.assertNotEqual(model["provider"], "anthropic")
             priorities.append(priority)
         self.assertEqual(len(priorities), len(set(priorities)))
 
