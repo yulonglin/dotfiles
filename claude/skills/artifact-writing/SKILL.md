@@ -117,6 +117,10 @@ A page-initiated file save — a blob URL on an `<a download>` — is inert in t
 
 ## Rendering mechanics
 
+**Data files published beside a page have two publisher limits, and neither is a reason to drop records.** The publisher refuses a text file that holds a raw U+FFFD replacement character — model readouts and partial-byte tokens produce thousands — so write it as the JSON escape `�`: `JSON.parse` restores it, and a sha256 check of a rebuilt prompt still matches. Each file is capped at 16 MB, so when a data file outgrows it, move the overflow into a second file the page fetches when the affected item is opened, instead of dropping conditions; a page that silently drops records reads as complete (Yulong, 2026-10-14).
+
+**Verify a page with data files in two steps, because a headless browser cannot open the viewer.** A private Artifact URL returns 403 to an unsigned browser, so serve the built page locally (`python -m http.server` outside the sandbox, so the browser can reach it) and drive it with Playwright: switch every filter, open items, and check that every input's hash badge matches. Then read the published files back (`Artifact action: "read"` with `paths`) and compare their sha256 with the files tested. Ask the user to confirm the in-viewer render only after both pass (2026-10-14).
+
 **Transcripts.** The full text sits in a collapsed `<details>` beside the excerpt (the *why* is in `~/.claude/checklists/results-analysis.md`); inside it, visually locate the excerpt the prose is about with a `<mark>`, a coloured left border or a boxed span, so expanding the section shows immediately where the fragment sits in context. Keep the role palette theme-aware. Long transcripts scroll inside their own container (`overflow-x: auto`, bounded `max-height`), never the page body.
 
 **Enumerated instances.** Where a page lists many samples, episodes or runs, give each collapsed row a compact per-step strip in its header — one cell per step (attempt, turn, retry, epoch), coloured by that step's outcome plus a label — so recovery, degradation and "it failed the same way ten times" are visible before anything is opened.
