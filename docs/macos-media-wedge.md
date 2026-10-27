@@ -1,6 +1,6 @@
 # macOS Media Wedge: Several Apps Hang While CPU Stays Low
 
-When several unrelated apps stop working at once and CPU, memory and network all look healthy, check the audio stack first. A crash-looping `avconferenced` leaves `coreaudiod` wedged, and every app that touches audio, camera or contacts then blocks in synchronous IPC. Flat resource graphs are the signature of this wedge, not evidence against it. Run `reset-mac-media --check` (read-only, about a second), then `reset-mac-media` to fix it without a reboot.
+When several unrelated apps stop working at once and CPU, memory and network all look healthy, check the audio stack first. A wedged `coreaudiod` — left by a crash-looping `avconferenced`, or deadlocked inside itself (2026-10-26) — means every app that touches audio, camera or contacts then blocks in synchronous IPC. Flat resource graphs are the signature of this wedge, not evidence against it. Run `reset-mac-media --check` (read-only, about a second), then `reset-mac-media` to fix it without a reboot.
 
 ## The symptoms look like a network or display fault
 
@@ -11,6 +11,7 @@ On 2026-09-24 the first symptoms were read as a network problem and cost about 1
 - FaceTime, Spotify or other audio apps freeze; the UI feels stuck.
 - NordVPN's Shield extension logs `Failed to talk to secd after 4 attempts` every few seconds. This is a downstream symptom: it stopped as soon as the media daemons restarted. Killing Shield does nothing, because launchd respawns a system extension at once.
 - `~/Library/Logs/DiagnosticReports` holds a run of `avconferenced-*.ips` files a few seconds to minutes apart.
+- One app hangs every time it launches (Telegram on 2026-10-26, first mistaken for a WindowServer fault), and `/Library/Logs/DiagnosticReports` holds `.hang` reports whose header reads `Deadlock: coreaudiod`.
 
 ## Confirm it in thirty seconds
 
@@ -28,7 +29,7 @@ reset-mac-media --dry-run   # preview
 reset-mac-media             # save diagnostics, restart the media daemons, verify
 ```
 
-It needs administrator authentication and interrupts audio, video and calls for a moment. Apps that were blocked recover on their own. Brew-upgraded apps that were running during the upgrade (see below) should be quit and relaunched as well. If the helper is not at hand, this is the minimal equivalent:
+It needs administrator authentication and interrupts audio, video and calls for a moment. Apps that were blocked recover on their own. A deadlocked `coreaudiod` cannot act on SIGTERM, because its handler runs on a dispatch queue that is itself blocked: on 2026-10-26 it kept PID 634 through two runs. So the helper now sends SIGKILL to a daemon whose PID has not changed 5 s after SIGTERM, and to that daemon only. Brew-upgraded apps that were running during the upgrade (see below) should be quit and relaunched as well. If the helper is not at hand, this is the minimal equivalent:
 
 ```
 sudo killall -9 \
@@ -39,15 +40,18 @@ sudo killall -9 \
 
 If neither clears it, reboot. A normal restart can hang for over ten minutes because frozen apps cannot quit (2026-08-24), so be ready to hold the power button.
 
-## Three incidents share one crash but not one trigger
+## Four incidents, two mechanisms, a call in every one
 
-Every incident has the same crash site: `avconferenced` terminating itself from `+[VCXPCConnection selfTerminateDueToTimeout:]` on an XPC call timeout, repeated seconds to minutes apart.
+The first three incidents share one crash site: `avconferenced` terminating itself from `+[VCXPCConnection selfTerminateDueToTimeout:]` on an XPC call timeout, repeated seconds to minutes apart.
 
 | Date | What happened just before | Other crash | Fixed by |
 |---|---|---|---|
 | 2026-08-24 | FaceTime call with a broken peer; Alfred's audio-device switcher crashed on a vanished CoreAudio device | `audiomxd` abort | Hard reboot |
 | 2026-09-22 | AirPods broke CoreAudio's Bluetooth route before a call (session notes; verification was left pending) | FineTune suspected | `killall` of the media daemons |
 | 2026-09-24 | A manual `brew update` then `brew upgrade` (run by Yulong) quit or replaced 15 running apps from 17:04:00 (AlDente and Alfred first); first `avconferenced` crash at 17:04:28 | FineTune crashed 17:05:16 | `killall` of the media daemons |
+| 2026-10-26 | A Google Meet call in Safari on AirPods ended at 14:40:04; about 10 s later `coreaudiod` deadlocked. No `avconferenced` loop until the reset restarted it | None; two Telegram `.hang` reports named `Deadlock: coreaudiod` | `reset-mac-media` failed twice (SIGTERM ignored); `killall -9 coreaudiod` pending |
+
+The 2026-10-26 wedge is a different mechanism: a lock-order deadlock inside `coreaudiod`, with no crash. One thread was updating a process tap's format for the AirPods (`HALS_Tap::_UpdateTapFormatFromDeviceFormat`), which happens when they leave headset mode at the end of a call. The other was removing an audio client (`HALS_System::RemoveClient`). Each held the lock the other needed. A process tap exists only if some app captures or reroutes other apps' audio, and two were running: FineTune, which taps every app for per-app volume, and Granola's audio helper. Granola's helper was idle in a live sample and captures through ScreenCaptureKit, which leans the tap toward FineTune (about 65/35, unproven). The thread timestamps count awake time only, so the deadlock time needs the 14:46–14:50 sleep added back; that correction is what places it at the end of the call. Evidence: `~/scratch/coreaudio-wedge-2026-10-26/`.
 
 On 2026-09-24 the FaceTime call ended at about 17:03, one minute before the upgrade began, and `avconferenced` was still logging RTCP timeouts from its teardown at 17:03:08. NordVPN Shield's `secd` errors had begun at 15:59:29, the second the camera came on for that call. So brew quit AlDente and Alfred while the call was still being torn down, on a stack that may already have been strained; the upgrade guard alone might not have prevented it.
 
@@ -73,7 +77,13 @@ brew-running-casks --greedy   # include casks that update themselves
 
 **Wait a few minutes after a call ends before running `brew upgrade`**, and do not start one during a call.
 
-**Add FaceTime to FineTune's ignore list** (decided 2026-09-24). FineTune's GitHub issues document friction with calls specifically, not a general fault: about ten FaceTime reports, five still open, where FineTune's audio tap fights FaceTime's voice-processing mode and leaves call audio near-silent or crackling ([#113](https://github.com/ronitsingh10/FineTune/issues/113), [#156](https://github.com/ronitsingh10/FineTune/issues/156), [#262](https://github.com/ronitsingh10/FineTune/issues/262)), plus a cluster on AirPods and Bluetooth routing ([#185](https://github.com/ronitsingh10/FineTune/issues/185), [#255](https://github.com/ronitsingh10/FineTune/issues/255), [#316](https://github.com/ronitsingh10/FineTune/issues/316), [#326](https://github.com/ronitsingh10/FineTune/issues/326)). No issue reports a system-wide `coreaudiod` wedge (searched 2026-09-24). On 2026-09-24 FineTune crashed 48 s after the loop began, in its window code rather than its audio path, so it may have been a victim that day rather than the trigger. Use the MacBook microphone when Bluetooth call routing is unstable, and remove FineTune if a fourth incident follows.
+**Add FaceTime to FineTune's ignore list** (decided 2026-09-24). FineTune's GitHub issues document friction with calls specifically, not a general fault: about ten FaceTime reports, five still open, where FineTune's audio tap fights FaceTime's voice-processing mode and leaves call audio near-silent or crackling ([#113](https://github.com/ronitsingh10/FineTune/issues/113), [#156](https://github.com/ronitsingh10/FineTune/issues/156), [#262](https://github.com/ronitsingh10/FineTune/issues/262)), plus a cluster on AirPods and Bluetooth routing ([#185](https://github.com/ronitsingh10/FineTune/issues/185), [#255](https://github.com/ronitsingh10/FineTune/issues/255), [#316](https://github.com/ronitsingh10/FineTune/issues/316), [#326](https://github.com/ronitsingh10/FineTune/issues/326)). No issue reports a system-wide `coreaudiod` wedge (searched 2026-09-24). On 2026-09-24 FineTune crashed 48 s after the loop began, in its window code rather than its audio path, so it may have been a victim that day rather than the trigger. Use the MacBook microphone when Bluetooth call routing is unstable.
+
+**FineTune is quit as a test, not yet uninstalled** (2026-10-26). The fourth incident followed, so the 2026-09-24 trigger to remove it is met. But this time the tap owner could be FineTune or Granola, and quitting one is the test that tells them apart. It is not a login item, so it stays off across reboots until opened by hand. If AirPods calls run for a week without a wedge, uninstall it and move its `config/apps.conf` line to `config/apps-excluded.conf`; if a wedge recurs with FineTune off, Granola's tap is next.
+
+## A watcher posts a notification when CoreAudio wedges
+
+`coreaudio-watch` runs every 2 minutes from the `coreaudio-watch` LaunchAgent (`scripts/cleanup/setup_coreaudio_watch.sh`, deploy component `coreaudio-watch`, on by default on macOS). It reads crash and hang reports written since its last run, without touching CoreAudio, and probes with `reset-mac-media --check` only when a report blames `coreaudiod`, on every run while the state is wedged, or every 15 minutes as a backstop. It posts a notification when CoreAudio wedges, an hourly reminder while it stays wedged, one when it recovers, and one per new batch of media-daemon crash reports. State lives in `~/.local/state/coreaudio-watch/` and its log in `~/Library/Logs/com.user.coreaudio-watch.log`; `coreaudio-watch --dry-run` shows what a run would do. The notifications are Mac banners only, with no phone push.
 
 ## Diagnosis steps that worked, in order
 

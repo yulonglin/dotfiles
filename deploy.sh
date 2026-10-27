@@ -1449,6 +1449,10 @@ queue_scheduled_job() {
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
     fi
 
+    if [[ "$DEPLOY_COREAUDIO_WATCH" == "true" ]] && is_macos; then
+        queue_scheduled_job coreaudio-watch "$DOT_DIR/scripts/cleanup/setup_coreaudio_watch.sh"
+    fi
+
     if [[ "$DEPLOY_HIDE_IDLE_APPS" == "true" ]] && is_macos; then
         # Provenance, not the resolved boolean, decides whether this run may MINT
         # the escalation token. DEPLOY_HIDE_IDLE_APPS=true can come from a CLI
