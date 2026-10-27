@@ -1,0 +1,207 @@
+#!/usr/bin/env zsh
+# coreaudio-watch — post a notification when CoreAudio wedges, and again when it recovers.
+#
+# A wedged coreaudiod hangs every app that touches audio, and it looks like
+# something else: on 2026-10-26 Telegram hung on every launch for two hours and
+# the first guess was WindowServer. The hang reports named the cause the whole
+# time ("Deadlock: coreaudiod"), but nothing read them. Runbook:
+# docs/macos-media-wedge.md.
+#
+# Each run (every 2 minutes, from the coreaudio-watch LaunchAgent):
+#
+#   1. Passive scan. Reads crash and hang reports written since the last run and
+#      flags a hang report whose header blames coreaudiod, or a crash report from
+#      avconferenced, audiomxd or coreaudiod. This reads files only and never
+#      talks to CoreAudio.
+#   2. Active probe, `reset-mac-media --check`, which asks CoreAudio for its
+#      device list with a 20 s timeout. It runs when the scan flagged something,
+#      on every run while the last state was wedged (so recovery is noticed
+#      within one interval), and otherwise only every 15 minutes as a backstop.
+#      Probing a healthy daemon every 2 minutes would add client churn, and a
+#      client being removed was one half of the 2026-10-26 deadlock.
+#
+# Notifications: one when the state turns wedged, a reminder every hour while it
+# stays wedged, one on recovery, and one per new batch of media-daemon crash
+# reports while audio still answers (probe exit 3). Probe exit 4 (inconclusive)
+# changes nothing.
+#
+# The first run sets the scan stamp to now rather than scanning history, so an
+# install does not fire on old reports; it still probes once. macOS sometimes
+# rewrites a report after creating it (the 14:56 report of 2026-10-26 has an
+# mtime of 15:10), so a report can be scanned twice. That only triggers a probe;
+# the status gate keeps it from notifying twice.
+#
+# Everything is called by absolute path because launchd gives a minimal PATH.
+#
+# Usage:
+#   coreaudio-watch             Scan, probe if due, notify on a state change
+#   coreaudio-watch --dry-run   Print what it would do; notify and write nothing
+#   coreaudio-watch --help
+#
+# Test overrides (environment): CAW_STATE_DIR, CAW_REPORT_DIRS (space
+# separated), CAW_RESET_BIN, CAW_NOTIFIER, CAW_OSASCRIPT, CAW_NOW (epoch
+# seconds), CAW_BACKSTOP_SEC, CAW_REMIND_SEC.
+
+emulate -L zsh
+setopt no_unset pipe_fail null_glob
+zmodload zsh/datetime
+
+# Inside a function zsh sets $0 to the function name, so resolve it here.
+SELF="${0:A}"
+STATE_DIR="${CAW_STATE_DIR:-$HOME/.local/state/coreaudio-watch}"
+REPORT_DIRS=(${=CAW_REPORT_DIRS:-$HOME/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports})
+RESET_BIN="${CAW_RESET_BIN:-${SELF:h}/reset-mac-media}"
+NOTIFIER="${CAW_NOTIFIER:-/opt/homebrew/bin/terminal-notifier}"
+OSASCRIPT="${CAW_OSASCRIPT:-/usr/bin/osascript}"
+NOW="${CAW_NOW:-$EPOCHSECONDS}"
+BACKSTOP_SEC="${CAW_BACKSTOP_SEC:-900}"
+REMIND_SEC="${CAW_REMIND_SEC:-3600}"
+FIX_HINT="Audio apps will hang. Fix: reset-mac-media"
+
+DRY_RUN=0
+
+usage() {
+    /usr/bin/sed -n '/^# Usage:/,/^$/s/^# \{0,1\}//p' "$SELF"
+}
+
+log() {
+    print -r -- "$(strftime '%Y-%m-%dT%H:%M:%S%z' $EPOCHSECONDS) coreaudio-watch: $*"
+}
+
+read_state() {
+    local file="$STATE_DIR/$1" fallback="$2"
+    if [[ -r $file ]]; then
+        print -r -- "$(<$file)"
+    else
+        print -r -- "$fallback"
+    fi
+}
+
+write_state() {
+    (( DRY_RUN )) && return 0
+    print -r -- "$2" > "$STATE_DIR/$1"
+}
+
+notify() {
+    local title="$1" message="$2"
+    log "notify: $title: $message"
+    (( DRY_RUN )) && return 0
+    if [[ -x $NOTIFIER ]] && "$NOTIFIER" -title "$title" -message "$message" \
+        -sound Basso -group coreaudio-watch >/dev/null 2>&1; then
+        return 0
+    fi
+    "$OSASCRIPT" -e 'on run argv' \
+        -e 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Basso"' \
+        -e 'end run' "$title" "$message" >/dev/null 2>&1 || log "notification failed"
+}
+
+# Prints each report written since the stamp that points at a CoreAudio wedge.
+scan_reports() {
+    local stamp="$1" dir report
+    for dir in $REPORT_DIRS; do
+        [[ -d $dir ]] || continue
+        for report in $dir/*.(hang|ips|diag)(N.); do
+            [[ $report -nt $stamp ]] || continue
+            case ${report:t} in
+                avconferenced*.ips|audiomxd*.ips|coreaudiod*.ips)
+                    print -r -- "$report"; continue ;;
+            esac
+            [[ $report == *.hang ]] || continue
+            # The deadlock verdict sits in the report header, well inside 80 lines.
+            if /usr/bin/head -n 80 -- "$report" 2>/dev/null \
+                | /usr/bin/grep -q -E '^(Deadlock|Blocked by Deadlock): .*coreaudiod'; then
+                print -r -- "$report"
+            fi
+        done
+    done
+}
+
+main() {
+    while (( $# > 0 )); do
+        case "$1" in
+            --dry-run) DRY_RUN=1; shift ;;
+            --help|-h) usage; return 0 ;;
+            *) print -u2 "coreaudio-watch: unknown option: $1"; usage >&2; return 2 ;;
+        esac
+    done
+
+    [[ "$(/usr/bin/uname -s)" == Darwin ]] || { log "macOS only"; return 0; }
+    (( DRY_RUN )) || mkdir -p "$STATE_DIR" || return 1
+
+    local stamp="$STATE_DIR/scan-stamp" next_stamp="$STATE_DIR/scan-stamp.next"
+    # Not "status": zsh reserves that name for the last exit code.
+    local state last_probe last_notify first_run=0
+    local -a hits
+    state="$(read_state status healthy)"
+    last_probe="$(read_state last-probe 0)"
+    last_notify="$(read_state last-notify 0)"
+
+    # The next stamp is taken before the scan, so a report written during the
+    # scan is newer than it and is caught on the next run instead of lost.
+    (( DRY_RUN )) || : > "$next_stamp"
+    if [[ -f $stamp ]]; then
+        hits=("${(@f)$(scan_reports "$stamp")}")
+        hits=(${hits:#})
+    else
+        first_run=1
+    fi
+    (( DRY_RUN )) || mv -f "$next_stamp" "$stamp"
+
+    local hit
+    for hit in $hits; do
+        log "report points at CoreAudio: ${hit:t}"
+    done
+
+    if (( ! first_run && ${#hits} == 0 )) && [[ $state != wedged ]] \
+        && (( NOW - last_probe < BACKSTOP_SEC )); then
+        return 0
+    fi
+
+    # Wide enough that a crash between two backstop probes is still counted.
+    local since_min=$(( BACKSTOP_SEC / 60 + 5 ))
+    (( since_min < 20 )) && since_min=20
+    local output rc=0
+    output="$("$RESET_BIN" --check --since "$since_min" 2>&1)" || rc=$?
+    write_state last-probe "$NOW"
+
+    case $rc in
+        0|3)
+            if [[ $state == wedged ]]; then
+                notify "CoreAudio recovered" "Audio answers again."
+                write_state status healthy
+            elif (( ${#hits} > 0 )); then
+                log "a report blames CoreAudio, but it answers now"
+            fi
+            if (( rc == 3 )); then
+                local crashes seen
+                crashes="$(print -r -- "$output" | /usr/bin/sed -n 's/^  //p' | /usr/bin/sort)"
+                seen="$(read_state crashes-seen '')"
+                if [[ -n $crashes && $crashes != "$seen" ]]; then
+                    notify "Media daemons crashed" \
+                        "Audio still answers. If apps hang: reset-mac-media --check"
+                    write_state crashes-seen "$crashes"
+                fi
+            fi
+            ;;
+        1)
+            if [[ $state != wedged ]]; then
+                notify "CoreAudio is wedged" "$FIX_HINT"
+                write_state status wedged
+                write_state wedged-since "$NOW"
+                write_state last-notify "$NOW"
+            elif (( NOW - last_notify >= REMIND_SEC )); then
+                local since_epoch
+                since_epoch="$(read_state wedged-since "$NOW")"
+                notify "CoreAudio still wedged" \
+                    "Since $(strftime '%H:%M' $since_epoch). $FIX_HINT"
+                write_state last-notify "$NOW"
+            fi
+            ;;
+        *)
+            log "probe inconclusive (exit $rc); state left at $state: ${output//$'\n'/ | }"
+            ;;
+    esac
+    return 0
+}
+
+main "$@"
