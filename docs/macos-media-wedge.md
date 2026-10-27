@@ -29,7 +29,7 @@ reset-mac-media --dry-run   # preview
 reset-mac-media             # save diagnostics, restart the media daemons, verify
 ```
 
-It needs administrator authentication and interrupts audio, video and calls for a moment. Apps that were blocked recover on their own. A deadlocked `coreaudiod` cannot act on SIGTERM, because its handler runs on a dispatch queue that is itself blocked: on 2026-10-26 it kept PID 634 through two runs. So the helper now sends SIGKILL to a daemon whose PID has not changed 5 s after SIGTERM, and to that daemon only. Brew-upgraded apps that were running during the upgrade (see below) should be quit and relaunched as well. If the helper is not at hand, this is the minimal equivalent:
+It needs administrator authentication and interrupts audio, video and calls for a moment. Apps that were blocked recover on their own. A deadlocked `coreaudiod` does not exit on SIGTERM: it defers exit until its open XPC transactions drain, and a deadlocked daemon's never do. On 2026-10-26 it logged `Remaining transactions after SIGTERM: 5` every 0.5 s and kept PID 634 through three runs; the stuck `register_driver` transaction it listed was opened at about 16:44, two hours into the wedge, so it was a victim rather than the cause. So the helper now sends SIGKILL to a daemon whose PID has not changed 5 s after SIGTERM, and to that daemon only. Brew-upgraded apps that were running during the upgrade (see below) should be quit and relaunched as well. If the helper is not at hand, this is the minimal equivalent:
 
 ```
 sudo killall -9 \
