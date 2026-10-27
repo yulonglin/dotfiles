@@ -40,7 +40,7 @@
 #
 # Test overrides (environment): CAW_STATE_DIR, CAW_REPORT_DIRS (space
 # separated), CAW_RESET_BIN, CAW_NOTIFIER, CAW_OSASCRIPT, CAW_NOW (epoch
-# seconds), CAW_BACKSTOP_SEC, CAW_REMIND_SEC.
+# seconds), CAW_BACKSTOP_SEC, CAW_REMIND_SEC, CAW_RUNBOOK_URL.
 
 emulate -L zsh
 setopt no_unset pipe_fail null_glob
@@ -56,7 +56,10 @@ OSASCRIPT="${CAW_OSASCRIPT:-/usr/bin/osascript}"
 NOW="${CAW_NOW:-$EPOCHSECONDS}"
 BACKSTOP_SEC="${CAW_BACKSTOP_SEC:-900}"
 REMIND_SEC="${CAW_REMIND_SEC:-3600}"
-FIX_HINT="Audio apps will hang. Fix: reset-mac-media"
+# The banner is the only prompt a wedged Mac gives, so it carries the fix
+# itself; a click opens the runbook's fix section for the fallbacks.
+FIX_HINT="Run reset-mac-media in a terminal, type y, then your password. Click for fallbacks."
+RUNBOOK_URL="${CAW_RUNBOOK_URL:-https://github.com/yulonglin/dotfiles/blob/main/docs/macos-media-wedge.md#fix-it-with-reset-mac-media-and-reboot-only-as-the-fallback}"
 
 DRY_RUN=0
 
@@ -82,12 +85,16 @@ write_state() {
     print -r -- "$2" > "$STATE_DIR/$1"
 }
 
+# notify TITLE MESSAGE [URL]: a click opens URL. Only terminal-notifier can
+# attach a click action; the osascript fallback shows the text alone.
 notify() {
-    local title="$1" message="$2"
+    local title="$1" message="$2" url="${3:-}"
+    local -a click=()
+    [[ -n $url ]] && click=(-open "$url")
     log "notify: $title: $message"
     (( DRY_RUN )) && return 0
     if [[ -x $NOTIFIER ]] && "$NOTIFIER" -title "$title" -message "$message" \
-        -sound Basso -group coreaudio-watch >/dev/null 2>&1; then
+        -sound Basso -group coreaudio-watch "${click[@]}" >/dev/null 2>&1; then
         return 0
     fi
     "$OSASCRIPT" -e 'on run argv' \
@@ -178,14 +185,15 @@ main() {
                 seen="$(read_state crashes-seen '')"
                 if [[ -n $crashes && $crashes != "$seen" ]]; then
                     notify "Media daemons crashed" \
-                        "Audio still answers. If apps hang: reset-mac-media --check"
+                        "Audio still answers. If apps hang, run reset-mac-media --check in a terminal." \
+                        "$RUNBOOK_URL"
                     write_state crashes-seen "$crashes"
                 fi
             fi
             ;;
         1)
             if [[ $state != wedged ]]; then
-                notify "CoreAudio is wedged" "$FIX_HINT"
+                notify "CoreAudio is wedged" "$FIX_HINT" "$RUNBOOK_URL"
                 write_state status wedged
                 write_state wedged-since "$NOW"
                 write_state last-notify "$NOW"
@@ -193,7 +201,7 @@ main() {
                 local since_epoch
                 since_epoch="$(read_state wedged-since "$NOW")"
                 notify "CoreAudio still wedged" \
-                    "Since $(strftime '%H:%M' $since_epoch). $FIX_HINT"
+                    "Since $(strftime '%H:%M' $since_epoch). $FIX_HINT" "$RUNBOOK_URL"
                 write_state last-notify "$NOW"
             fi
             ;;
