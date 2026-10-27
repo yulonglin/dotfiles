@@ -30,6 +30,7 @@ fi
 STATE="$WORK/state"
 REPORTS="$WORK/reports"
 NOTES="$WORK/notifications.txt"
+NOTE_ARGS="$WORK/notification-args.txt"
 PROBE_RC_FILE="$WORK/probe-rc"
 PROBE_CALLS="$WORK/probe-calls"
 mkdir -p "$STATE" "$REPORTS"
@@ -53,7 +54,8 @@ EOF
 FAKE_NOTIFIER="$WORK/notifier"
 cat > "$FAKE_NOTIFIER" <<EOF
 #!/bin/bash
-# Records the title, which follows -title.
+# Records the full argument list, then the title, which follows -title.
+printf '%s\n' "\$*" >> "$NOTE_ARGS"
 while (( \$# > 0 )); do
     [[ \$1 == -title ]] && { echo "\$2" >> "$NOTES"; break; }
     shift
@@ -102,6 +104,12 @@ NOW=$((NOW + 120))
 run_watch
 [[ "$(probe_count)" == 2 ]] && pass "coreaudiod deadlock report triggers a probe" || fail "coreaudiod deadlock report triggers a probe (calls: $(probe_count))"
 [[ "$(last_note)" == "CoreAudio is wedged" ]] && pass "wedge posts a notification" || fail "wedge posts a notification (got: $(last_note))"
+# The banner itself must say what to run, and a click must open the runbook.
+wedge_args="$(tail -n 1 "$NOTE_ARGS")"
+[[ "$wedge_args" == *"Run reset-mac-media in a terminal, type y, then your password"* ]] \
+    && pass "wedge notification gives the fix steps" || fail "wedge notification gives the fix steps (got: $wedge_args)"
+[[ "$wedge_args" == *"-open https://github.com/yulonglin/dotfiles/blob/main/docs/macos-media-wedge.md#fix-it-with-reset-mac-media"* ]] \
+    && pass "wedge notification opens the runbook on click" || fail "wedge notification opens the runbook on click (got: $wedge_args)"
 [[ "$(cat "$STATE/status")" == wedged ]] && pass "state is wedged" || fail "state is wedged"
 
 # 5. Still wedged two minutes later: probed (state is wedged) but no repeat.
@@ -128,6 +136,7 @@ set_probe 0
 NOW=$((NOW + 120))
 run_watch
 [[ "$(last_note)" == "CoreAudio recovered" ]] && pass "recovery posts a notification" || fail "recovery posts a notification (got: $(last_note))"
+[[ "$(tail -n 1 "$NOTE_ARGS")" != *"-open"* ]] && pass "recovery notification has no click action" || fail "recovery notification has no click action"
 [[ "$(cat "$STATE/status")" == healthy ]] && pass "state is healthy after recovery" || fail "state is healthy after recovery"
 
 # 9. Crash reports while audio answers notify once per new batch.
