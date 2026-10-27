@@ -312,10 +312,11 @@ restart_root_process() {
     fi
     [[ -n "$old_pid" ]] || return 0
 
-    # A deadlocked daemon cannot act on SIGTERM: its handler runs on a dispatch
-    # queue that is itself blocked. On 2026-10-26 coreaudiod kept PID 634
-    # through two runs of this helper and needed SIGKILL. Escalate only for this
-    # same daemon, and only while its old PID is still the one running.
+    # coreaudiod handles SIGTERM by deferring exit until its open XPC
+    # transactions drain, and a deadlocked one's never do. On 2026-10-26 it
+    # logged "Remaining transactions after SIGTERM: 5" every 0.5 s, kept PID 634
+    # through three runs of this helper, and needed SIGKILL. Escalate only for
+    # this same daemon, and only while its old PID is still the one running.
     while (( attempt < 5 )); do
         [[ "$(process_pid "$process_name")" == "$old_pid" ]] || return 0
         "$RMM_SLEEP_BIN" 1
