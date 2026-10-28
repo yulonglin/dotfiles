@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Desktop clients may start with only the system PATH.
+export PATH="${PATH:-/usr/bin:/bin}:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin"
+exec "$SCRIPT_DIR/secrets" run SLACK_MCP_USER_TOKEN -- python3 -c '
+import json
+import os
+import sys
+
+token = os.environ["SLACK_MCP_USER_TOKEN"]
+if not token.startswith("xoxp-") or any(c.isspace() for c in token):
+    sys.exit("Slack MCP requires a valid xoxp user token")
+print(json.dumps({"Authorization": "Bearer " + token}))
+'
