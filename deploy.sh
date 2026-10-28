@@ -322,7 +322,7 @@ export PATH="\$DOT_DIR/custom_bins:\$PATH"
 
 # Tool integrations
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
-[ -d "\$HOME/.cargo" ] && . "\$HOME/.cargo/env"
+[ -f "\$HOME/.cargo/env" ] && . "\$HOME/.cargo/env"
 [ -d "\$HOME/.local/bin" ] && [ -f "\$HOME/.local/bin/env" ] && source "\$HOME/.local/bin/env"
 
 # ASCII art in interactive shells
