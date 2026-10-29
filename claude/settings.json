@@ -201,8 +201,13 @@
         "description": "ChatGPT subscription (Codex)"
       },
       {
+        "model": "terra",
+        "label": "GPT-6.1 Terra",
+        "description": "ChatGPT subscription (Codex)"
+      },
+      {
         "model": "kimi",
-        "label": "Kimi K3",
+        "label": "Kimi K3.1 Pro",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -999,6 +1004,12 @@
     "sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-6.1-terra": {
+      "autoCompactWindow": 258400
+    },
+    "terra": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-sol": {
       "autoCompactWindow": 258400
     },
@@ -1017,10 +1028,13 @@
     "gpt-5.6-luna": {
       "autoCompactWindow": 258400
     },
-    "kimi-k3": {
+    "kimi-k3.1-pro": {
       "autoCompactWindow": 250000
     },
     "kimi": {
+      "autoCompactWindow": 250000
+    },
+    "kimi-k3": {
       "autoCompactWindow": 250000
     },
     "glm-5.3": {
