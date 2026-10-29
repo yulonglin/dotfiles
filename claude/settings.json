@@ -181,28 +181,18 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-haiku-5-5",
-        "label": "Haiku 5.5",
-        "description": "Claude subscription"
-      },
-      {
-        "model": "claude-opus-4-6",
-        "label": "Opus 4.6",
-        "description": "Claude subscription"
-      },
-      {
         "model": "astra",
         "label": "GPT-6 Astra",
         "description": "ChatGPT subscription (Codex)"
       },
       {
-        "model": "sol",
-        "label": "GPT-6.1 Sol",
-        "description": "ChatGPT subscription (Codex)"
+        "model": "gemini",
+        "label": "Gemini 4 Argon",
+        "description": "OpenRouter, pay per token"
       },
       {
-        "model": "terra",
-        "label": "GPT-6.1 Terra",
+        "model": "sol",
+        "label": "GPT-6.1 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
@@ -223,11 +213,6 @@
       {
         "model": "grok",
         "label": "Grok 4.7",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "gemini",
-        "label": "Gemini 4 Argon",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -998,6 +983,12 @@
     "astra": {
       "autoCompactWindow": 258400
     },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini": {
+      "autoCompactWindow": 1000000
+    },
     "gpt-6.1-sol": {
       "autoCompactWindow": 258400
     },
@@ -1054,12 +1045,6 @@
     },
     "grok": {
       "autoCompactWindow": 500000
-    },
-    "gemini-4-argon": {
-      "autoCompactWindow": 1000000
-    },
-    "gemini": {
-      "autoCompactWindow": 1000000
     },
     "qwen3.8-max": {
       "autoCompactWindow": 1000000

@@ -123,6 +123,7 @@ provider = "anthropic"
 id = "claude-haiku-5-5"
 name = "Haiku 5.5"
 provider = "anthropic"
+picker = false           # off /model (2026-10-28); subagents still take `model: haiku`
 
 # Opus 4.6 is active until at least 2027-02-05 (deprecations page, 2026-09-07).
 # Opus 3 is not addable: retired on the API 2026-01-05 and gone from OpenRouter too.
@@ -130,6 +131,7 @@ provider = "anthropic"
 id = "claude-opus-4-6"
 name = "Opus 4.6"
 provider = "anthropic"
+picker = false           # off /model (2026-10-28); subagents still take `model: claude-opus-4-6`
 
 # ---- OpenAI, from the account (never through OpenRouter) ----------------
 
@@ -141,6 +143,19 @@ name = "GPT-6 Astra"
 provider = "codex"
 context-window = 258400
 agent = "high"
+
+# Gemini sits right below Astra in /model (Yulong, 2026-10-28), so its block is
+# here although it routes through OpenRouter like the families further down.
+# Gemini 3.7 Flash once returned "400 Provider returned error" on a full Claude
+# Code request (2026-09-22), not reproduced on 3.7 or 3.8 Flash on 2026-10-12.
+# If a 400 recurs on any Gemini, keep the upstream error.metadata.raw.
+[[models]]
+id = "gemini-4-argon"
+aliases = ["gemini"]
+name = "Gemini 4 Argon"
+provider = "openrouter"
+slug = "google/gemini-4-argon"
+context-window = 1048576
 
 # `sol` moved here from gpt-5.6-sol on 2026-10-01. Router 0.1.23 serves
 # gpt-6.1-sol through the account (released 2026-09-29, listed by the managed
@@ -164,6 +179,7 @@ aliases = ["terra"]
 name = "GPT-6.1 Terra"
 provider = "codex"
 context-window = 258400
+picker = false           # subagent only: terra(high)
 agent = "high"
 
 # GPT-6 Sol on the account. It went through OpenRouter while the router pinned
@@ -262,17 +278,6 @@ name = "Grok 4.7"
 provider = "openrouter"
 slug = "x-ai/grok-4.7"
 context-window = 500000
-
-# Gemini 3.7 Flash once returned "400 Provider returned error" on a full Claude
-# Code request (2026-09-22), not reproduced on 3.7 or 3.8 Flash on 2026-10-12.
-# If a 400 recurs on any Gemini, keep the upstream error.metadata.raw.
-[[models]]
-id = "gemini-4-argon"
-aliases = ["gemini"]
-name = "Gemini 4 Argon"
-provider = "openrouter"
-slug = "google/gemini-4-argon"
-context-window = 1048576
 
 [[models]]
 id = "qwen3.8-max"
