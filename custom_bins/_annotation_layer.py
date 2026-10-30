@@ -85,11 +85,11 @@ Behaviour, all of which the tests guard:
   localStorage;
 - a fixed count badge that jumps to the panel, with an on/off switch beside
   it. The Artifact viewer has native commenting on the same select-text
-  gesture, so a reader can switch the highlights and the note box off. Off
-  only hides: comments stay stored, counted, guarded and exported, a dirty
-  box declines the switch rather than lose its words, and a stored draft
-  waits for the layer to come back on. The choice is kept per page under
-  `an-off:<key>`.
+  gesture, so the highlights and the note box start OFF and a reader switches
+  them on to comment here. Off only hides: comments stay stored, counted,
+  guarded and exported, a dirty box declines the switch rather than lose its
+  words, and a stored draft waits for the layer to come back on. The choice
+  is kept per page under `an-off:<key>`: "0" is on, "1" or nothing is off.
 
 Layer v2 adds a second mode, **Suggest edit**, to the same box. Comment stays
 the default, so select-type-Enter means exactly what it meant before. The
@@ -376,7 +376,7 @@ HTML = r"""
   <textarea id="anExportText" readonly></textarea>
 </div>
 <div id="anDock">
-<button id="anToggle" type="button" aria-pressed="true" title="Switch this page's highlights and comment box off, to use the viewer's own comments. Your comments are kept.">Highlights on</button>
+<button id="anToggle" type="button" aria-pressed="false" title="Switch this page's highlights and comment box on or off. Off leaves select-to-comment to the viewer's own comments. Your comments are kept either way.">Highlights off</button>
 <button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
 </div>
 """
@@ -1555,11 +1555,13 @@ badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth",
 
 // ---- on/off switch -------------------------------------------------------
 // The Artifact viewer has its own commenting, and both answer the same
-// select-text gesture, so a reader can switch this layer's highlights and box
-// off. Off hides; it never deletes: the comments, their count, the badge's
-// warning, the unload guard and Copy all carry on as before, and a draft is
-// left in storage for the next time the layer is on. One reader's choice,
-// kept per page under its own prefixed key.
+// select-text gesture, so this layer's highlights and box start off and a
+// reader switches them on. Off hides; it never deletes: the comments, their
+// count, the badge's warning, the unload guard and Copy all carry on as
+// before, and a draft is left in storage for the next time the layer is on.
+// One reader's choice, kept per page under its own prefixed key: "0" means
+// on, and anything else -- nothing stored, "1", unreadable storage -- is the
+// off default.
 function layerOff(){ return document.documentElement.classList.contains("an-off"); }
 function setLayerOff(off){
   document.documentElement.classList.toggle("an-off", off);
@@ -1578,10 +1580,10 @@ toggle.onclick = function(){
 };
 function layerOn(){
   setLayerOff(false);
-  lsDel(OFF);
+  lsSet(OFF, "0");
   if (!isOpen()) restoreDraft();
 }
-setLayerOff(lsGet(OFF) === "1");
+setLayerOff(lsGet(OFF) !== "0");
 
 // A host page may bind single-key shortcuts on document or window -- a triage
 // console where `d` means delete, a slideshow where `j` means next. Typing a
