@@ -39,10 +39,12 @@ import argparse
 import hashlib
 import html
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -193,6 +195,12 @@ def mermaid_passthrough(tokens: list[Token]) -> list[Token]:
 MERMAID_JS = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"
 MERMAID_CHECK_PLAYWRIGHT = "playwright==1.64.1"
 MERMAID_CHECK_TIMEOUT = 120  # seconds; a cold uv cache downloads Playwright first
+# Variables that would make uv fetch Playwright from somewhere else.
+UV_REDIRECT_VARS = frozenset({
+    "UV_CONFIG_FILE", "UV_INDEX", "UV_INDEX_URL", "UV_DEFAULT_INDEX", "UV_EXTRA_INDEX_URL",
+    "UV_FIND_LINKS", "UV_INSECURE_HOST", "UV_INDEX_STRATEGY", "UV_NO_INDEX",
+    "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_FIND_LINKS",
+})
 _MERMAID_PARSE_SCRIPT = r'''
 import json, sys
 from playwright.sync_api import sync_playwright
@@ -247,18 +255,29 @@ def run_mermaid_parser(blocks: list[str]) -> list[str | None]:
     uv = shutil.which("uv")
     if not uv:
         raise MermaidCheckUnavailable("uv is not on PATH")
+    # md2artifact runs in whatever directory holds the page, often a repo
+    # someone else wrote. A uv.toml or pyproject [tool.uv] there could point
+    # the Playwright install at another index and so run its code, so uv reads
+    # no config file and starts in an empty directory, and the variables that
+    # redirect an index are dropped. Hardening variables such as
+    # UV_MALWARE_CHECK and UV_EXCLUDE_NEWER pass through.
+    env = {k: v for k, v in os.environ.items() if k not in UV_REDIRECT_VARS}
     try:
-        r = subprocess.run(
-            [
-                *(uv, "run", "--no-project", "--quiet", "--with", MERMAID_CHECK_PLAYWRIGHT),
-                *("python", "-I", "-c", _MERMAID_PARSE_SCRIPT, MERMAID_JS),
-            ],
-            input=json.dumps(blocks),
-            capture_output=True,
-            text=True,
-            timeout=MERMAID_CHECK_TIMEOUT,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory(prefix="md2artifact-mermaid-") as scratch:
+            r = subprocess.run(
+                [
+                    *(uv, "run", "--no-config", "--no-project", "--quiet"),
+                    *("--with", MERMAID_CHECK_PLAYWRIGHT),
+                    *("python", "-I", "-c", _MERMAID_PARSE_SCRIPT, MERMAID_JS),
+                ],
+                input=json.dumps(blocks),
+                capture_output=True,
+                text=True,
+                timeout=MERMAID_CHECK_TIMEOUT,
+                check=False,
+                cwd=scratch,
+                env=env,
+            )
     except subprocess.TimeoutExpired:
         raise MermaidCheckUnavailable(f"timed out after {MERMAID_CHECK_TIMEOUT}s") from None
     if r.returncode != 0:

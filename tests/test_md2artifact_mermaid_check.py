@@ -125,3 +125,28 @@ def test_real_parser_accepts_good_and_rejects_the_eaten_braces() -> None:
         pytest.skip(f"mermaid parser unavailable: {exc}")
     assert verdicts[0] is None
     assert verdicts[1] and "Parse error" in verdicts[1]
+
+
+def test_uv_ignores_the_callers_config_and_index_variables(tmp_path, monkeypatch) -> None:
+    """A uv.toml or index variable where the page lives must not pick the index.
+
+    md2artifact runs in the page's directory, often a repo someone else wrote,
+    and the parser install runs code from whatever index uv resolves.
+    """
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(cmd=cmd, **kwargs)
+        return md2.subprocess.CompletedProcess(cmd, 0, stdout="[null]", stderr="")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("UV_INDEX_URL", "https://example.invalid/simple")
+    monkeypatch.setenv("UV_MALWARE_CHECK", "1")
+    monkeypatch.setattr(md2.shutil, "which", lambda name: "/usr/bin/uv")
+    monkeypatch.setattr(md2.subprocess, "run", fake_run)
+    assert md2.run_mermaid_parser([GOOD]) == [None]
+    assert "--no-config" in seen["cmd"]
+    assert md2.MERMAID_CHECK_PLAYWRIGHT in seen["cmd"]
+    assert Path(seen["cwd"]).resolve() != tmp_path.resolve()
+    assert "UV_INDEX_URL" not in seen["env"]
+    assert seen["env"]["UV_MALWARE_CHECK"] == "1"
