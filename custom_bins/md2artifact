@@ -14,6 +14,11 @@ heading's ` {judgement}` / ` {lower}` tag into a "Your call" badge or a folded
 "Lower priority" tray, and offers a page-level comment button. The seen marks
 and the button need the capabilities `--capabilities` prints.
 
+Before writing, each mermaid block is parsed with Mermaid's own parser in the
+system Chrome, so a diagram that would render as an error box stops the build
+with its line and Mermaid's error. When that parser cannot run it warns and
+builds anyway; `--no-mermaid-check` skips it.
+
 Markdown artifacts cannot carry JavaScript, so a spec or report published as
 raw `.md` silently loses all of that. Run it through here first.
 
@@ -22,6 +27,7 @@ raw `.md` silently loses all of that. Run it through here first.
     md2artifact spec.md --title "P1 spec" --no-toc
     md2artifact spec.md --states approve,approve-pending-edits,deny
     md2artifact --capabilities           # JSON to pass when publishing
+    md2artifact spec.md --no-mermaid-check
 
 The output is a fragment (no <html>/<head>/<body>), which is what the Artifact
 tool expects; it is also viewable directly in a browser.
@@ -34,6 +40,8 @@ import hashlib
 import html
 import json
 import re
+import shutil
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -132,6 +140,7 @@ def mermaid_passthrough(tokens: list[Token]) -> list[Token]:
         tok = tokens[i]
         if tok.type == "fence" and tok.info.strip().split() == ["mermaid"]:
             out.append(_mermaid_token(tok.content))
+            out[-1].map = tok.map
             i += 1
             continue
         if (
@@ -159,11 +168,141 @@ def mermaid_passthrough(tokens: list[Token]) -> list[Token]:
                 source = "\n\n".join(parts).strip()
                 source = source[len(MERMAID_OPEN) : -len(MERMAID_CLOSE)]
                 out.append(_mermaid_token(source))
+                out[-1].map = tok.map
                 i = j
                 continue
         out.append(tok)
         i += 1
     return out
+
+
+# The build-time Mermaid check. The viewer renders a diagram it cannot parse as
+# an error box, and nothing upstream notices: a generator that wrote decision
+# nodes as Q"text" instead of Q{"text"} (an f-string ate the braces) published
+# five broken diagrams through here silently. So each block is parsed with
+# Mermaid's own parser before the page is written.
+#
+# Only a browser runs that parser. Mermaid's bundled DOMPurify initialises
+# against a real DOM when the bundle loads, so the same bundle under Node or
+# bun fails every block (valid or not) unless an npm DOM polyfill is installed.
+# The check therefore drives the system Chrome through Playwright, in a
+# throwaway `uv run --with` environment so md2artifact's own interpreter needs
+# nothing new. It runs only on pages that have diagrams. When it cannot run at
+# all (no uv, no Chrome, no network, or a sandbox that stops Chrome starting)
+# it warns and the build goes on; a block that fails to parse stops the build.
+MERMAID_JS = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"
+MERMAID_CHECK_PLAYWRIGHT = "playwright==1.64.1"
+MERMAID_CHECK_TIMEOUT = 120  # seconds; a cold uv cache downloads Playwright first
+_MERMAID_PARSE_SCRIPT = r'''
+import json, sys
+from playwright.sync_api import sync_playwright
+
+blocks = json.load(sys.stdin)
+with sync_playwright() as p:
+    browser = p.chromium.launch(channel="chrome", headless=True)
+    try:
+        page = browser.new_page()
+        page.add_script_tag(url=sys.argv[1])
+        results = page.evaluate(
+            """async (blocks) => {
+              const out = [];
+              for (const b of blocks) {
+                try { await mermaid.parse(b); out.push(null); }
+                catch (e) { out.push(String((e && e.message) || e)); }
+              }
+              return out;
+            }""",
+            blocks,
+        )
+    finally:
+        browser.close()
+json.dump(results, sys.stdout)
+'''
+
+
+class MermaidCheckUnavailable(Exception):
+    """The parser could not run; says nothing about the diagrams."""
+
+
+def mermaid_sources(md_text: str) -> list[tuple[int, str]]:
+    """(source line, text) per diagram, the text exactly as Mermaid receives it.
+
+    Taken from the passthrough's own output, so a block counts here exactly
+    when it renders as a diagram, and unescaped, because Mermaid reads the
+    element's textContent.
+    """
+    tokens = mermaid_passthrough(_markdown().parse(md_text))
+    return [
+        (
+            t.map[0] + 1 if t.map else 0,
+            html.unescape(t.content[len(MERMAID_OPEN) :].rsplit(MERMAID_CLOSE, 1)[0]).strip(),
+        )
+        for t in tokens
+        if t.type == "html_block" and t.content.startswith(MERMAID_OPEN)
+    ]
+
+
+def run_mermaid_parser(blocks: list[str]) -> list[str | None]:
+    """Mermaid's verdict per block: None if it parses, else Mermaid's error."""
+    uv = shutil.which("uv")
+    if not uv:
+        raise MermaidCheckUnavailable("uv is not on PATH")
+    try:
+        r = subprocess.run(
+            [
+                *(uv, "run", "--no-project", "--quiet", "--with", MERMAID_CHECK_PLAYWRIGHT),
+                *("python", "-I", "-c", _MERMAID_PARSE_SCRIPT, MERMAID_JS),
+            ],
+            input=json.dumps(blocks),
+            capture_output=True,
+            text=True,
+            timeout=MERMAID_CHECK_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise MermaidCheckUnavailable(f"timed out after {MERMAID_CHECK_TIMEOUT}s") from None
+    if r.returncode != 0:
+        lines = [ln.strip() for ln in r.stderr.splitlines() if ln.strip()]
+        # The exception line of the traceback, not the call log printed after it.
+        cause = next(
+            (ln for ln in reversed(lines) if re.match(r"[\w.]+(Error|Exception)\b.*:", ln)),
+            lines[-1] if lines else f"exit status {r.returncode}",
+        )
+        raise MermaidCheckUnavailable(cause[:300])
+    try:
+        results = json.loads(r.stdout)
+    except ValueError:
+        raise MermaidCheckUnavailable("the parser printed no verdicts") from None
+    if not isinstance(results, list) or len(results) != len(blocks):
+        raise MermaidCheckUnavailable("the parser returned the wrong number of verdicts")
+    return results
+
+
+def mermaid_faults(md_text: str) -> list[str]:
+    """One message per diagram that does not parse; [] when all do or none ran."""
+    sources = mermaid_sources(md_text)
+    if not sources:
+        return []
+    blocks = [text for _, text in sources]
+    try:
+        verdicts = run_mermaid_parser(blocks)
+    except MermaidCheckUnavailable as exc:
+        print(
+            f"md2artifact: warning: mermaid check skipped, {len(blocks)} diagram(s) "
+            f"not validated: {exc}",
+            file=sys.stderr,
+        )
+        return []
+    faults = []
+    for n, ((line, block), error) in enumerate(zip(sources, verdicts), 1):
+        if error is not None:
+            first = block.splitlines()[0] if block else ""
+            detail = "\n".join("    " + ln for ln in str(error).splitlines())
+            faults.append(
+                f"mermaid block {n} of {len(blocks)} (line {line}, starts {first!r}) "
+                f"does not parse:\n{detail}"
+            )
+    return faults
 
 
 DETAILS_OPEN_RE = re.compile(
@@ -1371,11 +1510,15 @@ PAGE_TOOLS = (
 )
 
 
+def _markdown() -> MarkdownIt:
+    return MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
+
+
 def render(
     md_text: str, states: list[str] | None = None
 ) -> tuple[str, list[tuple[int, str, str]]]:
     """Return (html, headings) where headings are (level, slug, text)."""
-    md = MarkdownIt("commonmark", {"html": False, "linkify": True}).enable("table")
+    md = _markdown()
     tokens = md.parse(md_text)
     for passthrough in PASSTHROUGHS:
         tokens = passthrough(tokens)
@@ -1838,6 +1981,8 @@ th,td{{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
 th{{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}}
 hr{{border:0;border-top:1px solid var(--rule);margin:2rem 0}}
 .doc svg{{max-width:100%;height:auto}}
+pre.mermaid{{background:var(--panel);border:1px solid var(--rule);border-radius:9px;
+ padding:1rem;margin:1.6rem 0;text-align:center}}
 p.svg-note{{color:var(--bad);background:var(--bad-bg);border-radius:6px;
  padding:.4rem .7rem;font-size:.85rem}}
 a{{color:var(--accent)}}
@@ -1925,6 +2070,13 @@ def main(argv: list[str] | None = None) -> int:
         "qualified by the parent directory for a generic stem like spec.md, so "
         "republishing the same document keeps its comments and two specs never share them)",
     )
+    ap.add_argument(
+        "--no-mermaid-check",
+        action="store_true",
+        help="skip parsing each mermaid block with Mermaid's own parser before "
+        "writing (by default a block that fails stops the build; when the parser "
+        "cannot run - no uv, Chrome or network - it warns and builds anyway)",
+    )
     args = ap.parse_args(argv)
 
     if args.capabilities:
@@ -1951,6 +2103,17 @@ def main(argv: list[str] | None = None) -> int:
                 "characters stop that line parsing back"
             )
     text = args.source.read_text(encoding="utf-8")
+    if not args.no_mermaid_check:
+        faults = mermaid_faults(text)
+        if faults:
+            for fault in faults:
+                print(f"md2artifact: {fault}", file=sys.stderr)
+            print(
+                f"md2artifact: {len(faults)} mermaid diagram(s) would render as an error "
+                "box; nothing written (--no-mermaid-check builds anyway)",
+                file=sys.stderr,
+            )
+            return 1
 
     title = args.title
     if not title:
