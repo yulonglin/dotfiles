@@ -194,6 +194,12 @@ def load_config(path: Path) -> dict:
         if app not in ("cold_turkey", "screenzen"):
             problems.append(f"blocklists key {app!r} must be cold_turkey or screenzen")
         for name, bl in (lists or {}).items():
+            keys = {"block", "allow"} | ({"off_in"} if app == "screenzen" else set())
+            if set(bl or {}) - keys:
+                problems.append(f"{app} {name!r} may only have {sorted(keys)}")
+            for m in bl.get("off_in") or []:
+                if m not in (cfg.get("modes") or {}):
+                    problems.append(f"{app} {name!r} off_in names unknown mode {m!r}")
             refs += [
                 (f"{app} {name}", (bl.get("block") or []) + (bl.get("allow") or []))
             ]
@@ -378,8 +384,17 @@ def sz_follow(cfg: dict, modes: list[str]) -> None:
         # else that loosens ScreenZen (a note edit since the last write: a block removed,
         # a shared site added) still waits, under the key 'focus screenzen' would use.
         mode_sites = set(sz_allow_sites(cfg, modes)) - set(sz_allow_sites(cfg, []))
+        # So is standing aside a 🚫 group whose off_in names the new mode.
+        mode_off = {
+            f"{name}:off"
+            for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items()
+            if any(m in (bl.get("off_in") or []) for m in modes)
+        }
         other = [
-            x for x in loosen if not (":+" in x and x.split(":+", 1)[1] in mode_sites)
+            x
+            for x in loosen
+            if x not in mode_off
+            and not (":+" in x and x.split(":+", 1)[1] in mode_sites)
         ]
         if other:
             try:
@@ -838,6 +853,14 @@ def cmd_screenzen(
         ]
         group["apps"] = want_apps
         loosen.extend(f"{name}:-{x}" for x in removed)
+        # A 🚫 group can stand aside while certain modes run (off_in), e.g. messaging
+        # apps during admin; it is back on for every other mode and for no mode.
+        was_off = group["isDisabled"]
+        group["isDisabled"] = any(m in (bl.get("off_in") or []) for m in modes)
+        if group["isDisabled"] and not was_off:
+            loosen.append(f"{name}:off")
+        if group["isDisabled"] != was_off:
+            report_lines.append(f"{name}: {'off' if group['isDisabled'] else 'on'}")
         if added or removed:
             report_lines.append(
                 f"{name}: add {', '.join(added) or '-'}; remove {', '.join(removed) or '-'}"

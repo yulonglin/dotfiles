@@ -531,3 +531,48 @@ def test_screenzen_gets_one_group_per_mode_and_only_the_running_one_is_on(
     assert "screenzen:+localhost" in loosen
     # the template itself is left as it was; only the dry run's copy changed
     assert template["isDisabled"] is False
+
+
+def test_a_screenzen_block_group_stands_aside_in_its_off_in_modes(
+    tmp_path, monkeypatch
+):
+    p = tmp_path / "note.md"
+    p.write_text(
+        NOTE.replace(
+            "blocklists:\n",
+            'blocklists:\n  screenzen:\n    "🚫 chat": {block: [chat], off_in: [writing]}\n',
+        )
+    )
+    cfg = ct.load_config(p)
+    groups = [
+        {
+            "groupName": "✅ always",
+            "id": "A",
+            "isDisabled": False,
+            "alwaysActive": True,
+            "customSites": [],
+            "apps": [],
+        },
+        {
+            "groupName": "🚫 chat",
+            "id": "B",
+            "isDisabled": False,
+            "alwaysActive": True,
+            "customSites": [],
+            "apps": [],
+        },
+    ]
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs(groups))
+    monkeypatch.setattr(
+        ct, "resolve_app", lambda name: (Path(f"/Applications/{name}.app"), "x")
+    )
+    assert "🚫 chat:off" in ct.cmd_screenzen(
+        cfg, dry_run=True, modes=["writing"], quiet=True
+    )
+    assert "🚫 chat:off" not in ct.cmd_screenzen(
+        cfg, dry_run=True, modes=["research"], quiet=True
+    )
+    bad = tmp_path / "bad.md"
+    bad.write_text(p.read_text().replace("off_in: [writing]", "off_in: [nope]"))
+    with pytest.raises(SystemExit, match="unknown mode 'nope'"):
+        ct.load_config(bad)
