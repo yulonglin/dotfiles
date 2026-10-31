@@ -330,6 +330,10 @@ def test_an_approved_switch_does_not_cover_a_different_switch(
         "mode: writing": mode_block(cfg, "writing", "false"),
     }
     monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    # A regression must never reach the real Cold Turkey CLI from a test.
+    monkeypatch.setattr(
+        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+    )
     with pytest.raises(SystemExit):
         ct.cmd_start(cfg, "writing")  # queued: research -> writing
     now[0] += 11 * 60
