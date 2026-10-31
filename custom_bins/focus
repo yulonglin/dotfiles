@@ -63,6 +63,7 @@ reads Cold Turkey's settings database (an obfuscated JSON blob) and never writes
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import json
 import os
@@ -337,8 +338,12 @@ def cmd_start(cfg: dict, mode: str) -> None:
             )
     if running:
         # Starting from no mode only tightens; switching may allow sites the current mode blocks.
+        # The key names the current state too, so an approval for one switch does not
+        # carry over to a different one.
         gate(
-            cfg, f"switch:{mode}", f"switching from {', '.join(running)} to {target!r}"
+            cfg,
+            f"switch:{','.join(sorted(running))}->{mode}",
+            f"switching from {', '.join(running)} to {target!r}",
         )
     # Start the target before stopping the others: for a moment both run, which only blocks
     # more, and if the start fails the old mode is still on. Failing closed, not open.
@@ -356,7 +361,7 @@ def cmd_off(cfg: dict) -> None:
         if b.get("enabled") == "true"
     }
     if running:
-        gate(cfg, "off", f"stopping {', '.join(running)}")
+        gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
     for name, block in running.items():
         if is_locked(block):
             print(f"{name!r} is locked; left running")
@@ -914,17 +919,24 @@ def cmd_pull(cfg_path: Path, dry_run: bool) -> None:
 
 def cmd_add(cfg_path: Path, group: str, items: list[str], app: bool) -> None:
     kind = "apps" if app else "sites"
-    added = add_to_note(cfg_path, group, items, kind)
-    print(f"{group}: added {', '.join(added) or 'nothing new (already listed)'}")
-    cfg = load_config(cfg_path)  # re-read: validates the edited note
+    # Work out what the add would loosen from an in-memory copy, and pass the gate before
+    # the note is written: otherwise a queued agent add would already sit in the note, and
+    # the next sync run by anyone would apply it without the delay.
+    cfg = copy.deepcopy(load_config(cfg_path))
+    if group not in cfg["groups"]:
+        sys.exit(f"focus: no group {group!r}; groups are {', '.join(cfg['groups'])}")
+    lst = cfg["groups"][group].setdefault(kind, [])
+    lst.extend(i for i in items if i not in lst)
     # Reconcile both apps even when the note already had the items: a repeat of a queued
     # 'add' must still apply it. One gate covers both apps, keyed by everything both would
     # loosen, so the repeat after the delay runs the whole thing in one go.
-    print("\nScreenZen changes:")
+    print("ScreenZen changes:")
     loosen = sync_loosen(cfg, read_blocks()) + cmd_screenzen(cfg, dry_run=True)
     if loosen:
         gate(cfg, "add:" + ",".join(sorted(loosen)), f"allowing {', '.join(loosen)}")
-    print()
+    added = add_to_note(cfg_path, group, items, kind)
+    print(f"\n{group}: added {', '.join(added) or 'nothing new (already listed)'}")
+    cfg = load_config(cfg_path)  # re-read: validates the edited note
     if app:
         print("Apps need a manual edit in Cold Turkey; focus status names it.")
     else:

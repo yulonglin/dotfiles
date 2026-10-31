@@ -301,3 +301,41 @@ def test_a_repeated_add_still_syncs_both_apps(tmp_path, monkeypatch):
     )
     ct.cmd_add(p, "papers", ["arxiv.org"], app=False)  # already listed
     assert ("sync", False) in ran and ("sz", False, False) in ran
+
+
+def test_a_queued_agent_add_leaves_the_note_unchanged(tmp_path, monkeypatch):
+    p = tmp_path / "note.md"
+    p.write_text(NOTE)
+    before = p.read_text()
+    monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    monkeypatch.setattr(ct, "sync_loosen", lambda cfg, blocks: ["writing:new.org"])
+    monkeypatch.setattr(ct, "cmd_screenzen", lambda cfg, dry_run, gated=True: [])
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_add(p, "papers", ["new.org"], app=False)
+    assert e.value.code == 3
+    assert p.read_text() == before
+
+
+def test_an_approved_switch_does_not_cover_a_different_switch(
+    cfg, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    now = [1_000_000.0]
+    monkeypatch.setattr(ct.time, "time", lambda: now[0])
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    with pytest.raises(SystemExit):
+        ct.cmd_start(cfg, "writing")  # queued: research -> writing
+    now[0] += 11 * 60
+    blocks["mode: research"]["enabled"] = "false"
+    blocks["mode: admin"] = {**mode_block(cfg, "writing", "true")}
+    cfg["modes"]["admin"] = {"allow": ["papers"]}
+    with pytest.raises(SystemExit) as e:  # admin -> writing is a different request
+        ct.cmd_start(cfg, "writing")
+    assert e.value.code == 3
