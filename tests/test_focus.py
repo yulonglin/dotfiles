@@ -50,9 +50,13 @@ def test_a_switch_points_screenzen_at_the_new_mode(cfg, monkeypatch):
     }
     fake_cold_turkey(monkeypatch, blocks)
     followed = []
-    monkeypatch.setattr(ct, "sz_follow", lambda cfg, modes: followed.append(modes))
+    monkeypatch.setattr(
+        ct, "sz_follow", lambda cfg, modes, switched: followed.append((modes, switched))
+    )
     ct.cmd_start(cfg, "writing")
-    assert followed == [["writing"]]
+    assert followed == [(["writing"], True)]
+    ct.cmd_start(cfg, "writing")  # already running: nothing switched
+    assert followed[-1] == (["writing"], False)
 
 
 NOTE = """# Test note
@@ -495,7 +499,7 @@ def test_a_switch_waits_on_screenzen_loosening_beyond_the_mode(
         return ["✅ always:+arxiv.org", "🚫 pause:-x.com"]
 
     monkeypatch.setattr(ct, "cmd_screenzen", fake_sz)
-    ct.sz_follow(cfg, ["research"])
+    ct.sz_follow(cfg, ["research"], switched=True)
     assert writes == []  # queued, not written
     monkeypatch.setattr(
         ct,
@@ -504,7 +508,11 @@ def test_a_switch_waits_on_screenzen_loosening_beyond_the_mode(
             ["✅ always:+arxiv.org"] if dry_run else writes.append(k["modes"])
         ),
     )
-    ct.sz_follow(cfg, ["research"])  # only the mode's own site: approved by the switch
+    ct.sz_follow(cfg, ["research"])  # same mode re-run: approved nothing, so it waits
+    assert writes == []
+    ct.sz_follow(
+        cfg, ["research"], switched=True
+    )  # a real switch approved the mode's sites
     assert writes == [["research"]]
 
 

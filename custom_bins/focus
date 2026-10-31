@@ -364,32 +364,39 @@ def cmd_start(cfg: dict, mode: str) -> None:
         )
     # Start the target before stopping the others: for a moment both run, which only blocks
     # more, and if the start fails the old mode is still on. Failing closed, not open.
-    if blocks[target].get("enabled") != "true":
+    switched = blocks[target].get("enabled") != "true"
+    if switched:
         switch(target, on=True)
     for name in running:
         switch(name, on=False)
-    # ScreenZen follows the mode. The switch itself already passed the agent gate.
-    sz_follow(cfg, [mode])
+    # ScreenZen follows the mode. A real switch already passed the agent gate; re-running
+    # the mode that already runs approved nothing, so it waives nothing either.
+    sz_follow(cfg, [mode], switched=switched)
     print(f"started {target!r}")
 
 
-def sz_follow(cfg: dict, modes: list[str]) -> None:
+def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
     """Point ScreenZen's allow list at the running modes. Cold Turkey has already switched,
     so a ScreenZen failure is reported without undoing that."""
     if not Path(f"{SZ_DOMAIN}.plist").exists():
         return  # ScreenZen is not installed here
     try:
         loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
-        # Allowing the new mode's own sites is what the switch already approved. Anything
-        # else that loosens ScreenZen (a note edit since the last write: a block removed,
-        # a shared site added) still waits, under the key 'focus screenzen' would use.
-        mode_sites = set(sz_allow_sites(cfg, modes)) - set(sz_allow_sites(cfg, []))
-        # So is standing aside a 🚫 group whose off_in names the new mode.
-        mode_off = {
-            f"{name}:off"
-            for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items()
-            if any(m in (bl.get("off_in") or []) for m in modes)
-        }
+        # When the mode really changed, allowing its own sites is what the switch already
+        # approved. Anything else that loosens ScreenZen (a note edit since the last write:
+        # a block removed, a shared site added) still waits, under the key that
+        # 'focus screenzen' would use.
+        mode_sites, mode_off = set(), set()
+        if switched:
+            mode_sites = set(sz_allow_sites(cfg, modes)) - set(sz_allow_sites(cfg, []))
+            # So is standing aside a 🚫 group whose off_in names the new mode.
+            mode_off = {
+                f"{name}:off"
+                for name, bl in (cfg.get("blocklists") or {})
+                .get("screenzen", {})
+                .items()
+                if any(m in (bl.get("off_in") or []) for m in modes)
+            }
         other = [
             x
             for x in loosen
