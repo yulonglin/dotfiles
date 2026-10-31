@@ -25,10 +25,12 @@ blocklists only name groups:
     blocklists:   {screenzen: {"🚫 distractions": {block: [comms]}},
                    cold_turkey: {"always": {block: [comms], allow: [papers]}}}
 
-Two layers. ScreenZen gives all-day friction: its '✅ always' group allows every
-site any mode allows, except what its own 🚫 groups block (other sites get a
-pause screen); its 🚫 groups are written from `blocklists.screenzen`, and its
-other ✅ groups are switched off. ScreenZen has no CLI, so `screenzen` saves a
+Two layers. ScreenZen gives friction and follows the mode: its '✅ always' group
+allows the shared list plus the running mode's sites (only the shared list when
+no mode runs), except what its own 🚫 groups block; every other site gets a
+pause screen. A switch or 'off' rewrites it. Its 🚫 groups are written from
+`blocklists.screenzen`, and its other ✅ groups are switched off. ScreenZen has
+no CLI, so each write saves a
 backup to $FOCUS_BACKUPS (default ~/scratch/blocker-backups), closes it,
 writes its preferences with `defaults`, reads them back and reopens it.
 ScreenZen matches by substring, so an allow pattern is cut at its first '*' (it
@@ -98,6 +100,7 @@ SZ_DOMAIN = (
     / "Library/Group Containers/group.ScreenZen.macos/Library/Preferences/group.ScreenZen.macos"
 )
 SZ_GROUP = "✅ always"  # name prefix of the one ScreenZen group this tool owns
+SZ_BACKUPS_KEPT = 50
 BACKUP_DIR = Path(
     os.environ.get("FOCUS_BACKUPS", Path.home() / "scratch/blocker-backups")
 )
@@ -351,7 +354,20 @@ def cmd_start(cfg: dict, mode: str) -> None:
         switch(target, on=True)
     for name in running:
         switch(name, on=False)
+    # ScreenZen follows the mode. The switch itself already passed the agent gate.
+    sz_follow(cfg, [mode])
     print(f"started {target!r}")
+
+
+def sz_follow(cfg: dict, modes: list[str]) -> None:
+    """Point ScreenZen's allow list at the running modes. Cold Turkey has already switched,
+    so a ScreenZen failure is reported without undoing that."""
+    if not Path(f"{SZ_DOMAIN}.plist").exists():
+        return  # ScreenZen is not installed here
+    try:
+        cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
+    except (subprocess.CalledProcessError, OSError, ValueError) as e:
+        print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
 
 
 def cmd_off(cfg: dict) -> None:
@@ -367,7 +383,11 @@ def cmd_off(cfg: dict) -> None:
         gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
     for name in running:
         switch(name, on=False)
-        print(f"stopped {name!r}")
+    if running:
+        sz_follow(
+            cfg, running_modes(cfg)
+        )  # back to the shared list, plus any locked mode
+        print(f"stopped {', '.join(running)}")
 
 
 def drift(cfg: dict, blocks: dict, mode: str) -> dict:
@@ -602,17 +622,22 @@ def sz_allow_pattern(site: str) -> str | None:
     return head if "." in head else None
 
 
-def sz_allow_sites(cfg: dict) -> list[str]:
-    """always_allow plus every mode's allow, as ScreenZen patterns, minus what ScreenZen's own
-    🚫 groups block: those keep their pause screen even where a mode allows them."""
+def sz_allow_sites(cfg: dict, modes: list[str] | None = None) -> list[str]:
+    """ScreenZen's allow list follows the mode: always_allow plus the allow groups of the
+    given modes (the running ones; none means only the shared list), as ScreenZen patterns,
+    minus what ScreenZen's own 🚫 groups block, which keep their pause screen everywhere.
+    modes=None means every mode, the widest list ScreenZen can ever hold."""
     blocked = {
         s.replace("*", "")
         for bl in (cfg.get("blocklists") or {}).get("screenzen", {}).values()
         for s in group_items(cfg, bl.get("block") or [], "sites")
     }
     seen: dict[str, None] = {}
-    for mode in cfg["modes"]:
-        for site in desired_exceptions(cfg, mode):
+    shared = group_items(cfg, cfg.get("always_allow") or [], "sites")
+    names = list(cfg["modes"]) if modes is None else modes
+    sources = [shared] + [desired_exceptions(cfg, m) for m in names]
+    for sites in sources:
+        for site in sites:
             pattern = sz_allow_pattern(site)
             # ScreenZen matches by substring, so a blocked 'x.com' also covers an allowed
             # 'x.com/' or 'm.x.com': compare the same way.
@@ -666,8 +691,26 @@ APP_TEMPLATE = {
 }
 
 
-def cmd_screenzen(cfg: dict, dry_run: bool, gated: bool = True) -> list[str]:
-    """Write ScreenZen's groups from the note; return what the write loosens."""
+def running_modes(cfg: dict) -> list[str]:
+    """Modes whose Cold Turkey block is on now."""
+    return [
+        n[len(PREFIX) :]
+        for n, b in mode_blocks(read_blocks()).items()
+        if b.get("enabled") == "true" and n[len(PREFIX) :] in cfg["modes"]
+    ]
+
+
+def cmd_screenzen(
+    cfg: dict,
+    dry_run: bool,
+    gated: bool = True,
+    modes: list[str] | None = None,
+    quiet: bool = False,
+) -> list[str]:
+    """Write ScreenZen's groups from the note for the given modes (default: the ones
+    Cold Turkey runs now); return what the write loosens."""
+    if modes is None:
+        modes = running_modes(cfg)
     raw = sz_export()
     groups = sz_groups(raw)
     by_name = {g["groupName"]: g for g in groups}
@@ -686,14 +729,17 @@ def cmd_screenzen(cfg: dict, dry_run: bool, gated: bool = True) -> list[str]:
             f"{name}:{'+' if allows else '-'}{x}"
             for x in (added if allows else removed)
         )
-        print(
-            f"{name}:\n  add: {', '.join(added) or '-'}\n  remove: {', '.join(removed) or '-'}"
-        )
+        if not quiet:
+            print(
+                f"{name}:\n  add: {', '.join(added) or '-'}\n  remove: {', '.join(removed) or '-'}"
+            )
 
     allow = owned[0]
+    if not quiet:
+        print(f"ScreenZen follows: {', '.join(modes) or 'no mode (shared list only)'}")
     report(
         allow["groupName"],
-        *sz_set_sites(allow, sz_allow_sites(cfg), "allow"),
+        *sz_set_sites(allow, sz_allow_sites(cfg, modes), "allow"),
         allows=True,
     )
     for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items():
@@ -728,7 +774,8 @@ def cmd_screenzen(cfg: dict, dry_run: bool, gated: bool = True) -> list[str]:
         for g in groups
         if g["groupName"].startswith("✅") and g is not allow and not g["isDisabled"]
     ]
-    print(f"switch off: {', '.join(g['groupName'] for g in others) or '-'}")
+    if not quiet:
+        print(f"switch off: {', '.join(g['groupName'] for g in others) or '-'}")
     if dry_run or not (changed or others):
         return loosen
     if loosen and gated:
@@ -738,6 +785,9 @@ def cmd_screenzen(cfg: dict, dry_run: bool, gated: bool = True) -> list[str]:
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backup = BACKUP_DIR / f"screenzen-{dt.datetime.now():%Y-%m-%dT%H%M%S}.plist"
     backup.write_bytes(raw)
+    # Every mode switch writes ScreenZen, so keep the newest backups only.
+    for old in sorted(BACKUP_DIR.glob("screenzen-*.plist"))[:-SZ_BACKUPS_KEPT]:
+        old.unlink()
     # ScreenZen must be closed, or it writes its in-memory groups back over ours.
     subprocess.run(["killall", "ScreenZen"], capture_output=True)
     time.sleep(1)
@@ -762,7 +812,12 @@ def cmd_screenzen(cfg: dict, dry_run: bool, gated: bool = True) -> list[str]:
             f"focus: wrote ScreenZen (backup at {backup}) but could not reopen it, "
             "so its blocking is off until it runs. Reopen it: open -a ScreenZen"
         )
-    print(f"wrote ScreenZen and reopened it; backup at {backup}")
+    if quiet:
+        print(
+            f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
+        )
+    else:
+        print(f"wrote ScreenZen and reopened it; backup at {backup}")
     return loosen
 
 
@@ -1097,16 +1152,51 @@ def cmd_alfred(cfg: dict, query: str) -> None:
     print(json.dumps({"items": items}))
 
 
+def cmd_overview(cfg: dict) -> None:
+    """What 'focus' with no command prints: the modes, the timers, and what runs now."""
+    try:
+        blocks = read_blocks()
+    except (OSError, sqlite3.Error, ValueError):
+        blocks = {}
+
+    def on(name: str) -> str:
+        return "  (running)" if blocks.get(name, {}).get("enabled") == "true" else ""
+
+    width = max(len(n) for n in [*cfg["modes"], *(cfg.get("timers") or {})])
+    print("Modes: focus <mode>")
+    for m, spec in cfg["modes"].items():
+        allow = ", ".join(spec.get("allow") or [])
+        print(f"  {m:<{width}}  allows {allow}{on(PREFIX + m)}")
+    if cfg.get("timers"):
+        print("\nTimers: focus <timer> [minutes]")
+        for t, spec in cfg["timers"].items():
+            block = ", ".join(spec.get("block") or [])
+            mins = spec.get("minutes", 50)
+            print(
+                f"  {t:<{width}}  blocks {block}, {mins} min by default{on(TIMER_PREFIX + t)}"
+            )
+    print(
+        "\nAlso: off · status · sync · screenzen · add GROUP SITE · pull · export"
+        "\nAlways allowed: " + ", ".join(cfg.get("always_allow") or [])
+    )
+
+
 def main() -> None:
-    p = argparse.ArgumentParser(prog="focus", description=__doc__.split("\n")[0])
+    p = argparse.ArgumentParser(
+        prog="focus",
+        description="Switch Cold Turkey and ScreenZen between work modes defined in one note.",
+        epilog="Run 'focus' with no command to list the modes and what is running.",
+    )
     p.add_argument(
         "--config",
         type=Path,
         default=Path(os.environ.get("FOCUS_CONFIG", DEFAULT_CONFIG)),
+        help=f"the config note (default {DEFAULT_CONFIG})",
     )
     p.add_argument(
         "command",
-        help="a mode name, or off | status | sync | export | screenzen | add | alfred",
+        nargs="?",
+        help="a mode or timer name, or off | status | sync | screenzen | add | pull | export",
     )
     p.add_argument(
         "args", nargs="*", help="export: output file; add: GROUP SITE [SITE…]"
@@ -1120,6 +1210,8 @@ def main() -> None:
     if not cfg.get("modes"):
         sys.exit(f"focus: no modes in {a.config}")
     match a.command:
+        case None:
+            cmd_overview(cfg)
         case "off":
             cmd_off(cfg)
         case "status":
