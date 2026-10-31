@@ -475,3 +475,33 @@ def test_a_pull_into_a_reused_group_counts_as_loosening(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         ct.cmd_pull(p, dry_run=False)
     assert e.value.code == 3 and p.read_text() == before
+
+
+def test_a_switch_waits_on_screenzen_loosening_beyond_the_mode(
+    cfg, tmp_path, monkeypatch
+):
+    plist = tmp_path / "sz" / "prefs.plist"
+    plist.parent.mkdir()
+    plist.write_text("")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", plist.with_suffix(""))
+    monkeypatch.setenv("CLAUDECODE", "1")
+    writes = []
+
+    def fake_sz(cfg, dry_run, gated=True, modes=None, quiet=False):
+        if not dry_run:
+            writes.append(modes)
+        # the mode's own site, plus a 🚫 entry removed by a note edit
+        return ["✅ always:+arxiv.org", "🚫 pause:-x.com"]
+
+    monkeypatch.setattr(ct, "cmd_screenzen", fake_sz)
+    ct.sz_follow(cfg, ["research"])
+    assert writes == []  # queued, not written
+    monkeypatch.setattr(
+        ct,
+        "cmd_screenzen",
+        lambda cfg, dry_run, **k: (
+            ["✅ always:+arxiv.org"] if dry_run else writes.append(k["modes"])
+        ),
+    )
+    ct.sz_follow(cfg, ["research"])  # only the mode's own site: approved by the switch
+    assert writes == [["research"]]

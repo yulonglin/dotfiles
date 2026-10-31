@@ -365,6 +365,24 @@ def sz_follow(cfg: dict, modes: list[str]) -> None:
     if not Path(f"{SZ_DOMAIN}.plist").exists():
         return  # ScreenZen is not installed here
     try:
+        loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
+        # Allowing the new mode's own sites is what the switch already approved. Anything
+        # else that loosens ScreenZen (a note edit since the last write: a block removed,
+        # a shared site added) still waits, under the key 'focus screenzen' would use.
+        mode_sites = set(sz_allow_sites(cfg, modes)) - set(sz_allow_sites(cfg, []))
+        other = [
+            x for x in loosen if not (":+" in x and x.split(":+", 1)[1] in mode_sites)
+        ]
+        if other:
+            try:
+                gate(
+                    cfg, "screenzen:" + ",".join(sorted(loosen)), "loosening ScreenZen"
+                )
+            except SystemExit:
+                print(
+                    "ScreenZen not updated yet; run 'focus screenzen' after the wait."
+                )
+                return
         cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
