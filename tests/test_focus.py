@@ -506,3 +506,28 @@ def test_a_switch_waits_on_screenzen_loosening_beyond_the_mode(
     )
     ct.sz_follow(cfg, ["research"])  # only the mode's own site: approved by the switch
     assert writes == [["research"]]
+
+
+def sz_prefs(groups):
+    import plistlib as pl
+
+    return pl.dumps({"pauseShieldInstances": json.dumps(groups).encode()})
+
+
+def test_screenzen_gets_one_group_per_mode_and_only_the_running_one_is_on(
+    cfg, monkeypatch
+):
+    template = {
+        "groupName": "✅ always 💯",
+        "id": "OLD",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs([template]))
+    loosen = ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert "screenzen:+arxiv.org" in loosen  # research's sites now pass
+    assert "screenzen:+localhost" in loosen
+    # the template itself is left as it was; only the dry run's copy changed
+    assert template["isDisabled"] is False

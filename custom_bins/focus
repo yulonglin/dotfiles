@@ -25,11 +25,12 @@ blocklists only name groups:
     blocklists:   {screenzen: {"🚫 distractions": {block: [comms]}},
                    cold_turkey: {"always": {block: [comms], allow: [papers]}}}
 
-Two layers. ScreenZen gives friction and follows the mode: its '✅ always' group
-allows the shared list plus the running mode's sites (only the shared list when
-no mode runs), except what its own 🚫 groups block; every other site gets a
-pause screen. A switch or 'off' rewrites it. Its 🚫 groups are written from
-`blocklists.screenzen`, and its other ✅ groups are switched off. ScreenZen has
+Two layers. ScreenZen gives friction and follows the mode: focus owns one allow
+group per mode, '✅ focus: <mode>', plus '✅ focus: shared' for no mode, each
+holding the shared list plus that mode's sites minus what ScreenZen's own 🚫
+groups block. Exactly one is on, so ScreenZen shows the mode; every other site
+gets a pause screen. A switch or 'off' turns the right one on. Its 🚫 groups are
+written from `blocklists.screenzen`, and all other ✅ groups are off. ScreenZen has
 no CLI, so each write saves a
 backup to $FOCUS_BACKUPS (default ~/scratch/blocker-backups), closes it,
 writes its preferences with `defaults`, reads them back and reopens it.
@@ -99,7 +100,7 @@ SZ_DOMAIN = (
     Path.home()
     / "Library/Group Containers/group.ScreenZen.macos/Library/Preferences/group.ScreenZen.macos"
 )
-SZ_GROUP = "✅ always"  # name prefix of the one ScreenZen group this tool owns
+SZ_MODE_PREFIX = "✅ focus: "  # ScreenZen allow groups this tool owns, one per mode
 SZ_BACKUPS_KEPT = 50
 BACKUP_DIR = Path(
     os.environ.get("FOCUS_BACKUPS", Path.home() / "scratch/blocker-backups")
@@ -741,6 +742,22 @@ def running_modes(cfg: dict) -> list[str]:
     ]
 
 
+def sz_mode_group(mode: str | None) -> str:
+    """Name of the ScreenZen allow group focus owns for a mode (None: no mode runs)."""
+    return f"{SZ_MODE_PREFIX}{mode or 'shared'}"
+
+
+def sz_effective_allow(groups: list[dict]) -> set[str]:
+    """Allow patterns of every enabled ✅ group: what passes without a pause screen."""
+    return {
+        s["pattern"]
+        for g in groups
+        if g["groupName"].startswith("✅") and not g["isDisabled"]
+        for s in g["customSites"]
+        if s["action"] == "allow"
+    }
+
+
 def cmd_screenzen(
     cfg: dict,
     dry_run: bool,
@@ -748,41 +765,54 @@ def cmd_screenzen(
     modes: list[str] | None = None,
     quiet: bool = False,
 ) -> list[str]:
-    """Write ScreenZen's groups from the note for the given modes (default: the ones
-    Cold Turkey runs now); return what the write loosens."""
+    """Write ScreenZen's groups from the note and switch on the group of the given modes
+    (default: the ones Cold Turkey runs now); return what the write loosens.
+
+    focus owns one allow group per mode plus one for no mode ('✅ focus: shared'), each
+    holding the shared list plus that mode's sites; exactly one is on, so ScreenZen's own
+    screen shows the mode. Missing groups are created by copying an existing ✅ group.
+    Every other ✅ group is switched off."""
     if modes is None:
         modes = running_modes(cfg)
     raw = sz_export()
     groups = sz_groups(raw)
+    before = copy.deepcopy(groups)
     by_name = {g["groupName"]: g for g in groups}
-    owned = [g for g in groups if g["groupName"].startswith(SZ_GROUP)]
-    if len(owned) != 1:
-        sys.exit(
-            f"focus: expected one ScreenZen group named {SZ_GROUP!r}…, found {len(owned)}"
-        )
-    changed = False
-    loosen: list[str] = []  # allows gained, blocks lost
-
-    def report(name: str, added: list[str], removed: list[str], allows: bool) -> None:
-        nonlocal changed
-        changed |= bool(added or removed)
-        loosen.extend(
-            f"{name}:{'+' if allows else '-'}{x}"
-            for x in (added if allows else removed)
-        )
-        if not quiet:
-            print(
-                f"{name}:\n  add: {', '.join(added) or '-'}\n  remove: {', '.join(removed) or '-'}"
-            )
-
-    allow = owned[0]
-    if not quiet:
-        print(f"ScreenZen follows: {', '.join(modes) or 'no mode (shared list only)'}")
-    report(
-        allow["groupName"],
-        *sz_set_sites(allow, sz_allow_sites(cfg, modes), "allow"),
-        allows=True,
+    # Copy an all-day allow group, so a new group inherits no time window.
+    allow_groups = [g for g in groups if g["groupName"].startswith("✅")]
+    template = next(
+        (g for g in allow_groups if g.get("alwaysActive")),
+        next(iter(allow_groups), None),
     )
+    if template is None:
+        sys.exit(
+            "focus: ScreenZen has no ✅ group to copy; create one in ScreenZen first"
+        )
+    loosen: list[str] = []  # allows gained, blocks lost
+    report_lines: list[str] = []
+
+    # One allow group per mode, plus the no-mode group; keep each list current.
+    want_on = {sz_mode_group(m) for m in modes} or {sz_mode_group(None)}
+    for mode in [None, *cfg["modes"]]:
+        name = sz_mode_group(mode)
+        group = by_name.get(name)
+        if group is None:
+            group = copy.deepcopy(template)
+            group.update(
+                groupName=name, id=str(uuid.uuid4()).upper(), customSites=[], apps=[]
+            )
+            groups.append(group)
+            by_name[name] = group
+            report_lines.append(f"{name}: created")
+        added, removed = sz_set_sites(
+            group, sz_allow_sites(cfg, [mode] if mode else []), "allow"
+        )
+        if added or removed:
+            report_lines.append(f"{name}: +{len(added)} -{len(removed)} sites")
+    for g in groups:
+        if g["groupName"].startswith("✅"):
+            g["isDisabled"] = g["groupName"] not in want_on
+
     for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items():
         group = by_name.get(name)
         if group is None:
@@ -807,22 +837,31 @@ def cmd_screenzen(
             f"app {n}" for n in have_apps if n not in [a["appName"] for a in want_apps]
         ]
         group["apps"] = want_apps
-        report(name, added, removed, allows=False)
+        loosen.extend(f"{name}:-{x}" for x in removed)
+        if added or removed:
+            report_lines.append(
+                f"{name}: add {', '.join(added) or '-'}; remove {', '.join(removed) or '-'}"
+            )
         if missing:
-            print(f"  apps not found on this Mac, left out: {', '.join(missing)}")
-    others = [
-        g
-        for g in groups
-        if g["groupName"].startswith("✅") and g is not allow and not g["isDisabled"]
-    ]
+            report_lines.append(
+                f"{name}: apps not found on this Mac, left out: {', '.join(missing)}"
+            )
+
+    # What now passes without a pause screen that did not before.
+    loosen.extend(
+        f"screenzen:+{s}"
+        for s in sorted(sz_effective_allow(groups) - sz_effective_allow(before))
+    )
+    changed = groups != before
     if not quiet:
-        print(f"switch off: {', '.join(g['groupName'] for g in others) or '-'}")
-    if dry_run or not (changed or others):
+        print(
+            f"ScreenZen follows: {', '.join(modes) or 'no mode'}; on: {', '.join(sorted(want_on))}"
+        )
+        print("\n".join(f"  {line}" for line in report_lines) or "  no changes")
+    if dry_run or not changed:
         return loosen
     if loosen and gated:
         gate(cfg, "screenzen:" + ",".join(sorted(loosen)), "loosening ScreenZen")
-    for g in others:
-        g["isDisabled"] = True
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backup = BACKUP_DIR / f"screenzen-{dt.datetime.now():%Y-%m-%dT%H%M%S}.plist"
     backup.write_bytes(raw)
@@ -989,7 +1028,7 @@ def cmd_pull(cfg_path: Path, dry_run: bool) -> None:
         print(f"{p['group']} ({section} {owner!r} {key}): {', '.join(items)}")
     if dry_run:
         return
-    # A pulled site that ends up allowed reaches ScreenZen's '✅ always' on the next write by
+    # A pulled site that ends up allowed reaches ScreenZen's allow groups on the next write by
     # anyone, so for an agent it is loosening like any other. Judge that from the effect:
     # apply the plan to an in-memory copy and compare what every mode and ScreenZen would
     # allow, since a from-… group may already exist and be named by an allow list.
