@@ -5,7 +5,7 @@ description: Switch, inspect or change Yulong's Cold Turkey and ScreenZen blocki
 
 # Focus modes
 
-Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: each mode is a block `mode: <name>` that blocks every site except its allowlist and blocks the apps of its app groups. **ScreenZen** gives friction and follows the mode: its "✅ always" group allows the shared list plus the running mode's sites (only the shared list when no mode runs), so everything else gets a pause screen; each switch or `focus off` rewrites it, closing and reopening ScreenZen. Its 🚫 groups block apps and sites always.
+Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: each mode is a block `mode: <name>` that blocks every site except its allowlist and blocks the apps of its app groups. **ScreenZen** gives friction and follows the mode: focus owns one allow group per mode ("✅ focus: research" and so on, plus "✅ focus: shared" for no mode), each holding the shared list plus that mode's sites, and exactly one is on, so everything else gets a pause screen; each switch or `focus off` turns the right one on, closing and reopening ScreenZen. Its 🚫 groups block apps and sites always.
 
 ## Where things live
 
@@ -39,6 +39,6 @@ When Claude runs it, `focus` delays anything that loosens blocking: stopping a m
 - **"Why is X blocked":** check, in order, whether the running mode allows a group containing X, whether a Cold Turkey always-on block bans X (`focus status` prints `conflict:` lines; an exception never overrides another block), and whether a ScreenZen 🚫 group lists it.
 - **What stays manual in Cold Turkey:** removing a site, changing a mode's apps, and loosening an always-on block (the Cold Turkey blocks under `blocklists.cold_turkey` in the note). `focus sync` tries to add newly banned sites to the always-on blocks through the CLI, which only tightens; whether the CLI accepts additions to a locked block is untested, and sync says when one did not land. `focus status` names every remaining difference; give Yulong that as the step to do by hand.
 - **Why not write Cold Turkey's database directly:** it is possible (the settings are lightly obfuscated JSON), but it is exactly the path around the delay locks, and the running app can overwrite or corrupt it. Do not build or suggest it.
-- **ScreenZen's 🚫 groups win inside ScreenZen.** A site a mode allows but a ScreenZen 🚫 group blocks is left out of "✅ always", so it keeps its pause screen all day.
+- **ScreenZen's 🚫 groups win inside ScreenZen.** A site a mode allows but a ScreenZen 🚫 group blocks is left out of every "✅ focus:" group, so it keeps its pause screen all day.
 - **Time windows come from the apps' own schedules, not from a mode.** Some always-on blocks are scheduled off at set hours; the note says which. A running mode still blocks everything it does not allow, so a window needs `focus off`. Schedules are edited in the apps, not the note.
 - **Pattern syntax** is Cold Turkey's (`*` for any text, a path is its own entry). ScreenZen matches by substring, so `focus` cuts allow patterns at the first `*` and strips `*` from block patterns.
