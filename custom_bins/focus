@@ -360,12 +360,12 @@ def cmd_off(cfg: dict) -> None:
         for n, b in mode_blocks(read_blocks()).items()
         if b.get("enabled") == "true"
     }
+    for name in [n for n, b in running.items() if is_locked(b)]:
+        print(f"{name!r} is locked; left running")
+        del running[name]
     if running:
         gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
-    for name, block in running.items():
-        if is_locked(block):
-            print(f"{name!r} is locked; left running")
-            continue
+    for name in running:
         switch(name, on=False)
         print(f"stopped {name!r}")
 
@@ -614,7 +614,9 @@ def sz_allow_sites(cfg: dict) -> list[str]:
     for mode in cfg["modes"]:
         for site in desired_exceptions(cfg, mode):
             pattern = sz_allow_pattern(site)
-            if pattern and pattern not in blocked:
+            # ScreenZen matches by substring, so a blocked 'x.com' also covers an allowed
+            # 'x.com/' or 'm.x.com': compare the same way.
+            if pattern and not any(b in pattern for b in blocked if b):
                 seen[pattern] = None
     return list(seen)
 
@@ -891,6 +893,17 @@ def cmd_pull(cfg_path: Path, dry_run: bool) -> None:
         print(f"{p['group']} ({section} {owner!r} {key}): {', '.join(items)}")
     if dry_run:
         return
+    # A site pulled into an allow list reaches ScreenZen's '✅ always' on the next write by
+    # anyone, so for an agent it is loosening like any other.
+    loosen = sorted(
+        f"{p['ref'][1]}:{s}" for p in plan if p["ref"][2] == "allow" for s in p["sites"]
+    )
+    if loosen:
+        gate(
+            cfg,
+            "pull:" + ",".join(loosen),
+            f"pulling allowed sites ({', '.join(loosen)})",
+        )
 
     def change(doc):
         from ruamel.yaml.comments import CommentedMap, CommentedSeq
@@ -931,7 +944,10 @@ def cmd_add(cfg_path: Path, group: str, items: list[str], app: bool) -> None:
     # 'add' must still apply it. One gate covers both apps, keyed by everything both would
     # loosen, so the repeat after the delay runs the whole thing in one go.
     print("ScreenZen changes:")
-    loosen = sync_loosen(cfg, read_blocks()) + cmd_screenzen(cfg, dry_run=True)
+    # An app add never runs sync, so sync's pending loosening is not this command's to gate.
+    loosen = ([] if app else sync_loosen(cfg, read_blocks())) + cmd_screenzen(
+        cfg, dry_run=True
+    )
     if loosen:
         gate(cfg, "add:" + ",".join(sorted(loosen)), f"allowing {', '.join(loosen)}")
     added = add_to_note(cfg_path, group, items, kind)
