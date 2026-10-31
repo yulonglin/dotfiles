@@ -417,18 +417,20 @@ def cmd_off(cfg: dict) -> None:
         for n, b in mode_blocks(read_blocks()).items()
         if b.get("enabled") == "true"
     }
-    for name in [n for n, b in running.items() if is_locked(b)]:
+    locked = [n for n, b in running.items() if is_locked(b)]
+    for name in locked:
         print(f"{name!r} is locked; left running")
         del running[name]
-    if running:
-        gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
+    if not running:
+        # Always say something, so 'off' is never silent.
+        if not locked:
+            print("no mode was running; nothing to stop")
+        return
+    gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
     for name in running:
         switch(name, on=False)
-    if running:
-        sz_follow(
-            cfg, running_modes(cfg)
-        )  # back to the shared list, plus any locked mode
-        print(f"stopped {', '.join(running)}")
+    sz_follow(cfg, running_modes(cfg))  # back to the shared list, plus any locked mode
+    print(f"stopped {', '.join(running)}")
 
 
 def drift(cfg: dict, blocks: dict, mode: str) -> dict:

@@ -576,3 +576,16 @@ def test_a_screenzen_block_group_stands_aside_in_its_off_in_modes(
     bad.write_text(p.read_text().replace("off_in: [writing]", "off_in: [nope]"))
     with pytest.raises(SystemExit, match="unknown mode 'nope'"):
         ct.load_config(bad)
+
+
+def test_off_says_so_when_no_mode_is_running(cfg, monkeypatch, capsys):
+    monkeypatch.setattr(
+        ct,
+        "read_blocks",
+        lambda: {"mode: research": mode_block(cfg, "research", "false")},
+    )
+    monkeypatch.setattr(
+        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+    )
+    ct.cmd_off(cfg)
+    assert "no mode was running" in capsys.readouterr().out
