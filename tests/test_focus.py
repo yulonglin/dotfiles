@@ -335,7 +335,8 @@ def test_a_repeated_add_still_syncs_both_apps(tmp_path, monkeypatch):
         lambda cfg, dry_run, gated=True: ran.append(("sz", dry_run, gated)) or [],
     )
     ct.cmd_add(p, "papers", ["arxiv.org"], app=False)  # already listed
-    assert ("sync", False) in ran and ("sz", False, False) in ran
+    # sync applies the note to both apps; the gate already ran once, in add itself
+    assert ("sync", False) in ran
 
 
 def test_a_queued_agent_add_leaves_the_note_unchanged(tmp_path, monkeypatch):

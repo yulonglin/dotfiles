@@ -25,7 +25,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to t
 | "what's running", "is it in sync" | `focus status` |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
 | "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
-| after editing the note by hand | `focus status`, then `focus sync`, then `focus screenzen --dry-run` and `focus screenzen` |
+| after editing the note by hand | `focus status`, then `focus sync` (applies the note to Cold Turkey and to ScreenZen for the running mode) |
 | new mode blocks needed | `focus export`, then Yulong imports `~/Downloads/focus-blocks.ctbbl` (Blocks → menu → Import blocks from another installation…) |
 
 ## Loosening waits; do not work around it
