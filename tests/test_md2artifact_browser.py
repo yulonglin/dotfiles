@@ -84,15 +84,21 @@ SELECT_JS = """() => {
 POP_OPEN = "() => getComputedStyle(document.getElementById('anPop')).display === 'block'"
 
 # The layer starts off, so a reader who never touched the switch gets no box.
-# Nearly every test here is about the box, so their pages read an unset
-# `an-off:` key as "0" (on). Anything a test or a click stores still wins,
-# which keeps the off-state tests honest. The default itself is tested on a
-# bare context in `test_the_layer_starts_off_until_the_reader_switches_it_on`.
+# Nearly every test here is about the box, so their pages start as if the
+# reader had switched it on: the first read of each `an-on:` key stores "1".
+# The seeding happens once per key, so a later switch-off (which removes the
+# key) survives a reload and the off-state tests stay honest. The default
+# itself is tested on a bare context in
+# `test_the_layer_starts_off_until_the_reader_switches_it_on`.
 LAYER_ON_BY_DEFAULT = """(() => {
   const get = Storage.prototype.getItem;
   Storage.prototype.getItem = function(k){
-    const v = get.call(this, k);
-    return v === null && String(k).startsWith("an-off:") ? "0" : v;
+    k = String(k);
+    if (k.startsWith("an-on:") && get.call(this, "test-seeded:" + k) === null) {
+      this.setItem("test-seeded:" + k, "1");
+      this.setItem(k, "1");
+    }
+    return get.call(this, k);
   };
 })();"""
 
@@ -1174,7 +1180,7 @@ def test_the_switch_survives_a_reload_and_switches_back_on(page) -> None:
     expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "false")
     page.click("#anToggle")
     expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "true")
-    assert page.evaluate("() => localStorage.getItem('an-off:review-sample')") == "0"
+    assert page.evaluate("() => localStorage.getItem('an-on:review-sample')") == "1"
     page.evaluate(SELECT_JS)
     page.wait_for_function(POP_OPEN, timeout=3000)
 
@@ -1195,7 +1201,7 @@ def test_a_stored_draft_waits_out_the_off_state(page) -> None:
     page.wait_for_function(POP_OPEN, timeout=3000)
     page.fill("#anTxt", "drafted before switching off")
     page.dispatch_event("#anTxt", "input")
-    page.evaluate("() => localStorage.setItem('an-off:review-sample', '1')")
+    page.evaluate("() => localStorage.removeItem('an-on:review-sample')")
     page.reload()
     page.wait_for_timeout(400)
     assert not page.evaluate(POP_OPEN)
@@ -1221,7 +1227,7 @@ def test_a_panel_edit_while_off_cannot_lose_the_waiting_draft(page) -> None:
     page.evaluate(
         "() => { localStorage.setItem('review-sample', JSON.stringify("
         "  [{id: 7, where: 'x', quote: 'text gone after a republish', note: 'orphan'}]));"
-        "  localStorage.setItem('an-off:review-sample', '1'); }"
+        "  localStorage.removeItem('an-on:review-sample'); }"
     )
     page.reload()
     page.click("#anList .anbtn:has-text('edit')")
@@ -1246,7 +1252,7 @@ def test_a_panel_edit_of_the_comment_being_revised_keeps_the_revision(page, anch
         page.wait_for_function(POP_OPEN, timeout=3000)
         page.fill("#anTxt", "revised but not saved")
         page.dispatch_event("#anTxt", "input")
-        page.evaluate("() => localStorage.setItem('an-off:review-sample', '1')")
+        page.evaluate("() => localStorage.removeItem('an-on:review-sample')")
     else:
         # Off first: an on page's pagehide save would delete a draft planted
         # under its closed box before the reload ever reads it.

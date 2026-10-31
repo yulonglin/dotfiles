@@ -89,7 +89,8 @@ Behaviour, all of which the tests guard:
   them on to comment here. Off only hides: comments stay stored, counted,
   guarded and exported, a dirty box declines the switch rather than lose its
   words, and a stored draft waits for the layer to come back on. The choice
-  is kept per page under `an-off:<key>`: "0" is on, "1" or nothing is off.
+  is kept per page under `an-on:<key>`: "1" while the reader has it on, and
+  removed when they switch it off. Nothing stored means off.
 
 Layer v2 adds a second mode, **Suggest edit**, to the same box. Comment stays
 the default, so select-type-Enter means exactly what it meant before. The
@@ -406,7 +407,7 @@ var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 var DIRTY = "an-dirty:" + KEY;
 var DRAFT = "an-draft:" + KEY;
 var STATES = "an-states:" + KEY;
-var OFF = "an-off:" + KEY;
+var ON = "an-on:" + KEY;
 
 // ---- storage -------------------------------------------------------------
 // localStorage, and nothing else. An IndexedDB mirror, a backup key and a
@@ -1559,8 +1560,9 @@ badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth",
 // reader switches them on. Off hides; it never deletes: the comments, their
 // count, the badge's warning, the unload guard and Copy all carry on as
 // before, and a draft is left in storage for the next time the layer is on.
-// One reader's choice, kept per page under its own prefixed key: "0" means
-// on, and anything else -- nothing stored, "1", unreadable storage -- is the
+// One reader's choice, kept per page under its own prefixed key, which holds
+// "1" while the layer is on and is removed when it goes off. Anything else --
+// nothing stored, unreadable storage, a key left by an older layer -- is the
 // off default.
 function layerOff(){ return document.documentElement.classList.contains("an-off"); }
 function setLayerOff(off){
@@ -1575,15 +1577,15 @@ toggle.onclick = function(){
     if (isOpen() && dirty) { nudge(); return; }
     if (isOpen()) closePop();
     setLayerOff(true);
-    lsSet(OFF, "1");
+    lsDel(ON);
   } else layerOn();
 };
 function layerOn(){
   setLayerOff(false);
-  lsSet(OFF, "0");
+  lsSet(ON, "1");
   if (!isOpen()) restoreDraft();
 }
-setLayerOff(lsGet(OFF) !== "0");
+setLayerOff(lsGet(ON) !== "1");
 
 // A host page may bind single-key shortcuts on document or window -- a triage
 // console where `d` means delete, a slideshow where `j` means next. Typing a
