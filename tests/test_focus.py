@@ -20,6 +20,15 @@ def load():
 
 ct = load()
 
+
+@pytest.fixture(autouse=True)
+def not_an_agent(monkeypatch, tmp_path):
+    # These tests often run inside Claude Code, which sets CLAUDECODE=1; a test that
+    # wants agent behaviour sets it itself. The delay queue never touches the real one.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+
+
 NOTE = """# Test note
 
 ```yaml
@@ -343,3 +352,100 @@ def test_an_approved_switch_does_not_cover_a_different_switch(
     with pytest.raises(SystemExit) as e:  # admin -> writing is a different request
         ct.cmd_start(cfg, "writing")
     assert e.value.code == 3
+
+
+def test_off_reports_a_locked_mode_without_queueing(cfg, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    locked = {**mode_block(cfg, "research", "true"), "lock": "delay,5,m"}
+    monkeypatch.setattr(ct, "read_blocks", lambda: {"mode: research": locked})
+    monkeypatch.setattr(
+        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+    )
+    ct.cmd_off(cfg)  # returns: nothing stoppable, so nothing to wait for
+    assert "locked" in capsys.readouterr().out
+    assert not (tmp_path / "pending.json").exists()
+
+
+def test_screenzen_block_covers_allowed_paths_and_subdomains(tmp_path):
+    p = tmp_path / "note.md"
+    p.write_text(
+        NOTE.replace(
+            "  papers: {sites: [arxiv.org]}",
+            '  papers: {sites: [arxiv.org, "x.com/*", m.x.com]}',
+        ).replace(
+            "blocklists:\n", "blocklists:\n  screenzen:\n    pause: {block: [feeds]}\n"
+        )
+    )
+    cfg = ct.load_config(p)
+    allowed = ct.sz_allow_sites(cfg)
+    assert (
+        "x.com/" not in allowed and "m.x.com" not in allowed and "arxiv.org" in allowed
+    )
+
+
+def test_an_agent_pull_into_an_allow_list_waits(tmp_path, monkeypatch):
+    p = tmp_path / "note.md"
+    p.write_text(NOTE)
+    cfg = ct.load_config(p)
+    before = p.read_text()
+    blocks = {
+        "mode: research": {
+            "web": ["*.*"],
+            "exceptions": ct.desired_exceptions(cfg, "research") + ["reddit.com"],
+            "apps": [],
+        }
+    }
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_pull(p, dry_run=False)
+    assert e.value.code == 3 and p.read_text() == before
+
+
+def test_an_app_add_does_not_wait_for_pending_site_syncs(tmp_path, monkeypatch):
+    p = tmp_path / "note.md"
+    p.write_text(NOTE)
+    monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    monkeypatch.setattr(ct, "sync_loosen", lambda cfg, blocks: ["writing:other.org"])
+    ran = []
+    monkeypatch.setattr(ct, "cmd_sync", lambda cfg, gated=True: ran.append("sync"))
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda cfg, dry_run, gated=True: ran.append("sz") or []
+    )
+    ct.cmd_add(p, "chat", ["Signal"], app=True)  # tightening only: runs at once
+    assert "sync" not in ran and ran.count("sz") == 2
+
+
+def test_a_pull_into_a_reused_group_counts_as_loosening(tmp_path, monkeypatch):
+    # An existing from-avoid group is also named by research's allow list, so pulling a
+    # banned site into it would allow that site in research.
+    p = tmp_path / "note.md"
+    p.write_text(
+        NOTE.replace(
+            "  chat: {apps: [Telegram]}",
+            "  chat: {apps: [Telegram]}\n  from-avoid: {sites: [old.org]}",
+        ).replace(
+            "research: {allow: [papers, review]",
+            "research: {allow: [papers, review, from-avoid]",
+        )
+    )
+    cfg = ct.load_config(p)
+    before = p.read_text()
+    blocks = {
+        "avoid": {
+            "web": ["x.com", "*casino*", "reddit.com"],
+            "exceptions": ["file://*.*", "localhost"],
+            "apps": [],
+        }
+    }
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_pull(p, dry_run=False)
+    assert e.value.code == 3 and p.read_text() == before

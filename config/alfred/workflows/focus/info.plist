@@ -104,7 +104,9 @@ focus alfred "$1"</string>
 				<integer>102</integer>
 				<key>script</key>
 				<string>export PATH="$HOME/code/dotfiles/custom_bins:/opt/homebrew/bin:$HOME/.local/bin:$PATH"
-# $1 is "research", "off" or "deep 90": split it into words on purpose
+# $1 is "research", "off", "deep 90" or "add GROUP SITE": split it into words on
+# purpose, but never glob it, so a pattern such as github.com/*/pull/* stays literal
+set -f
 focus $1 2&gt;&amp;1 | tail -n 1</string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
