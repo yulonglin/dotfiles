@@ -112,6 +112,13 @@ DEFAULT_DELAY_MIN = 10
 EXPIRE_S = 3600  # a due request not run within this long must be queued again
 
 
+def paint(text: str, sgr: str) -> str:
+    """ANSI colour for a terminal; plain text when piped (Alfred) or when NO_COLOR is set."""
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    return f"\033[{sgr}m{text}\033[0m"
+
+
 def by_agent() -> bool:
     # Claude Code sets CLAUDECODE=1 in every shell it runs.
     return os.environ.get("CLAUDECODE") == "1"
@@ -365,6 +372,24 @@ def sz_follow(cfg: dict, modes: list[str]) -> None:
     if not Path(f"{SZ_DOMAIN}.plist").exists():
         return  # ScreenZen is not installed here
     try:
+        loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
+        # Allowing the new mode's own sites is what the switch already approved. Anything
+        # else that loosens ScreenZen (a note edit since the last write: a block removed,
+        # a shared site added) still waits, under the key 'focus screenzen' would use.
+        mode_sites = set(sz_allow_sites(cfg, modes)) - set(sz_allow_sites(cfg, []))
+        other = [
+            x for x in loosen if not (":+" in x and x.split(":+", 1)[1] in mode_sites)
+        ]
+        if other:
+            try:
+                gate(
+                    cfg, "screenzen:" + ",".join(sorted(loosen)), "loosening ScreenZen"
+                )
+            except SystemExit:
+                print(
+                    "ScreenZen not updated yet; run 'focus screenzen' after the wait."
+                )
+                return
         cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
@@ -412,9 +437,11 @@ def drift(cfg: dict, blocks: dict, mode: str) -> dict:
 def cmd_status(cfg: dict) -> None:
     blocks = read_blocks()
     for name, block in blocks.items():
-        state = "enabled" if block.get("enabled") == "true" else "off"
+        on = block.get("enabled") == "true"
+        state = paint(f"{'enabled' if on else 'off':8}", "1;32" if on else "2")
         lock = "" if not is_locked(block) else f", lock {block['lock'].split(',')[0]}"
-        print(f"{state:8} {name}  ({block.get('type')}{lock})")
+        detail = paint(f"({block.get('type')}{lock})", "2")
+        print(f"{state} {name}  {detail}")
     print()
     for mode in cfg["modes"]:
         d = drift(cfg, blocks, mode)
@@ -422,7 +449,8 @@ def cmd_status(cfg: dict) -> None:
             print(f"{PREFIX}{mode}: missing; run 'focus export' and import it")
             continue
         issues = {k: v for k, v in d.items() if k != "exists" and v}
-        print(f"{PREFIX}{mode}: {'in sync' if not issues else ''}")
+        verdict = paint("in sync", "32") if not issues else paint("differs", "33")
+        print(f"{PREFIX}{mode}: {verdict}")
         for k, v in issues.items():
             print(f"  {k}: {', '.join(v)}")
     # Always-on blocks are reported, never written: they carry delay locks the CLI cannot get past.
@@ -456,9 +484,12 @@ def cmd_status(cfg: dict) -> None:
             "missing_apps": missing,
         }
         issues = {k: v for k, v in issues.items() if v}
-        print(
-            f"{name}: {'in sync' if not issues else 'differs (edit by hand in Cold Turkey)'}"
+        verdict = (
+            paint("in sync", "32")
+            if not issues
+            else paint("differs (edit by hand in Cold Turkey)", "33")
         )
+        print(f"{name}: {verdict}")
         for k, v in issues.items():
             print(f"  {k}: {', '.join(v)}")
     for line in conflicts(cfg):
@@ -485,10 +516,16 @@ def landed(name: str, kind: str, site: str) -> bool:
 
 def cmd_sync(cfg: dict, gated: bool = True) -> None:
     blocks = read_blocks()
+    sz_on = Path(f"{SZ_DOMAIN}.plist").exists()
+    # One gate for both apps, so an agent's repeat after the delay applies all of it.
     loosen = sync_loosen(cfg, blocks)
+    if sz_on:
+        loosen += cmd_screenzen(cfg, dry_run=True, quiet=True)
     if loosen and gated:
         gate(
-            cfg, "sync:" + ",".join(loosen), f"allowing new sites ({', '.join(loosen)})"
+            cfg,
+            "sync:" + ",".join(sorted(loosen)),
+            f"allowing new sites ({', '.join(loosen)})",
         )
     needs_import, failed = [], []
     for mode in cfg["modes"]:
@@ -540,6 +577,10 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             "(a missing mode or timer block comes from importing a fresh 'focus export'):"
         )
         print("\n".join(f"  {line}" for line in needs_import))
+    # One command applies the note everywhere: ScreenZen too, for the running mode.
+    if sz_on:
+        print()
+        cmd_screenzen(cfg, dry_run=False, gated=False, quiet=True)
     if failed:
         sys.exit(
             "focus: Cold Turkey's CLI accepted these but they did not appear in its "
@@ -1029,9 +1070,9 @@ def cmd_add(cfg_path: Path, group: str, items: list[str], app: bool) -> None:
     cfg = load_config(cfg_path)  # re-read: validates the edited note
     if app:
         print("Apps need a manual edit in Cold Turkey; focus status names it.")
+        cmd_screenzen(cfg, dry_run=False, gated=False)
     else:
-        cmd_sync(cfg, gated=False)
-    cmd_screenzen(cfg, dry_run=False, gated=False)
+        cmd_sync(cfg, gated=False)  # writes ScreenZen too
 
 
 def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
@@ -1160,24 +1201,32 @@ def cmd_overview(cfg: dict) -> None:
         blocks = {}
 
     def on(name: str) -> str:
-        return "  (running)" if blocks.get(name, {}).get("enabled") == "true" else ""
+        if blocks.get(name, {}).get("enabled") == "true":
+            return "  " + paint("● running", "1;32")
+        return ""
 
     width = max(len(n) for n in [*cfg["modes"], *(cfg.get("timers") or {})])
-    print("Modes: focus <mode>")
+    print(paint("Modes", "1") + paint("  focus <mode>", "2"))
     for m, spec in cfg["modes"].items():
-        allow = ", ".join(spec.get("allow") or [])
-        print(f"  {m:<{width}}  allows {allow}{on(PREFIX + m)}")
+        allow = paint(", ".join(spec.get("allow") or []), "2")
+        print(f"  {paint(f'{m:<{width}}', '1;36')}  allows {allow}{on(PREFIX + m)}")
     if cfg.get("timers"):
-        print("\nTimers: focus <timer> [minutes]")
+        print("\n" + paint("Timers", "1") + paint("  focus <timer> [minutes]", "2"))
         for t, spec in cfg["timers"].items():
-            block = ", ".join(spec.get("block") or [])
+            block = paint(", ".join(spec.get("block") or []), "2")
             mins = spec.get("minutes", 50)
+            name = paint(f"{t:<{width}}", "1;33")
             print(
-                f"  {t:<{width}}  blocks {block}, {mins} min by default{on(TIMER_PREFIX + t)}"
+                f"  {name}  blocks {block}, {mins} min by default{on(TIMER_PREFIX + t)}"
             )
     print(
-        "\nAlso: off · status · sync · screenzen · add GROUP SITE · pull · export"
-        "\nAlways allowed: " + ", ".join(cfg.get("always_allow") or [])
+        "\n"
+        + paint("Also", "1")
+        + "  off · status · sync · screenzen · add GROUP SITE · pull · export"
+        + "\n"
+        + paint("Always allowed", "1")
+        + "  "
+        + paint(", ".join(cfg.get("always_allow") or []), "2")
     )
 
 
