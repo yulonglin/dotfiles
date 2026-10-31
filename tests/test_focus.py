@@ -419,3 +419,33 @@ def test_an_app_add_does_not_wait_for_pending_site_syncs(tmp_path, monkeypatch):
     )
     ct.cmd_add(p, "chat", ["Signal"], app=True)  # tightening only: runs at once
     assert "sync" not in ran and ran.count("sz") == 2
+
+
+def test_a_pull_into_a_reused_group_counts_as_loosening(tmp_path, monkeypatch):
+    # An existing from-avoid group is also named by research's allow list, so pulling a
+    # banned site into it would allow that site in research.
+    p = tmp_path / "note.md"
+    p.write_text(
+        NOTE.replace(
+            "  chat: {apps: [Telegram]}",
+            "  chat: {apps: [Telegram]}\n  from-avoid: {sites: [old.org]}",
+        ).replace(
+            "research: {allow: [papers, review]",
+            "research: {allow: [papers, review, from-avoid]",
+        )
+    )
+    cfg = ct.load_config(p)
+    before = p.read_text()
+    blocks = {
+        "avoid": {
+            "web": ["x.com", "*casino*", "reddit.com"],
+            "exceptions": ["file://*.*", "localhost"],
+            "apps": [],
+        }
+    }
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_pull(p, dry_run=False)
+    assert e.value.code == 3 and p.read_text() == before

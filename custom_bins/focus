@@ -893,11 +893,30 @@ def cmd_pull(cfg_path: Path, dry_run: bool) -> None:
         print(f"{p['group']} ({section} {owner!r} {key}): {', '.join(items)}")
     if dry_run:
         return
-    # A site pulled into an allow list reaches ScreenZen's '✅ always' on the next write by
-    # anyone, so for an agent it is loosening like any other.
-    loosen = sorted(
-        f"{p['ref'][1]}:{s}" for p in plan if p["ref"][2] == "allow" for s in p["sites"]
-    )
+    # A pulled site that ends up allowed reaches ScreenZen's '✅ always' on the next write by
+    # anyone, so for an agent it is loosening like any other. Judge that from the effect:
+    # apply the plan to an in-memory copy and compare what every mode and ScreenZen would
+    # allow, since a from-… group may already exist and be named by an allow list.
+    after = copy.deepcopy(cfg)
+    for p in plan:
+        g = after["groups"].setdefault(p["group"], {})
+        for kind in ("sites", "apps"):
+            if p[kind]:
+                lst = g.setdefault(kind, [])
+                lst.extend(i for i in p[kind] if i not in lst)
+        section, owner, key = p["ref"]
+        node = after
+        for part in section.split("."):
+            node = node[part]
+        refs = node[owner].setdefault(key, [])
+        if p["group"] not in refs:
+            refs.append(p["group"])
+
+    def allowed(c: dict) -> set[str]:
+        sites = {f"{m}:{s}" for m in c["modes"] for s in desired_exceptions(c, m)}
+        return sites | {f"screenzen:{s}" for s in sz_allow_sites(c)}
+
+    loosen = sorted(allowed(after) - allowed(cfg))
     if loosen:
         gate(
             cfg,
