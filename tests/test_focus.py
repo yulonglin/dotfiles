@@ -22,11 +22,37 @@ ct = load()
 
 
 @pytest.fixture(autouse=True)
-def not_an_agent(monkeypatch, tmp_path):
+def isolated(monkeypatch, tmp_path):
     # These tests often run inside Claude Code, which sets CLAUDECODE=1; a test that
-    # wants agent behaviour sets it itself. The delay queue never touches the real one.
+    # wants agent behaviour sets it itself. The delay queue, the backups and ScreenZen's
+    # preferences are never the real ones: a mode switch writes ScreenZen.
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
+    monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", tmp_path / "no-screenzen" / "prefs")
+    monkeypatch.setattr(
+        ct, "sz_export", lambda: pytest.fail("test reached real ScreenZen prefs")
+    )
+
+
+def test_screenzen_follows_the_running_mode(cfg):
+    shared_only = ct.sz_allow_sites(cfg, [])
+    research = ct.sz_allow_sites(cfg, ["research"])
+    assert "arxiv.org" not in shared_only and "localhost" in shared_only
+    assert "arxiv.org" in research and "github.com/" in research
+    assert "github.com/" not in ct.sz_allow_sites(cfg, ["writing"])
+
+
+def test_a_switch_points_screenzen_at_the_new_mode(cfg, monkeypatch):
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    followed = []
+    monkeypatch.setattr(ct, "sz_follow", lambda cfg, modes: followed.append(modes))
+    ct.cmd_start(cfg, "writing")
+    assert followed == [["writing"]]
 
 
 NOTE = """# Test note
