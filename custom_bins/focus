@@ -910,7 +910,10 @@ def cmd_screenzen(
         sys.exit(
             f"focus: ScreenZen read-back differs; restore with defaults import from {backup}"
         )
-    if subprocess.run(["open", "-a", "ScreenZen"], capture_output=True).returncode:
+    # -g keeps whatever app is in front there, and -j launches ScreenZen hidden, so a
+    # mode switch does not pull its window forward.
+    reopen = ["open", "-g", "-j", "-a", "ScreenZen"]
+    if subprocess.run(reopen, capture_output=True).returncode:
         sys.exit(
             f"focus: wrote ScreenZen (backup at {backup}) but could not reopen it, "
             "so its blocking is off until it runs. Reopen it: open -a ScreenZen"
