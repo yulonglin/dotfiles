@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>bundleid</key>
+	<string>com.yulonglin.focus</string>
+	<key>category</key>
+	<string>Productivity</string>
+	<key>createdby</key>
+	<string>Yulong Lin</string>
+	<key>description</key>
+	<string>Switch focus modes (Cold Turkey and ScreenZen): type "focus" and pick a mode, a timer or add</string>
+	<key>name</key>
+	<string>Focus modes</string>
+	<key>readme</key>
+	<string>Source: dotfiles config/alfred/workflows/focus. Runs custom_bins/focus; the lists live in ~/vault/tooling/dotfiles/config/cold-turkey.md.</string>
+	<key>connections</key>
+	<dict>
+		<key>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A01</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A02</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+		<key>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A02</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A03</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+				<key>vitoclose</key>
+				<false/>
+			</dict>
+		</array>
+	</dict>
+	<key>objects</key>
+	<array>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>alfredfiltersresults</key>
+				<false/>
+				<key>alfredfiltersresultsmatchmode</key>
+				<integer>0</integer>
+				<key>argumenttreatemptyqueryasnil</key>
+				<true/>
+				<key>argumenttrimmode</key>
+				<integer>0</integer>
+				<key>argumenttype</key>
+				<integer>1</integer>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>keyword</key>
+				<string>focus</string>
+				<key>queuedelaycustom</key>
+				<integer>3</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<true/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
+				<key>runningsubtext</key>
+				<string>Reading Cold Turkey…</string>
+				<key>script</key>
+				<string>export PATH="$HOME/code/dotfiles/custom_bins:/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+focus alfred "$1"</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>subtext</key>
+				<string>Switch Cold Turkey focus mode</string>
+				<key>title</key>
+				<string>Focus mode</string>
+				<key>type</key>
+				<integer>0</integer>
+				<key>withspace</key>
+				<true/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.scriptfilter</string>
+			<key>uid</key>
+			<string>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A01</string>
+			<key>version</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string>export PATH="$HOME/code/dotfiles/custom_bins:/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+# $1 is "research", "off" or "deep 90": split it into words on purpose
+focus $1 2&gt;&amp;1 | tail -n 1</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
+				<key>type</key>
+				<integer>0</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A02</string>
+			<key>version</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>lastpathcomponent</key>
+				<false/>
+				<key>onlyshowifquerypopulated</key>
+				<true/>
+				<key>removeextension</key>
+				<false/>
+				<key>text</key>
+				<string>{query}</string>
+				<key>title</key>
+				<string>Focus mode</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.notification</string>
+			<key>uid</key>
+			<string>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A03</string>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+	</array>
+	<key>uidata</key>
+	<dict>
+		<key>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A01</key>
+		<dict>
+			<key>xpos</key>
+			<real>40</real>
+			<key>ypos</key>
+			<real>40</real>
+		</dict>
+		<key>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A02</key>
+		<dict>
+			<key>xpos</key>
+			<real>260</real>
+			<key>ypos</key>
+			<real>40</real>
+		</dict>
+		<key>5E0C9B0A-5F4B-4C8E-9C61-2D7A3B1F0A03</key>
+		<dict>
+			<key>xpos</key>
+			<real>480</real>
+			<key>ypos</key>
+			<real>40</real>
+		</dict>
+	</dict>
+	<key>version</key>
+	<string>1.0</string>
+</dict>
+</plist>
