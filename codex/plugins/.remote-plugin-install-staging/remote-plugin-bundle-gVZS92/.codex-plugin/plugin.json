@@ -1,0 +1,51 @@
+{
+  "apps": "./.app.json",
+  "author": {
+    "email": "support@openai.com",
+    "name": "OpenAI",
+    "url": "https://openai.com/"
+  },
+  "description": "Securely connect your accounts to get personalized financial insights.",
+  "homepage": "https://openai.com/",
+  "interface": {
+    "brandColor": "#2E7D32",
+    "brandColorDark": "#82D186",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "category": "Finance",
+    "composerIcon": "./assets/composer-icon.png",
+    "defaultPrompt": [
+      "Summarize my recent spending and highlight the biggest changes.",
+      "Find recurring charges and subscriptions I may want to review.",
+      "Analyze my investment holdings and outstanding liabilities."
+    ],
+    "developerName": "OpenAI",
+    "displayName": "Finances",
+    "logo": "./assets/logo.png",
+    "longDescription": "Securely connect your financial accounts to explore transactions, spending, recurring charges, investments, and liabilities in ChatGPT.",
+    "privacyPolicyURL": "https://openai.com/policies/row-privacy-policy/",
+    "screenshots": [],
+    "shortDescription": "Personalized finance insights",
+    "termsOfServiceURL": "https://openai.com/policies/row-terms-of-use/",
+    "websiteURL": "https://openai.com/"
+  },
+  "keywords": [
+    "finances",
+    "openai",
+    "personal finance",
+    "banking",
+    "accounts",
+    "budgeting",
+    "net worth",
+    "transactions",
+    "spending",
+    "investments",
+    "liabilities"
+  ],
+  "license": "Proprietary",
+  "name": "finances",
+  "repository": "https://github.com/openai/openai/tree/master/chatgpt/oai-maintained-plugins/plugins/finances",
+  "version": "0.1.1"
+}
