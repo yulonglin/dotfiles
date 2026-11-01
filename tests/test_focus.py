@@ -720,3 +720,47 @@ def test_the_waiter_gets_the_same_config_and_a_failed_start_keeps_the_break(
     with pytest.raises(SystemExit):
         ct.cmd_start(cfg, "research")
     assert (tmp_path / "break.json").exists()
+
+
+def test_uninstall_agent_boots_out_and_removes_the_plist_then_is_quiet(
+    tmp_path, monkeypatch, capsys
+):
+    plist = tmp_path / "agent.plist"
+    plist.write_text("<plist/>")
+    monkeypatch.setattr(ct, "AGENT_PLIST", plist)
+    calls = []
+
+    class Done:
+        def __init__(self, rc):
+            self.returncode = rc
+
+    loaded = [True]
+
+    def fake_run(cmd, **k):
+        calls.append(cmd)
+        rc = 0 if loaded[0] else 3  # launchctl bootout fails for a job not loaded
+        loaded[0] = False
+        return Done(rc)
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_run)
+    ct.cmd_uninstall_agent()
+    assert calls == [["launchctl", "bootout", f"gui/{ct.os.getuid()}/{ct.AGENT_LABEL}"]]
+    assert not plist.exists()
+    assert ct.AGENT_LABEL in capsys.readouterr().out
+    # a second run finds nothing: it succeeds and prints nothing
+    ct.cmd_uninstall_agent()
+    assert len(calls) == 2
+    assert capsys.readouterr().out == ""
+
+
+def test_uninstall_agent_runs_without_a_config_note(tmp_path, monkeypatch):
+    # deploy.sh --no-focus must remove the job even on a machine whose note is gone
+    ran = []
+    monkeypatch.setattr(ct, "cmd_uninstall_agent", lambda: ran.append(True))
+    monkeypatch.setattr(
+        ct.sys,
+        "argv",
+        ["focus", "--config", str(tmp_path / "gone.md"), "uninstall-agent"],
+    )
+    ct.main()
+    assert ran == [True]

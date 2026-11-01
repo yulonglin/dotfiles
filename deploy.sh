@@ -112,6 +112,7 @@ COMPONENTS:
     --dotfiles-sync   Install daily commit + rebase + push of this repo (08:05, both platforms)
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
+    --focus           Install the once-a-minute job that ends Cold Turkey focus breaks on time (macOS only)
     --hide-idle-apps  Hide, then close, then quit apps left covered up, per config/app-lifecycle.yaml (macOS only, off by default)
     --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, off by default)
@@ -1443,6 +1444,19 @@ queue_scheduled_job() {
         # nothing else. Refusing a component and not selecting it are different.
         [[ -f "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" ]] && \
             "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" --uninstall >/dev/null 2>&1 || true
+    fi
+
+    # `focus break` stops a Cold Turkey mode and leaves a detached waiter to
+    # start it again. This job is the backstop: it ends an overdue break even
+    # after the waiter dies or the Mac restarts. The setup script skips quietly
+    # when Cold Turkey or its config note is absent.
+    if [[ "$DEPLOY_FOCUS" == "true" ]] && is_macos; then
+        queue_scheduled_job focus-tick "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)FOCUS]} )); then
+        # Gated on an EXPLICIT --no-focus, for the reason given at the alfred
+        # branch above: `--only vim` must not tear this job down.
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then

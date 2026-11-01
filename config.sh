@@ -94,6 +94,7 @@ DEPLOY_REGISTRY=(
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
     "mouseless|Keyboard-driven mouse control|macos|true|macOS"
     "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and watch for wedged workflow scripts|macos|true|macOS"
+    "focus|End Cold Turkey focus breaks on time (focus tick every minute via launchd)|macos|true|macOS"
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
     "pueue|Pueue + systemd resource slices|linux|true|Linux"
@@ -430,6 +431,8 @@ apply_profile() {
             # schedules a 5-minute launchd job, and "shared machine, no GUI" is
             # the last place that belongs.
             DEPLOY_ALFRED=false
+            # Schedules a once-a-minute launchd job for a GUI blocker a server never has.
+            DEPLOY_FOCUS=false
             ;;
         cloud)
             # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.

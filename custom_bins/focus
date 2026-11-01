@@ -15,6 +15,8 @@
     focus pull [--dry-run]    # copy sites and apps added inside Cold Turkey into the note
     focus deep [MINUTES]      # a timer: block its groups on top of any mode, locked
     focus alfred [QUERY]      # Alfred script-filter JSON (config/alfred/workflows/focus)
+    focus install-agent       # launchd job that ends an overdue break every minute
+    focus uninstall-agent     # remove that job (deploy.sh --no-focus)
 
 Every site and app is defined once, in a named group. Modes and the always-on
 blocklists only name groups:
@@ -481,6 +483,18 @@ def cmd_install_agent() -> None:
             f"focus: wrote {AGENT_PLIST} but launchctl refused it: {r.stderr.strip()}"
         )
     print(f"installed {AGENT_LABEL}: checks every minute for a break that is over")
+
+
+def cmd_uninstall_agent() -> None:
+    """Remove the launchd job that 'install-agent' installs. Safe to run when it is absent."""
+    loaded = not subprocess.run(
+        ["launchctl", "bootout", f"gui/{os.getuid()}/{AGENT_LABEL}"],
+        capture_output=True,
+    ).returncode
+    present = AGENT_PLIST.exists()
+    AGENT_PLIST.unlink(missing_ok=True)
+    if loaded or present:
+        print(f"removed {AGENT_LABEL}")
 
 
 def cmd_resume(cfg: dict) -> None:
@@ -1537,7 +1551,8 @@ def main() -> None:
     p.add_argument(
         "command",
         nargs="?",
-        help="a mode or timer name, or break | off | status | sync | screenzen | add | pull | export",
+        help="a mode or timer name, or break | off | status | sync | screenzen | add | pull | export"
+        " | install-agent | uninstall-agent",
     )
     p.add_argument(
         "args", nargs="*", help="export: output file; add: GROUP SITE [SITE…]"
@@ -1547,6 +1562,10 @@ def main() -> None:
     )
     p.add_argument("--app", action="store_true", help="add: the items are app names")
     a = p.parse_args()
+    # Before load_config: uninstalling must work when the config note is gone.
+    if a.command == "uninstall-agent":
+        cmd_uninstall_agent()
+        return
     global CONFIG_PATH
     CONFIG_PATH = a.config.expanduser().resolve()
     cfg = load_config(CONFIG_PATH)
