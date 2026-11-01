@@ -348,10 +348,42 @@ DEFAULT_BREAK_MAX = 30
 
 
 def read_break() -> dict | None:
+    """The current break, {'modes': [...], 'until': epoch}, or None. A file that does
+    not parse is treated as an ended break with nothing to restore, so it never blocks
+    a resume."""
     try:
-        return json.loads(BREAK_FILE.read_text())
-    except (FileNotFoundError, ValueError):
+        b = json.loads(BREAK_FILE.read_text())
+    except FileNotFoundError:
         return None
+    except ValueError:
+        return {"modes": [], "until": 0}
+    if not isinstance(b, dict):
+        return {"modes": [], "until": 0}
+    modes = b.get("modes") or ([b["mode"]] if b.get("mode") else [])
+    until = b.get("until")
+    return {
+        "modes": [m for m in modes if isinstance(m, str)],
+        "until": until if isinstance(until, (int, float)) else 0,
+    }
+
+
+def end_break(cfg: dict) -> bool:
+    """If a break is over, start every mode it stopped that is not running now, and
+    clear it. Runs at the start of every focus command as well as from the waiter, so a
+    killed waiter, a reboot or a crash cannot turn a break into no end."""
+    b = read_break()
+    if b is None or time.time() < b["until"]:
+        return False
+    BREAK_FILE.unlink(missing_ok=True)
+    back = [m for m in b["modes"] if m in cfg["modes"]]
+    running = set(running_modes(cfg))
+    for m in back:
+        if m not in running:
+            switch(PREFIX + m, on=True)
+    if back:
+        sz_follow(cfg, running_modes(cfg), switched=True)
+        print(f"break over: {', '.join(back)} running again")
+    return True
 
 
 def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
@@ -366,54 +398,51 @@ def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
 
 
 def cmd_break(cfg: dict, args: list[str]) -> None:
-    """Stop the running mode for N minutes; a detached waiter starts it again after."""
+    """Stop the running modes for N minutes; they start again when the break ends."""
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
     minutes = args[0] if args else "15"
     if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
         sys.exit(f"focus: a break is 1 to {cap} minutes, got {minutes!r}")
     if (b := read_break()) and time.time() < b["until"]:
         end = dt.datetime.fromtimestamp(b["until"])
-        sys.exit(f"focus: already on a break until {end:%H:%M} (back to {b['mode']})")
+        sys.exit(
+            f"focus: already on a break until {end:%H:%M} (back to {', '.join(b['modes'])})"
+        )
     blocks = read_blocks()
-    running = [
-        n[len(PREFIX) :]
-        for n, b in mode_blocks(blocks).items()
-        if b.get("enabled") == "true" and not is_locked(b)
-    ]
+    running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
     if not running:
         sys.exit("focus: no mode is running, so there is nothing to take a break from")
-    mode = running[0]
     gate(
         cfg, f"break:{','.join(sorted(running))}:{minutes}", f"a {minutes}-minute break"
     )
     until = time.time() + int(minutes) * 60
     BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    BREAK_FILE.write_text(json.dumps({"mode": mode, "until": until}))
+    BREAK_FILE.write_text(json.dumps({"modes": running, "until": until}))
+    # Start the waiter before anything is switched off: if it cannot start, no mode stops.
+    # Any later focus command also ends an expired break, so the waiter is not the only way.
+    try:
+        subprocess.Popen(
+            [sys.executable, sys.argv[0], "resume"],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as e:
+        BREAK_FILE.unlink(missing_ok=True)
+        sys.exit(f"focus: could not start the break timer ({e}); no mode was stopped")
     for name in running:
         switch(PREFIX + name, on=False)
     sz_follow(cfg, running_modes(cfg), switched=True)
-    # The waiter outlives this command; it checks the wall clock, so sleep does not drift it.
-    subprocess.Popen(
-        [sys.executable, sys.argv[0], "resume"],
-        start_new_session=True,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
     end = dt.datetime.fromtimestamp(until)
-    print(f"break until {end:%H:%M}; {mode} starts again by itself")
+    print(f"break until {end:%H:%M}; {', '.join(running)} starts again by itself")
 
 
 def cmd_resume(cfg: dict) -> None:
-    """Wait for the break to end, then start its mode again (run detached by 'break')."""
+    """Wait for the break to end, then start its modes again (run detached by 'break')."""
     while (b := read_break()) and time.time() < b["until"]:
         time.sleep(min(20, max(1, b["until"] - time.time())))
-    b = read_break()
-    if not b:
-        return  # a mode was started by hand during the break
-    BREAK_FILE.unlink(missing_ok=True)
-    if not running_modes(cfg):
-        cmd_start(cfg, b["mode"])
+    end_break(cfg)
 
 
 def cmd_start(cfg: dict, mode: str) -> None:
@@ -516,7 +545,9 @@ def cmd_off(cfg: dict) -> None:
         # Always say something, so 'off' is never silent.
         if on_break and time.time() < on_break["until"]:
             end = dt.datetime.fromtimestamp(on_break["until"])
-            print(f"on a break until {end:%H:%M}; {on_break['mode']} starts again then")
+            print(
+                f"on a break until {end:%H:%M}; {', '.join(on_break['modes'])} starts again then"
+            )
         elif not locked:
             print("no mode was running; nothing to stop")
         return
@@ -1427,7 +1458,11 @@ def cmd_overview(cfg: dict) -> None:
     if (b := read_break()) and time.time() < b["until"]:
         end = dt.datetime.fromtimestamp(b["until"])
         print(
-            "  " + paint(f"● on a break until {end:%H:%M}, back to {b['mode']}", "1;32")
+            "  "
+            + paint(
+                f"● on a break until {end:%H:%M}, back to {', '.join(b['modes'])}",
+                "1;32",
+            )
         )
     print(
         "\n"
@@ -1468,6 +1503,12 @@ def main() -> None:
     cfg = load_config(a.config)
     if not cfg.get("modes"):
         sys.exit(f"focus: no modes in {a.config}")
+    # Any focus command ends a break that is over, so a lost waiter cannot leave it open.
+    if a.command not in ("resume", "alfred"):
+        try:
+            end_break(cfg)
+        except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
+            print(f"focus: could not end an expired break: {e}")
     match a.command:
         case None:
             cmd_overview(cfg)

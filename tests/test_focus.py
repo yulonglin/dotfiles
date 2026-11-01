@@ -648,3 +648,43 @@ def test_a_block_group_off_in_none_stands_aside_with_no_mode(cfg):
     bl = {"off_in": ["admin", "none"]}
     assert ct.sz_group_off(bl, []) and ct.sz_group_off(bl, ["admin"])
     assert not ct.sz_group_off(bl, ["research"])
+
+
+def test_an_expired_break_is_ended_by_any_command_and_restores_every_mode(
+    cfg, tmp_path, monkeypatch
+):
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    (tmp_path / "break.json").write_text(
+        json.dumps({"modes": ["research", "writing"], "until": 0})
+    )
+    assert ct.end_break(cfg)
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert blocks["mode: writing"]["enabled"] == "true"
+    assert not (tmp_path / "break.json").exists()
+
+
+def test_a_malformed_break_file_never_blocks(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    (tmp_path / "break.json").write_text("{not json")
+    assert ct.end_break(cfg) and not (tmp_path / "break.json").exists()
+    (tmp_path / "break.json").write_text(json.dumps({"until": "soon"}))
+    assert ct.end_break(cfg)
+
+
+def test_no_mode_stops_when_the_break_timer_cannot_start(cfg, tmp_path, monkeypatch):
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+
+    def no_spawn(*a, **k):
+        raise OSError("no fork")
+
+    monkeypatch.setattr(ct.subprocess, "Popen", no_spawn)
+    with pytest.raises(SystemExit, match="no mode was stopped"):
+        ct.cmd_break(cfg, ["10"])
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert not (tmp_path / "break.json").exists()
