@@ -374,12 +374,14 @@ def end_break(cfg: dict) -> bool:
     b = read_break()
     if b is None or time.time() < b["until"]:
         return False
-    BREAK_FILE.unlink(missing_ok=True)
     back = [m for m in b["modes"] if m in cfg["modes"]]
     running = set(running_modes(cfg))
     for m in back:
         if m not in running:
-            switch(PREFIX + m, on=True)
+            switch(PREFIX + m, on=True)  # exits on failure, leaving the record to retry
+    # Clear the record only once every mode is back, so a failed start is retried by the
+    # next focus command instead of being forgotten.
+    BREAK_FILE.unlink(missing_ok=True)
     if back:
         sz_follow(cfg, running_modes(cfg), switched=True)
         print(f"break over: {', '.join(back)} running again")

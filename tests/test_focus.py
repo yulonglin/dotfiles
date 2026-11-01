@@ -688,3 +688,16 @@ def test_no_mode_stops_when_the_break_timer_cannot_start(cfg, tmp_path, monkeypa
         ct.cmd_break(cfg, ["10"])
     assert blocks["mode: research"]["enabled"] == "true"
     assert not (tmp_path / "break.json").exists()
+
+
+def test_a_failed_restore_keeps_the_break_record_for_a_retry(
+    cfg, tmp_path, monkeypatch
+):
+    blocks = {"mode: research": mode_block(cfg, "research", "false")}
+    fake_cold_turkey(monkeypatch, blocks, refuse={"mode: research"})
+    (tmp_path / "break.json").write_text(
+        json.dumps({"modes": ["research"], "until": 0})
+    )
+    with pytest.raises(SystemExit):
+        ct.end_break(cfg)
+    assert (tmp_path / "break.json").exists()
