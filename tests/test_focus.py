@@ -1,5 +1,6 @@
 """Tests for custom_bins/focus: config groups, ScreenZen pattern mapping, settings decoding, agent delay."""
 
+import datetime as dt
 import importlib.machinery
 import importlib.util
 import json
@@ -29,6 +30,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
     monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
     monkeypatch.setattr(ct, "SZ_DOMAIN", tmp_path / "no-screenzen" / "prefs")
     monkeypatch.setattr(
         ct, "sz_export", lambda: pytest.fail("test reached real ScreenZen prefs")
@@ -597,3 +599,52 @@ def test_off_says_so_when_no_mode_is_running(cfg, monkeypatch, capsys):
     )
     ct.cmd_off(cfg)
     assert "no mode was running" in capsys.readouterr().out
+
+
+def test_off_hours_spans_including_past_midnight():
+    cfg = {"off_hours": ["22:00-23:15", "23:50-00:30"]}
+    at = lambda h, m: dt.datetime(2026, 10, 30, h, m)  # noqa: E731
+    assert ct.in_off_hours(cfg, at(22, 30)) and not ct.in_off_hours(cfg, at(23, 15))
+    assert ct.in_off_hours(cfg, at(0, 10)) and not ct.in_off_hours(cfg, at(12, 0))
+
+
+def test_off_outside_off_hours_points_to_a_break(cfg, monkeypatch):
+    cfg["off_hours"] = ["22:00-23:15"]
+    monkeypatch.setattr(ct, "in_off_hours", lambda cfg: False)
+    monkeypatch.setattr(
+        ct,
+        "read_blocks",
+        lambda: {"mode: research": mode_block(cfg, "research", "true")},
+    )
+    monkeypatch.setattr(
+        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+    )
+    with pytest.raises(SystemExit, match="focus break"):
+        ct.cmd_off(cfg)
+
+
+def test_a_break_stops_the_mode_and_the_waiter_starts_it_again(
+    cfg, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    spawned = []
+    monkeypatch.setattr(ct.subprocess, "Popen", lambda cmd, **k: spawned.append(cmd))
+    ct.cmd_break(cfg, ["10"])
+    assert blocks["mode: research"]["enabled"] == "false" and spawned[0][-1] == "resume"
+    with pytest.raises(SystemExit, match="1 to 30"):
+        ct.cmd_break(cfg, ["45"])
+    # the waiter: once the break is over, research comes back
+    b = json.loads((tmp_path / "break.json").read_text())
+    (tmp_path / "break.json").write_text(json.dumps({**b, "until": 0}))
+    ct.cmd_resume(cfg)
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert not (tmp_path / "break.json").exists()
+
+
+def test_a_block_group_off_in_none_stands_aside_with_no_mode(cfg):
+    bl = {"off_in": ["admin", "none"]}
+    assert ct.sz_group_off(bl, []) and ct.sz_group_off(bl, ["admin"])
+    assert not ct.sz_group_off(bl, ["research"])

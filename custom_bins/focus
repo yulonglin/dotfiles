@@ -176,14 +176,23 @@ def load_config(path: Path) -> dict:
         "blocklists",
         "timers",
         "agent_loosen_delay_minutes",
+        "off_hours",
+        "break_max_minutes",
+        "no_mode_allow",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
+    for span in cfg.get("off_hours") or []:
+        if not re.fullmatch(r"\d\d:\d\d-\d\d:\d\d", str(span)):
+            problems.append(f"off_hours entry {span!r} must look like '22:00-23:15'")
     groups = cfg.setdefault("groups", {})
     for name, g in groups.items():
         if set(g or {}) - {"sites", "apps"}:
             problems.append(f"group {name!r} may only have 'sites' and 'apps'")
-    refs = [("always_allow", cfg.get("always_allow") or [])]
+    refs = [
+        ("always_allow", cfg.get("always_allow") or []),
+        ("no_mode_allow", cfg.get("no_mode_allow") or []),
+    ]
     for name, mode in (cfg.get("modes") or {}).items():
         if set(mode or {}) - {"allow", "block"}:
             problems.append(f"mode {name!r} may only have 'allow' and 'block'")
@@ -198,7 +207,7 @@ def load_config(path: Path) -> dict:
             if set(bl or {}) - keys:
                 problems.append(f"{app} {name!r} may only have {sorted(keys)}")
             for m in bl.get("off_in") or []:
-                if m not in (cfg.get("modes") or {}):
+                if m != "none" and m not in (cfg.get("modes") or {}):
                     problems.append(f"{app} {name!r} off_in names unknown mode {m!r}")
             refs += [
                 (f"{app} {name}", (bl.get("block") or []) + (bl.get("allow") or []))
@@ -334,9 +343,83 @@ def is_locked(block: dict) -> bool:
     return block.get("lock", "none") != "none"
 
 
+BREAK_FILE = PENDING.parent / "break.json"
+DEFAULT_BREAK_MAX = 30
+
+
+def read_break() -> dict | None:
+    try:
+        return json.loads(BREAK_FILE.read_text())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
+    """Whether now falls in one of the note's off_hours spans ('22:00-23:15')."""
+    now = now or dt.datetime.now()
+    t = now.strftime("%H:%M")
+    for span in cfg.get("off_hours") or []:
+        start, end = str(span).split("-")
+        if (start <= t < end) if start <= end else (t >= start or t < end):
+            return True
+    return False
+
+
+def cmd_break(cfg: dict, args: list[str]) -> None:
+    """Stop the running mode for N minutes; a detached waiter starts it again after."""
+    cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    minutes = args[0] if args else "15"
+    if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
+        sys.exit(f"focus: a break is 1 to {cap} minutes, got {minutes!r}")
+    if (b := read_break()) and time.time() < b["until"]:
+        end = dt.datetime.fromtimestamp(b["until"])
+        sys.exit(f"focus: already on a break until {end:%H:%M} (back to {b['mode']})")
+    blocks = read_blocks()
+    running = [
+        n[len(PREFIX) :]
+        for n, b in mode_blocks(blocks).items()
+        if b.get("enabled") == "true" and not is_locked(b)
+    ]
+    if not running:
+        sys.exit("focus: no mode is running, so there is nothing to take a break from")
+    mode = running[0]
+    gate(
+        cfg, f"break:{','.join(sorted(running))}:{minutes}", f"a {minutes}-minute break"
+    )
+    until = time.time() + int(minutes) * 60
+    BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    BREAK_FILE.write_text(json.dumps({"mode": mode, "until": until}))
+    for name in running:
+        switch(PREFIX + name, on=False)
+    sz_follow(cfg, running_modes(cfg), switched=True)
+    # The waiter outlives this command; it checks the wall clock, so sleep does not drift it.
+    subprocess.Popen(
+        [sys.executable, sys.argv[0], "resume"],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    end = dt.datetime.fromtimestamp(until)
+    print(f"break until {end:%H:%M}; {mode} starts again by itself")
+
+
+def cmd_resume(cfg: dict) -> None:
+    """Wait for the break to end, then start its mode again (run detached by 'break')."""
+    while (b := read_break()) and time.time() < b["until"]:
+        time.sleep(min(20, max(1, b["until"] - time.time())))
+    b = read_break()
+    if not b:
+        return  # a mode was started by hand during the break
+    BREAK_FILE.unlink(missing_ok=True)
+    if not running_modes(cfg):
+        cmd_start(cfg, b["mode"])
+
+
 def cmd_start(cfg: dict, mode: str) -> None:
     if mode not in cfg["modes"]:
         sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
+    BREAK_FILE.unlink(missing_ok=True)  # starting a mode by hand ends any break
     blocks = read_blocks()
     target = PREFIX + mode
     if target not in blocks:
@@ -395,7 +478,7 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
                 for name, bl in (cfg.get("blocklists") or {})
                 .get("screenzen", {})
                 .items()
-                if any(m in (bl.get("off_in") or []) for m in modes)
+                if sz_group_off(bl, modes)
             }
         other = [
             x
@@ -428,12 +511,25 @@ def cmd_off(cfg: dict) -> None:
     for name in locked:
         print(f"{name!r} is locked; left running")
         del running[name]
+    on_break = read_break()
     if not running:
         # Always say something, so 'off' is never silent.
-        if not locked:
+        if on_break and time.time() < on_break["until"]:
+            end = dt.datetime.fromtimestamp(on_break["until"])
+            print(f"on a break until {end:%H:%M}; {on_break['mode']} starts again then")
+        elif not locked:
             print("no mode was running; nothing to stop")
         return
+    # Leaving every mode is for off hours only; otherwise a break, which ends by itself,
+    # so 'off' is not a way past everything (Yulong, 2026-10-30).
+    if cfg.get("off_hours") and not in_off_hours(cfg):
+        hours = ", ".join(cfg["off_hours"])
+        sys.exit(
+            f"focus: 'off' works only in {hours}. Take 'focus break 15' instead, "
+            f"or switch to another mode."
+        )
     gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
+    BREAK_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
     sz_follow(cfg, running_modes(cfg))  # back to the shared list, plus any locked mode
@@ -688,20 +784,30 @@ def sz_allow_pattern(site: str) -> str | None:
     return head if "." in head else None
 
 
+def sz_group_off(bl: dict, modes: list[str]) -> bool:
+    """Whether a ScreenZen 🚫 group stands aside: one of its off_in modes runs, or no
+    mode runs and its off_in names 'none'."""
+    off_in = bl.get("off_in") or []
+    return any(m in off_in for m in modes) or (not modes and "none" in off_in)
+
+
 def sz_allow_sites(cfg: dict, modes: list[str] | None = None) -> list[str]:
     """ScreenZen's allow list follows the mode: always_allow plus the allow groups of the
     given modes (the running ones; none means only the shared list), as ScreenZen patterns,
-    minus what ScreenZen's own 🚫 groups block, which keep their pause screen everywhere.
+    minus what the ScreenZen 🚫 groups that stay on for those modes block.
     modes=None means every mode, the widest list ScreenZen can ever hold."""
     blocked = {
         s.replace("*", "")
         for bl in (cfg.get("blocklists") or {}).get("screenzen", {}).values()
+        if modes is None or not sz_group_off(bl, modes)
         for s in group_items(cfg, bl.get("block") or [], "sites")
     }
     seen: dict[str, None] = {}
     shared = group_items(cfg, cfg.get("always_allow") or [], "sites")
     names = list(cfg["modes"]) if modes is None else modes
     sources = [shared] + [desired_exceptions(cfg, m) for m in names]
+    if not modes:  # no mode (a break, or off hours), or every mode
+        sources.append(group_items(cfg, cfg.get("no_mode_allow") or [], "sites"))
     for sites in sources:
         for site in sites:
             pattern = sz_allow_pattern(site)
@@ -865,7 +971,7 @@ def cmd_screenzen(
         # A 🚫 group can stand aside while certain modes run (off_in), e.g. messaging
         # apps during admin; it is back on for every other mode and for no mode.
         was_off = group["isDisabled"]
-        group["isDisabled"] = any(m in (bl.get("off_in") or []) for m in modes)
+        group["isDisabled"] = sz_group_off(bl, modes)
         if group["isDisabled"] and not was_off:
             loosen.append(f"{name}:off")
         if group["isDisabled"] != was_off:
@@ -1236,6 +1342,24 @@ def cmd_alfred(cfg: dict, query: str) -> None:
             "valid": bool(running),
         }
     )
+    words_ = query.split()
+    mins = (
+        words_[1]
+        if len(words_) == 2 and words_[0] == "break" and words_[1].isdigit()
+        else "15"
+    )
+    items.append(
+        {
+            "uid": "break",
+            "title": f"break for {mins} min",
+            "subtitle": "stop "
+            + (", ".join(sorted(running)) if running else "nothing: no mode runs")
+            + "; it starts again by itself. Type minutes after 'break' to change it",
+            "arg": f"break {mins}",
+            "autocomplete": "break ",
+            "valid": bool(running),
+        }
+    )
     # Timers: 'focus deep 90' runs for 90 minutes; plain 'focus deep' uses the default.
     words = query.split()
     for name, spec in (cfg.get("timers") or {}).items():
@@ -1293,10 +1417,22 @@ def cmd_overview(cfg: dict) -> None:
             print(
                 f"  {name}  blocks {block}, {mins} min by default{on(TIMER_PREFIX + t)}"
             )
+    cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    hours = ", ".join(cfg.get("off_hours") or []) or "any time"
+    print(
+        "\n"
+        + paint("Breaks", "1")
+        + f"  focus break [minutes]  up to {cap} min, then the mode starts again"
+    )
+    if (b := read_break()) and time.time() < b["until"]:
+        end = dt.datetime.fromtimestamp(b["until"])
+        print(
+            "  " + paint(f"● on a break until {end:%H:%M}, back to {b['mode']}", "1;32")
+        )
     print(
         "\n"
         + paint("Also", "1")
-        + "  off · status · sync · screenzen · add GROUP SITE · pull · export"
+        + f"  off (only {hours}) · status · sync · screenzen · add GROUP SITE · pull · export"
         + "\n"
         + paint("Always allowed", "1")
         + "  "
@@ -1319,7 +1455,7 @@ def main() -> None:
     p.add_argument(
         "command",
         nargs="?",
-        help="a mode or timer name, or off | status | sync | screenzen | add | pull | export",
+        help="a mode or timer name, or break | off | status | sync | screenzen | add | pull | export",
     )
     p.add_argument(
         "args", nargs="*", help="export: output file; add: GROUP SITE [SITE…]"
@@ -1337,6 +1473,10 @@ def main() -> None:
             cmd_overview(cfg)
         case "off":
             cmd_off(cfg)
+        case "break":
+            cmd_break(cfg, a.args)
+        case "resume":  # internal: the detached waiter that 'break' starts
+            cmd_resume(cfg)
         case "status":
             cmd_status(cfg)
         case "sync":
