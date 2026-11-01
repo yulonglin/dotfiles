@@ -46,6 +46,8 @@ th,td{border-bottom:1px solid var(--rule);padding:.45rem .6rem;text-align:left}
 th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
 hr{border:0;border-top:1px solid var(--rule);margin:2rem 0}
 .doc svg{max-width:100%;height:auto}
+pre.mermaid{background:var(--panel);border:1px solid var(--rule);border-radius:9px;
+ padding:1rem;margin:1.6rem 0;text-align:center}
 p.svg-note{color:var(--bad);background:var(--bad-bg);border-radius:6px;
  padding:.4rem .7rem;font-size:.85rem}
 a{color:var(--accent)}
@@ -74,7 +76,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 <p><strong>The table is generated; edit the YAML, never the Markdown.</strong> Each row comes from one file — <code>artifacts/&lt;slug&gt;/meta.yml</code> for a page whose source is kept, <code>artifacts/index-rows/&lt;slug&gt;.yml</code> for one whose source was not — and <code>python3 scripts/build_artifacts_index.py</code> rewrites the block between the two markers below. Two publishes now touch two different files instead of the same table line, so they no longer conflict; a conflict inside the generated block is resolved by taking either side and re-running the script. Everything outside the markers is hand-written and is never touched.</p>
 <p><strong>Live index page:</strong> https://claude.ai/code/artifact/6cbce727-6346-4dff-a2ef-78aa2da38107 — published 2026-09-10 under <code>lin.yulong@gmail.com's Organization</code> from <code>artifacts/index/index.html</code>.</p>
 <p><strong>The index is republished to that same URL after every artifact publish</strong> (Yulong, 2026-09-10), which replaces the earlier &quot;republish only on request&quot; rule: rebuild <code>artifacts/index/index.html</code> from this file and publish it with <code>url</code> set to the address above, in the same turn as the row you just wrote. <code>claude/hooks/nudge_artifact_index.sh</code> reads that URL out of this header and reminds the session; it never publishes anything itself. The old rule existed because the two previous hosted copies — the org-locked original (<a href="https://claude.ai/code/artifact/8ad029a9-5ad8-431f-9e1d-88532cb89802">8ad029a9</a>) and its replacement (<a href="https://claude.ai/code/artifact/8d035fe5-a206-4d80-ac2f-c32ca0db743c">8d035fe5</a>), deleted the same day it was published — were both removed shortly after publication, so treat a 404 on the live URL as a signal to publish a fresh page and re-stamp this line rather than as a reason to stop.</p>
-<div class="sec" data-sec="artifacts" data-hash="6183f8df900a"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="artifacts--body" aria-labelledby="artifacts"></button>
+<div class="sec" data-sec="artifacts" data-hash="9cc9d5689ccd"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="artifacts--body" aria-labelledby="artifacts"></button>
 <h2 id="artifacts">Artifacts</h2>
 <div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="artifacts" data-label="Mark seen"></button></div><div class="sec-body" id="artifacts--body">
 <table>
@@ -90,10 +92,26 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </thead>
 <tbody>
 <tr>
+<td><a href="https://claude.ai/artifact/BGS1pzT1t5dZS5A3UFnD36">The No-Mode Baseline</a> — discussion page: with no focus mode running, ScreenZen passes fewer sites (31) than any mode (37 to 72), the reverse of Cold Turkey; five options for the no-mode baseline, lean B (union of every mode, 97 sites)</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>live</td>
+<td><code>artifacts/no-mode-baseline/</code></td>
+<td>no</td>
+<td>2026-11-01</td>
+</tr>
+<tr>
 <td><a href="https://claude.ai/artifact/RKXV7RT4bXVs3mUArR8MU7">Research Run Records</a> — the spec for <code>runrec</code>, tier 0 of the 2026-10-04 research-loop priorities: every launch writes a run directory, a live <code>launch.json</code> and a line in the repo's <code>out/runs.jsonl</code> before it spends; a Modal or RunPod launch with no cost cap, burn rate or idle limit is refused, <code>modal deploy</code> and <code>--detach</code> are refused because no in-run stop can reach them, and an OpenRouter balance below the declared API cap refuses the launch; a running command is stopped on estimated cost, idle or deadline; one Markdown board per project is kept in the vault. Reviewed before the build by GPT-6.1 Sol, whose six defects (mid-run manifest races, an API cap described as enforced when it is advisory, key ceiling mistaken for account credit, self-resetting idle clock, resumed progress, frozen board) the page records with their fixes</td>
 <td>lin.yulong@gmail.com's Organization</td>
 <td>live</td>
 <td><code>artifacts/research-run-records/</code></td>
+<td>no</td>
+<td>2026-10-12</td>
+</tr>
+<tr>
+<td><a href="https://claude.ai/artifact/BsHW8Yo2cmJLGyLEfL4XaX">Rigour Checks Review</a> — every rigour, reproducibility and research-integrity check the harness imposes on an experiment (75, one row each with every location), rated by iteration cost, value and risk with a suggested keep, automate, soften, merge or drop; 72 of 75 are text only, four built guards are unwired, the five costliest are human gates, and five pairs of files contradict each other. Yulong sets a decision per row in the page's shared <code>decisions</code> collection, which Claude reads back</td>
+<td>lin.yulong@gmail.com's Organization</td>
+<td>live</td>
+<td><code>artifacts/rigour-checks/</code></td>
 <td>no</td>
 <td>2026-10-12</td>
 </tr>
@@ -379,7 +397,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 </tr>
 </tbody>
 </table>
-<p>36 rows: 18 live, 15 done, 2 archived, 1 superseded.</p>
+<p>38 rows: 20 live, 15 done, 2 archived, 1 superseded.</p>
 <p><strong>Status vocabulary.</strong> <code>live</code> — still being updated, cite it. <code>done</code> — the work is finished and its conclusions stand, still quotable. <code>archived</code> — deliberately retired, do not cite, row kept for its history and comment threads. <code>superseded</code> — replaced by a specific newer page, and the row links to it. <code>elsewhere</code> — published under an org this machine is not signed into. <code>done</code> is an achievement and <code>archived</code> is a retirement; only <code>superseded</code> implies a successor exists. Nothing is ever deleted from this table.</p>
 <p><strong>What the table holds today.</strong> The tally under the table is generated with it, so it cannot go stale. The two <code>archived</code> rows are pages deleted upstream, so their links 404: the 2026-08-31 hosted index and <em>README Trimmed; Two Proposals Await</em>. The single <code>superseded</code> row is this index's org-locked original, replaced rather than retired. Nothing has ever been removed.</p>
 <p><strong>Org, and why most rows still say &quot;see note&quot;.</strong> Every row above appeared in the <code>Artifact action: list</code> result of 2026-08-29. Whether that <em>means</em> they are in the currently signed-in org depends on the listing being org-scoped, which the Claude Code docs nowhere state — so read &quot;see note&quot; as genuinely unknown rather than as a name I merely failed to type. The org's <em>name</em> is missing only because <code>claude auth status</code> returned <code>orgName: null</code> on the session that wrote this file — while reporting <code>authMethod: &quot;claude.ai&quot;</code> and publishing the index page without trouble. A null org therefore diagnoses nothing about how the session is authenticated; it is simply a field that is sometimes unpopulated. The field <em>is</em> populated on this machine as of 2026-09-10, which is where the index row's <code>lin.yulong@gmail.com's Organization</code> comes from — but reading today's org says nothing about which org published a page in August, so the older rows keep &quot;see note&quot; rather than being back-filled from it, and every row written from now on carries the org read at its own publish time.</p>
@@ -870,11 +888,21 @@ ul>li.antask{list-style:none}
  white-space:nowrap;cursor:pointer}
 .anstatebtn:hover{border-color:var(--an-accent);color:var(--an-accent)}
 .anstatebtn:focus-visible,.anstatebox:focus-visible{outline:2px solid var(--an-accent);outline-offset:2px}
-#anBadge{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
- bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;background:var(--an-bg);color:var(--an-ink);
+#anDock{position:fixed;right:calc(.9rem + env(safe-area-inset-right,0px));
+ bottom:calc(.9rem + env(safe-area-inset-bottom,0px));z-index:1045;display:flex;gap:.4rem;align-items:center}
+#anBadge,#anToggle{background:var(--an-bg);color:var(--an-ink);
  border:1px solid var(--an-rule);border-radius:999px;padding:.4rem .8rem;font:inherit;font-size:.85rem;
  font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+#anToggle{font-size:.78rem;color:var(--an-soft)}
+#anToggle[aria-pressed="false"]{border-style:dashed}
 #anBadge.warn{border-color:var(--an-bad);color:var(--an-bad)}
+/* Switched off, the page reads as if the layer were not there, so the
+   viewer's own commenting gets the selection and the original text. The
+   comments are kept, still counted and still exported; only their marks and
+   the box go quiet. */
+html.an-off mark.note{background:none;border-bottom:0;cursor:inherit}
+html.an-off mark.anedit{color:inherit;text-decoration:none;cursor:inherit}
+html.an-off .anins,html.an-off #anPop{display:none!important}
 </style>
 <div data-annotation-layer="v2" data-key="review-artifacts">
 <section id="anComments">
@@ -916,7 +944,10 @@ ul>li.antask{list-style:none}
   </div>
   <textarea id="anExportText" readonly></textarea>
 </div>
+<div id="anDock">
+<button id="anToggle" type="button" aria-pressed="false" title="Switch this page's highlights and comment box on or off. Off leaves select-to-comment to the viewer's own comments. Your comments are kept either way.">Highlights off</button>
 <button id="anBadge" type="button" aria-label="Jump to your comments">&#128172; 0</button>
+</div>
 </div>
 <script>
 (function(){
@@ -943,6 +974,7 @@ var KEY = (root && root.dataset.key) || ("annot:" + document.title);
 var DIRTY = "an-dirty:" + KEY;
 var DRAFT = "an-draft:" + KEY;
 var STATES = "an-states:" + KEY;
+var ON = "an-on:" + KEY;
 
 // ---- storage -------------------------------------------------------------
 // localStorage, and nothing else. An IndexedDB mirror, a backup key and a
@@ -1019,7 +1051,7 @@ function syncLegacyFlag(){ lsSet(DIRTY, isDirty() ? "1" : "0"); }
   comments.forEach(function(c){ if (!c.copiedAt) { c.copiedAt = now; touched = true; } });
   if (touched) persist();
 })();
-var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge");
+var pop = $("anPop"), txt = $("anTxt"), badge = $("anBadge"), toggle = $("anToggle");
 var pending = null, editingId = null;
 // The box has two modes and one dirty flag. `dirty` is set by the first user
 // modification and by nothing else: an edit box OPENS with the selection
@@ -1142,7 +1174,12 @@ $("anModeComment").onclick = function(){ switchMode("comment"); };
 $("anModeEdit").onclick = function(){ switchMode("edit"); };
 
 function openEdit(c, anchor, focus){
-  if (isOpen() && editingId !== c.id && dirty) { nudge(focus); return; }
+  // Off, the box is hidden by CSS but would still count as open, and the next
+  // press outside an unmodified open box closes it and deletes the draft.
+  if (layerOff()) return;
+  // The same entry too: reopening it would reload its saved body over the
+  // revision being typed -- or one just restored from a draft.
+  if (isOpen() && dirty) { nudge(focus); return; }
   editingId = c.id; pending = null;
   setModeState(isEdit(c) ? "edit" : "comment");
   txt.value = bodyOf(c);
@@ -1154,6 +1191,7 @@ function openEdit(c, anchor, focus){
 // Both parts of a suggested edit carry the entry id, as a comment highlight
 // does, so clicking the strikethrough or the replacement reopens the same box.
 document.addEventListener("click", function(ev){
+  if (layerOff()) return;
   var m = ev.target.closest && ev.target.closest("[data-cid]");
   if (!m || pop.contains(ev.target)) return;
   var c = comments.find(function(x){ return x.id === Number(m.dataset.cid); });
@@ -1330,6 +1368,7 @@ function openForSelection(autofocus){
 // Synchronous, so the focus stays inside the user gesture — Safari only
 // raises the soft keyboard for a focus() called within one.
 document.addEventListener("mouseup", function(ev){
+  if (layerOff()) return;
   if (pop.contains(ev.target)) return;
   if (ev.target.closest && ev.target.closest("[data-cid]")) return;
   clearTimeout(selTimer);
@@ -1354,6 +1393,7 @@ document.addEventListener("mousedown", function(ev){
 // fires on every platform; debounce it so it runs once the selection settles.
 var selTimer = null;
 document.addEventListener("selectionchange", function(){
+  if (layerOff()) return;
   if (document.activeElement === txt) return;
   if (editingId !== null) return;
   // Same test as openForSelection: modified work stays, an untouched prefill
@@ -1399,6 +1439,10 @@ function discard(){ closePop(); }
 // suggest a deletion, and a refresh before Enter must bring that back. In
 // comment mode an empty box is nothing to keep.
 function saveDraft(){
+  // Off, the box is shut but a draft from an earlier visit may be waiting in
+  // storage for the layer to come back on; the pagehide save must not take
+  // that closed box as "nothing to keep" and delete it.
+  if (layerOff()) return;
   if (!isOpen() || !dirty || (!hasText() && mode !== "edit")) { lsDel(DRAFT); return; }
   lsSet(DRAFT, JSON.stringify({
     note: txt.value, editingId: editingId, mode: mode,
@@ -1856,6 +1900,10 @@ function render(){
     } else n.textContent = c.note;
     var a = document.createElement("button"); a.className = "anbtn ghost tiny"; a.textContent = "edit";
     a.onclick = function(){
+      // Asking to edit is asking for the layer. Switch it on the normal way
+      // first, so a draft waiting out the off state is restored -- and then
+      // guarded by openEdit -- rather than lost under a box nobody can see.
+      if (layerOff()) layerOn();
       var m = document.querySelector('mark[data-cid="' + c.id + '"]');
       if (m) { m.scrollIntoView({ block: "center" }); m.click(); }
       else openEdit(c, null);
@@ -2073,6 +2121,39 @@ $("anPageCopy").onclick = async function(){
 
 badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth", block: "start" }); };
 
+// ---- on/off switch -------------------------------------------------------
+// The Artifact viewer has its own commenting, and both answer the same
+// select-text gesture, so this layer's highlights and box start off and a
+// reader switches them on. Off hides; it never deletes: the comments, their
+// count, the badge's warning, the unload guard and Copy all carry on as
+// before, and a draft is left in storage for the next time the layer is on.
+// One reader's choice, kept per page under its own prefixed key, which holds
+// "1" while the layer is on and is removed when it goes off. Anything else --
+// nothing stored, unreadable storage, a key left by an older layer -- is the
+// off default.
+function layerOff(){ return document.documentElement.classList.contains("an-off"); }
+function setLayerOff(off){
+  document.documentElement.classList.toggle("an-off", off);
+  toggle.setAttribute("aria-pressed", off ? "false" : "true");
+  toggle.textContent = off ? "Highlights off" : "Highlights on";
+}
+toggle.onclick = function(){
+  if (!layerOff()) {
+    // Words the reader typed are work, and closePop would delete their draft.
+    // Decline and point at them, as every other overwriting control does.
+    if (isOpen() && dirty) { nudge(); return; }
+    if (isOpen()) closePop();
+    setLayerOff(true);
+    lsDel(ON);
+  } else layerOn();
+};
+function layerOn(){
+  setLayerOff(false);
+  lsSet(ON, "1");
+  if (!isOpen()) restoreDraft();
+}
+setLayerOff(lsGet(ON) !== "1");
+
 // A host page may bind single-key shortcuts on document or window -- a triage
 // console where `d` means delete, a slideshow where `j` means next. Typing a
 // note would fire them: the keystroke bubbles out of this textarea and reaches
@@ -2092,7 +2173,8 @@ badge.onclick = function(){ $("anComments").scrollIntoView({ behavior: "smooth",
 wireStates();
 restoreHighlights();
 render();
-restoreDraft();
+// Off on load: the draft stays stored and comes back when the layer is on.
+if (!layerOff()) restoreDraft();
 })();
 </script>
 <!-- /annotation-layer -->

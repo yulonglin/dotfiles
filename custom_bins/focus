@@ -30,7 +30,8 @@ blocklists only name groups:
 Two layers. ScreenZen gives friction and follows the mode: focus owns one allow
 group per mode, '✅ focus: <mode>', plus '✅ focus: shared' for no mode, each
 holding the shared list plus that mode's sites minus what ScreenZen's own 🚫
-groups block. Exactly one is on, so ScreenZen shows the mode; every other site
+groups block; the no-mode group holds every mode's sites, so a mode only
+tightens it. Exactly one is on, so ScreenZen shows the mode; every other site
 gets a pause screen. A switch or 'off' turns the right one on. Its 🚫 groups are
 written from `blocklists.screenzen`, and all other ✅ groups are off. ScreenZen has
 no CLI, so each write saves a
@@ -561,7 +562,9 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
         # 'focus screenzen' would use.
         mode_sites, mode_off = set(), set()
         if switched:
-            mode_sites = set(sz_allow_sites(cfg, modes)) - set(sz_allow_sites(cfg, []))
+            # Measured against the shared list, not the no-mode list, which holds every
+            # mode's sites.
+            mode_sites = set(sz_allow_sites(cfg, modes)) - sz_shared_sites(cfg)
             # So is standing aside a 🚫 group whose off_in names the new mode.
             mode_off = {
                 f"{name}:off"
@@ -624,7 +627,8 @@ def cmd_off(cfg: dict) -> None:
     BREAK_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
-    sz_follow(cfg, running_modes(cfg))  # back to the shared list, plus any locked mode
+    # Back to the no-mode list, or a locked mode's; the gate above approved that state.
+    sz_follow(cfg, running_modes(cfg), switched=True)
     print(f"stopped {', '.join(running)}")
 
 
@@ -876,6 +880,12 @@ def sz_allow_pattern(site: str) -> str | None:
     return head if "." in head else None
 
 
+def sz_shared_sites(cfg: dict) -> set[str]:
+    """The always_allow sites as ScreenZen patterns: what every state lets through."""
+    sites = group_items(cfg, cfg.get("always_allow") or [], "sites")
+    return {p for s in sites if (p := sz_allow_pattern(s))}
+
+
 def sz_group_off(bl: dict, modes: list[str]) -> bool:
     """Whether a ScreenZen 🚫 group stands aside: one of its off_in modes runs, or no
     mode runs and its off_in names 'none'."""
@@ -885,9 +895,11 @@ def sz_group_off(bl: dict, modes: list[str]) -> bool:
 
 def sz_allow_sites(cfg: dict, modes: list[str] | None = None) -> list[str]:
     """ScreenZen's allow list follows the mode: always_allow plus the allow groups of the
-    given modes (the running ones; none means only the shared list), as ScreenZen patterns,
-    minus what the ScreenZen 🚫 groups that stay on for those modes block.
-    modes=None means every mode, the widest list ScreenZen can ever hold."""
+    given modes (the running ones), as ScreenZen patterns, minus what the ScreenZen 🚫
+    groups that stay on for those modes block.
+    No mode ([]: a break, off hours, a day not started) allows every mode's sites plus
+    no_mode_allow, so each mode only tightens it (Yulong, 2026-11-01).
+    modes=None means every mode with every 🚫 group on."""
     blocked = {
         s.replace("*", "")
         for bl in (cfg.get("blocklists") or {}).get("screenzen", {}).values()
@@ -896,7 +908,7 @@ def sz_allow_sites(cfg: dict, modes: list[str] | None = None) -> list[str]:
     }
     seen: dict[str, None] = {}
     shared = group_items(cfg, cfg.get("always_allow") or [], "sites")
-    names = list(cfg["modes"]) if modes is None else modes
+    names = modes or list(cfg["modes"])
     sources = [shared] + [desired_exceptions(cfg, m) for m in names]
     if not modes:  # no mode (a break, or off hours), or every mode
         sources.append(group_items(cfg, cfg.get("no_mode_allow") or [], "sites"))
@@ -991,7 +1003,8 @@ def cmd_screenzen(
     (default: the ones Cold Turkey runs now); return what the write loosens.
 
     focus owns one allow group per mode plus one for no mode ('✅ focus: shared'), each
-    holding the shared list plus that mode's sites; exactly one is on, so ScreenZen's own
+    holding the shared list plus that mode's sites (every mode's, for no mode); exactly
+    one is on, so ScreenZen's own
     screen shows the mode. Missing groups are created by copying an existing ✅ group.
     Every other ✅ group is switched off."""
     if modes is None:
@@ -1282,7 +1295,9 @@ def cmd_pull(cfg_path: Path, dry_run: bool) -> None:
 
     def allowed(c: dict) -> set[str]:
         sites = {f"{m}:{s}" for m in c["modes"] for s in desired_exceptions(c, m)}
-        return sites | {f"screenzen:{s}" for s in sz_allow_sites(c)}
+        # The no-mode list is the widest; modes=None also counts sites a 🚫 group blocks.
+        widest = sz_allow_sites(c) + sz_allow_sites(c, [])
+        return sites | {f"screenzen:{s}" for s in widest}
 
     loosen = sorted(allowed(after) - allowed(cfg))
     if loosen:
