@@ -84,6 +84,9 @@ from pathlib import Path
 import yaml
 
 DEFAULT_CONFIG = Path.home() / "vault/tooling/dotfiles/config/cold-turkey.md"
+CONFIG_PATH = DEFAULT_CONFIG  # set from --config in main; children are given the same
+AGENT_LABEL = "com.yulonglin.focus.tick"
+AGENT_PLIST = Path.home() / f"Library/LaunchAgents/{AGENT_LABEL}.plist"
 CT_BIN = Path(
     "/Applications/Cold Turkey Blocker.app/Contents/MacOS/Cold Turkey Blocker"
 )
@@ -369,8 +372,9 @@ def read_break() -> dict | None:
 
 def end_break(cfg: dict) -> bool:
     """If a break is over, start every mode it stopped that is not running now, and
-    clear it. Runs at the start of every focus command as well as from the waiter, so a
-    killed waiter, a reboot or a crash cannot turn a break into no end."""
+    clear it. Three things call it: the waiter that 'break' starts, the start of every
+    focus command, and the once-a-minute launchd job ('focus install-agent'). Without
+    that job, a killed waiter or a reboot leaves the break open until focus next runs."""
     b = read_break()
     if b is None or time.time() < b["until"]:
         return False
@@ -424,7 +428,7 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     # Any later focus command also ends an expired break, so the waiter is not the only way.
     try:
         subprocess.Popen(
-            [sys.executable, sys.argv[0], "resume"],
+            [sys.executable, sys.argv[0], "--config", str(CONFIG_PATH), "resume"],
             start_new_session=True,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -438,6 +442,45 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     sz_follow(cfg, running_modes(cfg), switched=True)
     end = dt.datetime.fromtimestamp(until)
     print(f"break until {end:%H:%M}; {', '.join(running)} starts again by itself")
+    if not AGENT_PLIST.exists():
+        print("tip: 'focus install-agent' makes sure a break ends even after a restart")
+
+
+def cmd_install_agent() -> None:
+    """Install the once-a-minute launchd job that ends overdue breaks, so a break ends
+    even if its waiter dies, the Mac restarts, or focus is never run again."""
+    path = os.environ.get("PATH", "")
+    extra = ["/opt/homebrew/bin", str(Path.home() / ".local/bin"), "/usr/bin", "/bin"]
+    plist = {
+        "Label": AGENT_LABEL,
+        "ProgramArguments": [
+            str(Path(sys.argv[0]).resolve()),
+            "--config",
+            str(CONFIG_PATH),
+            "tick",
+        ],
+        "StartInterval": 60,
+        "RunAtLoad": True,
+        "EnvironmentVariables": {"PATH": ":".join(extra + [path])},
+        "StandardOutPath": str(Path.home() / "Library/Logs/focus-tick.log"),
+        "StandardErrorPath": str(Path.home() / "Library/Logs/focus-tick.log"),
+    }
+    AGENT_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    AGENT_PLIST.write_bytes(plistlib.dumps(plist))
+    domain = f"gui/{os.getuid()}"
+    subprocess.run(
+        ["launchctl", "bootout", f"{domain}/{AGENT_LABEL}"], capture_output=True
+    )
+    r = subprocess.run(
+        ["launchctl", "bootstrap", domain, str(AGENT_PLIST)],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode:
+        sys.exit(
+            f"focus: wrote {AGENT_PLIST} but launchctl refused it: {r.stderr.strip()}"
+        )
+    print(f"installed {AGENT_LABEL}: checks every minute for a break that is over")
 
 
 def cmd_resume(cfg: dict) -> None:
@@ -450,7 +493,6 @@ def cmd_resume(cfg: dict) -> None:
 def cmd_start(cfg: dict, mode: str) -> None:
     if mode not in cfg["modes"]:
         sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
-    BREAK_FILE.unlink(missing_ok=True)  # starting a mode by hand ends any break
     blocks = read_blocks()
     target = PREFIX + mode
     if target not in blocks:
@@ -481,6 +523,9 @@ def cmd_start(cfg: dict, mode: str) -> None:
     switched = blocks[target].get("enabled") != "true"
     if switched:
         switch(target, on=True)
+    # A mode started by hand ends any break, but only once it is confirmed running, so a
+    # failed start leaves the break to be restored.
+    BREAK_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
     # ScreenZen follows the mode. A real switch already passed the agent gate; re-running
@@ -1502,11 +1547,13 @@ def main() -> None:
     )
     p.add_argument("--app", action="store_true", help="add: the items are app names")
     a = p.parse_args()
-    cfg = load_config(a.config)
+    global CONFIG_PATH
+    CONFIG_PATH = a.config.expanduser().resolve()
+    cfg = load_config(CONFIG_PATH)
     if not cfg.get("modes"):
         sys.exit(f"focus: no modes in {a.config}")
     # Any focus command ends a break that is over, so a lost waiter cannot leave it open.
-    if a.command not in ("resume", "alfred"):
+    if a.command not in ("resume", "alfred", "tick", "install-agent"):
         try:
             end_break(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
@@ -1520,6 +1567,10 @@ def main() -> None:
             cmd_break(cfg, a.args)
         case "resume":  # internal: the detached waiter that 'break' starts
             cmd_resume(cfg)
+        case "tick":  # internal: the launchd job; ends an overdue break, else silent
+            end_break(cfg)
+        case "install-agent":
+            cmd_install_agent()
         case "status":
             cmd_status(cfg)
         case "sync":

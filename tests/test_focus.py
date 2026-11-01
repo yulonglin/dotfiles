@@ -701,3 +701,22 @@ def test_a_failed_restore_keeps_the_break_record_for_a_retry(
     with pytest.raises(SystemExit):
         ct.end_break(cfg)
     assert (tmp_path / "break.json").exists()
+
+
+def test_the_waiter_gets_the_same_config_and_a_failed_start_keeps_the_break(
+    cfg, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "other-note.md")
+    monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    spawned = []
+    monkeypatch.setattr(ct.subprocess, "Popen", lambda cmd, **k: spawned.append(cmd))
+    ct.cmd_break(cfg, ["5"])
+    assert spawned[0][-3:] == ["--config", str(tmp_path / "other-note.md"), "resume"]
+    # starting a mode by hand that fails leaves the break in place
+    fake_cold_turkey(monkeypatch, blocks, refuse={"mode: research"})
+    with pytest.raises(SystemExit):
+        ct.cmd_start(cfg, "research")
+    assert (tmp_path / "break.json").exists()

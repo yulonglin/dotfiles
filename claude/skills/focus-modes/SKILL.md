@@ -20,7 +20,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to t
 | Ask | Run |
 |---|---|
 | "switch to / start writing" | `focus writing` |
-| "take a break", "pause for 15 minutes" | `focus break 15`: stops the mode, which starts again by itself after the break (at most `break_max_minutes`) |
+| "take a break", "pause for 15 minutes" | `focus break 15`: stops the mode, which starts again by itself after the break (at most `break_max_minutes`). `focus install-agent` adds a once-a-minute launchd job so a break ends even after a restart |
 | "turn blocking off" | `focus off`, which works only in the note's `off_hours`; at any other time offer a break or another mode instead. Never route around this |
 | "deep focus for 90 minutes", "block AI chat for a bit" | `focus deep 90`: the `timer: deep` block, locked until it ends, on top of any mode. Starting it only tightens, so it runs at once; nobody can end it early |
 | "what's running", "is it in sync" | `focus status` |
