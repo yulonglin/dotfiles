@@ -764,3 +764,46 @@ def test_uninstall_agent_runs_without_a_config_note(tmp_path, monkeypatch):
     )
     ct.main()
     assert ran == [True]
+
+
+def test_screenzen_follows_an_app_whose_bundle_id_changed(
+    tmp_path, monkeypatch, capsys
+):
+    p = tmp_path / "note.md"
+    p.write_text(
+        NOTE.replace(
+            "blocklists:\n",
+            'blocklists:\n  screenzen:\n    "🚫 chat": {block: [chat]}\n',
+        )
+    )
+    cfg = ct.load_config(p)
+    old = {
+        **ct.APP_TEMPLATE,
+        "appName": "Telegram",
+        "appBundle": "old.id",
+        "appUrl": "/x",
+    }
+    groups = [
+        {
+            "groupName": "✅ always",
+            "id": "A",
+            "isDisabled": False,
+            "alwaysActive": True,
+            "customSites": [],
+            "apps": [],
+        },
+        {
+            "groupName": "🚫 chat",
+            "id": "B",
+            "isDisabled": False,
+            "alwaysActive": True,
+            "customSites": [],
+            "apps": [old],
+        },
+    ]
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs(groups))
+    monkeypatch.setattr(
+        ct, "resolve_app", lambda name: (Path(f"/Applications/{name}.app"), "new.id")
+    )
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[])
+    assert "Telegram (now new.id)" in capsys.readouterr().out

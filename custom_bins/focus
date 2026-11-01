@@ -1047,10 +1047,14 @@ def cmd_screenzen(
         added, removed = sz_set_sites(group, [s for s in sites if s], "block")
         want_apps, missing = [], []
         for app in group_items(cfg, bl.get("block") or [], "apps"):
-            entry = next(
-                (a for a in group["apps"] if a["appName"] == app), None
-            ) or sz_app(app, APP_TEMPLATE)
+            old = next((a for a in group["apps"] if a["appName"] == app), None)
+            # Re-read the installed app each time: an update can change its bundle id
+            # (Open Grind went from org.opengrind to org.opengrind.app), and ScreenZen
+            # matches by id, so a stale entry silently stops blocking.
+            entry = sz_app(app, old or APP_TEMPLATE) or old
             (want_apps.append(entry) if entry else missing.append(app))
+            if old and entry and old.get("appBundle") != entry["appBundle"]:
+                added.append(f"app {app} (now {entry['appBundle']})")
         have_apps = [a["appName"] for a in group["apps"]]
         added += [
             f"app {a['appName']}" for a in want_apps if a["appName"] not in have_apps
