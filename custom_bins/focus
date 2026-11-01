@@ -107,6 +107,26 @@ SZ_DOMAIN = (
     / "Library/Group Containers/group.ScreenZen.macos/Library/Preferences/group.ScreenZen.macos"
 )
 SZ_MODE_PREFIX = "✅ focus: "  # ScreenZen allow groups this tool owns, one per mode
+SZ_BUNDLE = "com.scottharvey.screenzenapp.ios"
+
+
+def frontmost_bundle() -> str | None:
+    """Bundle id of the app in front, via lsappinfo (no Apple Events permission needed)."""
+    try:
+        asn = subprocess.run(
+            ["lsappinfo", "front"], capture_output=True, text=True
+        ).stdout
+        out = subprocess.run(
+            ["lsappinfo", "info", "-only", "bundleid", asn.strip()],
+            capture_output=True,
+            text=True,
+        ).stdout
+    except OSError:
+        return None
+    m = re.search(r'"CFBundleIdentifier"="([^"]+)"', out)
+    return m.group(1) if m else None
+
+
 SZ_BACKUPS_KEPT = 50
 BACKUP_DIR = Path(
     os.environ.get("FOCUS_BACKUPS", Path.home() / "scratch/blocker-backups")
@@ -334,10 +354,10 @@ def switch(name: str, on: bool) -> None:
     """Start or stop a block, then confirm in the database: the CLI exits 0 even when it fails."""
     ct("-start" if on else "-stop", name)
     want = "true" if on else "false"
-    for _ in range(10):
+    for _ in range(50):
         if read_blocks().get(name, {}).get("enabled") == want:
             return
-        time.sleep(0.5)
+        time.sleep(0.1)
     sys.exit(f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}")
 
 
@@ -724,10 +744,10 @@ def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
 
 def landed(name: str, kind: str, site: str) -> bool:
     """The CLI exits 0 even when it changes nothing, so check the database, briefly polling."""
-    for _ in range(6):
+    for _ in range(30):
         if site in read_blocks().get(name, {}).get(kind, []):
             return True
-        time.sleep(0.5)
+        time.sleep(0.1)
     return False
 
 
@@ -1115,9 +1135,14 @@ def cmd_screenzen(
     # Every mode switch writes ScreenZen, so keep the newest backups only.
     for old in sorted(BACKUP_DIR.glob("screenzen-*.plist"))[:-SZ_BACKUPS_KEPT]:
         old.unlink()
-    # ScreenZen must be closed, or it writes its in-memory groups back over ours.
+    front = frontmost_bundle()  # to hand the focus back if ScreenZen grabs it
+    # ScreenZen must be closed, or it writes its in-memory groups back over ours. Wait
+    # only as long as it takes to exit, instead of a fixed second.
     subprocess.run(["killall", "ScreenZen"], capture_output=True)
-    time.sleep(1)
+    for _ in range(30):
+        if subprocess.run(["pgrep", "-x", "ScreenZen"], capture_output=True).returncode:
+            break
+        time.sleep(0.1)
     blob = json.dumps(groups, ensure_ascii=False, separators=(",", ":")).encode()
     subprocess.run(
         [
@@ -1142,6 +1167,14 @@ def cmd_screenzen(
             f"focus: wrote ScreenZen (backup at {backup}) but could not reopen it, "
             "so its blocking is off until it runs. Reopen it: open -a ScreenZen"
         )
+    # ScreenZen activates itself on launch despite -g -j, so if it takes the front,
+    # give it back to whatever app had it.
+    if front and front != SZ_BUNDLE:
+        for _ in range(30):
+            if frontmost_bundle() == SZ_BUNDLE:
+                subprocess.run(["open", "-b", front], capture_output=True)
+                break
+            time.sleep(0.1)
     if quiet:
         print(
             f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
@@ -1381,12 +1414,12 @@ def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
         sys.exit(f"focus: {block!r} is already running and locked")
     # Tightening only, so no agent delay; the lock means nobody can end it early.
     ct("-start", block, "-lock", minutes)
-    for _ in range(10):
+    for _ in range(50):
         if read_blocks().get(block, {}).get("enabled") == "true":
             end = dt.datetime.now() + dt.timedelta(minutes=int(minutes))
             print(f"started {block!r}, locked until about {end:%H:%M:%S}")
             return
-        time.sleep(0.5)
+        time.sleep(0.1)
     sys.exit(f"focus: Cold Turkey did not start {block!r}")
 
 
@@ -1509,54 +1542,73 @@ def cmd_overview(cfg: dict) -> None:
     except (OSError, sqlite3.Error, ValueError):
         blocks = {}
 
-    running_label = "● running"
+    brk = read_break()
+    on_break = brk["modes"] if brk and time.time() < brk["until"] else []
 
-    def on(name: str) -> str:
-        # A fixed-width column right after the name, so the state reads first and the
-        # lists line up whether or not a row is running. Padded before painting.
-        if blocks.get(name, {}).get("enabled") == "true":
-            return paint(running_label, "1;32")
-        return " " * len(running_label)
+    def mark(block: str, mode: str | None = None) -> tuple[str, bool]:
+        """A one-character state, colour-coded and explained by the legend below."""
+        if blocks.get(block, {}).get("enabled") == "true":
+            return paint("●", "1;32"), True
+        if mode and mode in on_break:
+            return paint("◐", "1;33"), False
+        return paint("○", "2"), False
+
+    def head(title: str, usage: str) -> None:
+        print(paint(title, "1") + "  " + paint(usage, "2"))
 
     width = max(len(n) for n in [*cfg["modes"], *(cfg.get("timers") or {})])
-    print(paint("Modes", "1") + paint("  focus <mode>", "2"))
+
+    def row(sym_on: tuple[str, bool], name: str, detail: str) -> None:
+        sym, on = sym_on
+        label = paint(f"{name:<{width}}", "1;32" if on else "1")
+        print(f"  {sym} {label}  {detail}")
+
+    head("Modes", "focus <mode>")
     for m, spec in cfg["modes"].items():
-        allow = paint(", ".join(spec.get("allow") or []), "2")
-        name = paint(f"{m:<{width}}", "1;36")
-        print(f"  {name}  {on(PREFIX + m)}  allows {allow}")
-    if cfg.get("timers"):
-        print("\n" + paint("Timers", "1") + paint("  focus <timer> [minutes]", "2"))
-        for t, spec in cfg["timers"].items():
-            block = paint(", ".join(spec.get("block") or []), "2")
-            mins = spec.get("minutes", 50)
-            name = paint(f"{t:<{width}}", "1;33")
-            print(
-                f"  {name}  {on(TIMER_PREFIX + t)}  blocks {block}, {mins} min by default"
-            )
+        row(mark(PREFIX + m, m), m, paint(", ".join(spec.get("allow") or []), "2"))
+    for t, spec in (cfg.get("timers") or {}).items():
+        print()
+        head("Timer", f"focus {t} [minutes]")
+        blocked = ", ".join(spec.get("block") or [])
+        row(
+            mark(TIMER_PREFIX + t),
+            t,
+            paint(f"blocks {blocked} · {spec.get('minutes', 50)} min by default", "2"),
+        )
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
-    hours = ", ".join(cfg.get("off_hours") or []) or "any time"
-    print(
-        "\n"
-        + paint("Breaks", "1")
-        + f"  focus break [minutes]  up to {cap} min, then the mode starts again"
-    )
-    if (b := read_break()) and time.time() < b["until"]:
-        end = dt.datetime.fromtimestamp(b["until"])
+    print()
+    head("Break", "focus break [minutes]")
+    if on_break:
+        end = dt.datetime.fromtimestamp(brk["until"])
         print(
-            "  "
+            f"  {paint('◐', '1;33')} "
             + paint(
-                f"● on a break until {end:%H:%M:%S}, back to {', '.join(b['modes'])}",
-                "1;32",
+                f"until {end:%H:%M:%S}, then {', '.join(on_break)} starts again", "1;33"
             )
         )
+    else:
+        print(
+            "    "
+            + paint(f"up to {cap} min, then the mode starts again by itself", "2")
+        )
+    hours = ", ".join(cfg.get("off_hours") or []) or "any time"
+    print()
     print(
-        "\n"
-        + paint("Also", "1")
-        + f"  off (only {hours}) · status · sync · screenzen · add GROUP SITE · pull · export"
-        + "\n"
-        + paint("Always allowed", "1")
+        paint("Always allowed", "1")
         + "  "
         + paint(", ".join(cfg.get("always_allow") or []), "2")
+    )
+    print(
+        paint("Also", "1")
+        + "  "
+        + paint(
+            f"off ({hours} only) · status · sync · add GROUP SITE · pull · export", "2"
+        )
+    )
+    print()
+    print(
+        f"{paint('●', '1;32')} running   {paint('◐', '1;33')} on a break   "
+        f"{paint('○', '2')} off"
     )
 
 
