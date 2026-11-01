@@ -1509,16 +1509,21 @@ def cmd_overview(cfg: dict) -> None:
     except (OSError, sqlite3.Error, ValueError):
         blocks = {}
 
+    running_label = "● running"
+
     def on(name: str) -> str:
+        # A fixed-width column right after the name, so the state reads first and the
+        # lists line up whether or not a row is running. Padded before painting.
         if blocks.get(name, {}).get("enabled") == "true":
-            return "  " + paint("● running", "1;32")
-        return ""
+            return paint(running_label, "1;32")
+        return " " * len(running_label)
 
     width = max(len(n) for n in [*cfg["modes"], *(cfg.get("timers") or {})])
     print(paint("Modes", "1") + paint("  focus <mode>", "2"))
     for m, spec in cfg["modes"].items():
         allow = paint(", ".join(spec.get("allow") or []), "2")
-        print(f"  {paint(f'{m:<{width}}', '1;36')}  allows {allow}{on(PREFIX + m)}")
+        name = paint(f"{m:<{width}}", "1;36")
+        print(f"  {name}  {on(PREFIX + m)}  allows {allow}")
     if cfg.get("timers"):
         print("\n" + paint("Timers", "1") + paint("  focus <timer> [minutes]", "2"))
         for t, spec in cfg["timers"].items():
@@ -1526,7 +1531,7 @@ def cmd_overview(cfg: dict) -> None:
             mins = spec.get("minutes", 50)
             name = paint(f"{t:<{width}}", "1;33")
             print(
-                f"  {name}  blocks {block}, {mins} min by default{on(TIMER_PREFIX + t)}"
+                f"  {name}  {on(TIMER_PREFIX + t)}  blocks {block}, {mins} min by default"
             )
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
     hours = ", ".join(cfg.get("off_hours") or []) or "any time"
