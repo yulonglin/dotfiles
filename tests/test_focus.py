@@ -38,11 +38,39 @@ def isolated(monkeypatch, tmp_path):
 
 
 def test_screenzen_follows_the_running_mode(cfg):
-    shared_only = ct.sz_allow_sites(cfg, [])
     research = ct.sz_allow_sites(cfg, ["research"])
-    assert "arxiv.org" not in shared_only and "localhost" in shared_only
     assert "arxiv.org" in research and "github.com/" in research
     assert "github.com/" not in ct.sz_allow_sites(cfg, ["writing"])
+
+
+def test_no_mode_is_the_widest_screenzen_list(cfg):
+    # Every mode tightens no mode, so a break never pauses its mode's own sites.
+    no_mode = set(ct.sz_allow_sites(cfg, []))
+    for mode in cfg["modes"]:
+        assert set(ct.sz_allow_sites(cfg, [mode])) <= no_mode
+    assert {"localhost", "arxiv.org", "github.com/"} <= no_mode
+
+
+def test_a_switch_waives_the_new_modes_sites_even_though_no_mode_has_them(
+    cfg, tmp_path, monkeypatch
+):
+    # The waiver is measured against the shared list; against the no-mode list, which
+    # now holds every mode's sites, it would waive nothing and stall every switch.
+    plist = tmp_path / "sz" / "prefs.plist"
+    plist.parent.mkdir()
+    plist.write_text("")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", plist.with_suffix(""))
+    monkeypatch.setenv("CLAUDECODE", "1")
+    writes = []
+    monkeypatch.setattr(
+        ct,
+        "cmd_screenzen",
+        lambda cfg, dry_run, **k: (
+            ["✅ focus: writing:+arxiv.org"] if dry_run else writes.append(k["modes"])
+        ),
+    )
+    ct.sz_follow(cfg, ["writing"], switched=True)
+    assert writes == [["writing"]]
 
 
 def test_a_switch_points_screenzen_at_the_new_mode(cfg, monkeypatch):
