@@ -26,4 +26,4 @@ established: |
   ScreenZen with no mode turns on "✅ focus: shared", which holds only always_allow plus
   no_mode_allow, so it is stricter than every mode. A break inherits this, so a research break
   pauses arXiv. Cold Turkey's blocked-site log has no Drive URL, so the Drive block of
-  2026-11-01 came from ScreenZen. Frozen Turkey's schedule leaves 00:00-00:55 unlocked.
+  2026-11-01 came from ScreenZen. Frozen Turkey leaves 00:00-00:55 unlocked on purpose (wrap-up time at home). Decided: option B, 2026-11-01.

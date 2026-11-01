@@ -207,7 +207,7 @@ a { color: var(--accent); }
 
       <line x1="41" y1="72" x2="41" y2="190" stroke="var(--hard)" stroke-dasharray="3 3"/>
       <text x="48" y="206" font-weight="600" font-size="13">00:00–00:55 is unlocked</text>
-      <text x="48" y="223" class="small">Frozen Turkey's schedule ends at midnight and starts again at 00:55. This looks unintended; it is why no mode runs right now.</text>
+      <text x="48" y="223" class="small">On purpose: 23:15 gets Yulong home, 00:00–00:55 is for wrapping up before bed.</text>
     </svg>
   </div>
   <div class="legend">
@@ -277,12 +277,11 @@ a { color: var(--accent); }
 </section>
 
 <section class="ask">
-  <div class="eyebrow">Decisions for Yulong</div>
+  <div class="eyebrow">Decided 1 Nov 2026</div>
   <ul>
-    <li><strong>Which baseline:</strong> B (lean), C, D or E. A keeps today's behaviour.</li>
-    <li><strong>A day with no mode started:</strong> should it keep any friction? This question decides between B and C.</li>
-    <li><strong>The 00:00–00:55 gap</strong> in Frozen Turkey's schedule: is it meant to be there? If not, it is a fix you make in Cold Turkey itself (it is a lock block, so <code>focus</code> does not change it).</li>
-    <li><strong>Tonight's Drive change</strong> (Docs, Drive and Slides moved to <code>always_allow</code>) is queued until 00:16. It helps under A and does nothing extra under B to E, so it is safe to apply either way.</li>
+    <li><strong>Baseline: B.</strong> No mode allows every mode's sites, 97 in all. It is built on the dotfiles branch <code>focus-no-mode-baseline</code> and goes live when that branch is merged.</li>
+    <li><strong>The 00:00–00:55 gap is intended.</strong> The 23:15 lock gets Yulong out of the office and home. The gap leaves time to wrap up a few things before bed. The note now says so.</li>
+    <li><strong>Tonight's Drive change</strong> (Docs, Drive and Slides moved to <code>always_allow</code>) has been applied. Under B it adds nothing more, and it does no harm.</li>
   </ul>
 </section>
 
