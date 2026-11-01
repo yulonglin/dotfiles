@@ -158,7 +158,7 @@ def gate(cfg: dict, request: str, why: str) -> None:
         pending[request] = due
         PENDING.parent.mkdir(parents=True, exist_ok=True)
         PENDING.write_text(json.dumps(pending))
-    at = dt.datetime.fromtimestamp(due).strftime("%H:%M")
+    at = dt.datetime.fromtimestamp(due).strftime("%H:%M:%S")
     print(
         f"focus: {why}. An agent's loosening waits {delay} min: queued; "
         f"run the same command again after {at} to apply it."
@@ -415,7 +415,7 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     if (b := read_break()) and time.time() < b["until"]:
         end = dt.datetime.fromtimestamp(b["until"])
         sys.exit(
-            f"focus: already on a break until {end:%H:%M} (back to {', '.join(b['modes'])})"
+            f"focus: already on a break until {end:%H:%M:%S} (back to {', '.join(b['modes'])})"
         )
     blocks = read_blocks()
     running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
@@ -444,7 +444,7 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
         switch(PREFIX + name, on=False)
     sz_follow(cfg, running_modes(cfg), switched=True)
     end = dt.datetime.fromtimestamp(until)
-    print(f"break until {end:%H:%M}; {', '.join(running)} starts again by itself")
+    print(f"break until {end:%H:%M:%S}; {', '.join(running)} starts again by itself")
     if not AGENT_PLIST.exists():
         print("tip: 'focus install-agent' makes sure a break ends even after a restart")
 
@@ -610,7 +610,7 @@ def cmd_off(cfg: dict) -> None:
         if on_break and time.time() < on_break["until"]:
             end = dt.datetime.fromtimestamp(on_break["until"])
             print(
-                f"on a break until {end:%H:%M}; {', '.join(on_break['modes'])} starts again then"
+                f"on a break until {end:%H:%M:%S}; {', '.join(on_break['modes'])} starts again then"
             )
         elif not locked:
             print("no mode was running; nothing to stop")
@@ -1384,7 +1384,7 @@ def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
     for _ in range(10):
         if read_blocks().get(block, {}).get("enabled") == "true":
             end = dt.datetime.now() + dt.timedelta(minutes=int(minutes))
-            print(f"started {block!r}, locked until about {end:%H:%M}")
+            print(f"started {block!r}, locked until about {end:%H:%M:%S}")
             return
         time.sleep(0.5)
     sys.exit(f"focus: Cold Turkey did not start {block!r}")
@@ -1540,7 +1540,7 @@ def cmd_overview(cfg: dict) -> None:
         print(
             "  "
             + paint(
-                f"● on a break until {end:%H:%M}, back to {', '.join(b['modes'])}",
+                f"● on a break until {end:%H:%M:%S}, back to {', '.join(b['modes'])}",
                 "1;32",
             )
         )
