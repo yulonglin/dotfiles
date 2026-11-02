@@ -359,6 +359,23 @@ def parse_panel(spec: str | None, cfg: dict) -> list[str]:
     return panel
 
 
+# Fusion is asked for, not forced. `tool_choice: "required"` is what OpenRouter
+# documents for forcing fusion, but Anthropic rejects forced tool use on its
+# current flagships: claude-opus-5.5 and claude-fable-5.1 both answer
+# `tool_choice: type "tool" and "any" are not supported for this model.`
+# (measured 2026-11-01; claude-haiku-4.5 still accepts it). Inside fusion that
+# upstream 400 surfaces only as an opaque "Model call failed: invalid request
+# (400)" with no model named, and it broke every `fusion` and default `council
+# ask` from the day Opus 5.5 took the chair. A system instruction plus "auto"
+# works on every chair tried; if the chair ever skips the tool anyway,
+# fusion_result() fails closed, so compliance is checked rather than assumed.
+FUSION_INSTRUCTION = (
+    "Before answering, call the openrouter:fusion tool exactly once with the "
+    "user's request, then write your final answer from its result. Do not "
+    "answer without calling it."
+)
+
+
 def fusion_result(resp: dict) -> dict:
     """The structured fusion outcome, recorded as a server tool call in
     reasoning_details. Without it the panel cannot be verified, so its
@@ -370,7 +387,10 @@ def fusion_result(resp: dict) -> dict:
                 return json.loads(d["result"])
             except ValueError:
                 die("fusion tool result is not valid JSON")
-    die("response carries no openrouter:fusion tool result - cannot verify the panel ran")
+    # The usual cause since tool_choice became "auto": the chair answered
+    # directly and never called the tool. The answer is not a panel answer.
+    die("response carries no openrouter:fusion tool result - the chair likely "
+        "answered without calling fusion, so no panel ran; retry")
 
 
 def check_fusion_integrity(result: dict, panel: list[str]) -> list[str]:
@@ -930,7 +950,10 @@ def cmd_fusion(args, cfg) -> None:
     payload = {
         # The outer voice that writes the final prose.
         "model": chair_of(cfg),
-        "messages": [{"role": "user", "content": args.prompt}],
+        "messages": [
+            {"role": "system", "content": FUSION_INSTRUCTION},
+            {"role": "user", "content": args.prompt},
+        ],
         "tools": [{
             "type": "openrouter:fusion",
             "parameters": {
@@ -944,7 +967,8 @@ def cmd_fusion(args, cfg) -> None:
                 "max_completion_tokens": caps.get("max_completion_tokens", 16000),
             },
         }],
-        "tool_choice": "required",
+        # "auto", not "required": see FUSION_INSTRUCTION for why forcing fails.
+        "tool_choice": "auto",
     }
     if args.dry_run:
         print(json.dumps(payload, indent=2))

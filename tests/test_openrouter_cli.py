@@ -154,3 +154,36 @@ class TestFusionIntegrity:
         result = {"status": "ok", "analysis": {}}
         assert any("cannot verify the panel" in p
                    for p in orc.check_fusion_integrity(result, self.PANEL))
+
+
+class TestFusionRequestBody:
+    """The fusion request must not force tool use.
+
+    On 2026-11-01 every fusion call with the Opus 5.5 chair failed with an
+    opaque `Model call failed: invalid request (400)`. The same chair given a
+    plain function tool and `tool_choice: "required"` showed the real cause,
+    from Anthropic upstream: `tool_choice: type "tool" and "any" are not
+    supported for this model.` Fusion is now requested by system instruction
+    with `tool_choice: "auto"`, and fusion_result() fails closed if skipped.
+    """
+
+    def body(self, capsys):
+        import argparse
+        import json
+        ns = argparse.Namespace(prompt="q", panel=None, dry_run=True)
+        orc.cmd_fusion(ns, CFG)
+        return json.loads(capsys.readouterr().out)
+
+    def test_tool_choice_is_not_forced(self, capsys):
+        assert self.body(capsys)["tool_choice"] not in ("required", "any")
+
+    def test_system_message_asks_for_fusion_before_the_prompt(self, capsys):
+        msgs = self.body(capsys)["messages"]
+        assert msgs[0]["role"] == "system"
+        assert "openrouter:fusion" in msgs[0]["content"]
+        assert msgs[-1] == {"role": "user", "content": "q"}
+
+    def test_skipped_tool_names_the_likely_cause(self, capsys):
+        with pytest.raises(SystemExit):
+            orc.fusion_result(good_response("answered directly"))
+        assert "without calling fusion" in capsys.readouterr().err

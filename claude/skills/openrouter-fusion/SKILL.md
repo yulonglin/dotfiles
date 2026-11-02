@@ -37,7 +37,7 @@ curl https://openrouter.ai/api/v1/models -H "Authorization: Bearer $OPENROUTER_A
   | jq '.data[] | {id, context_length, pricing}'
 ```
 
-Fusion as a raw tool call is `"tools": [{"type": "openrouter:fusion", "parameters": {...}}]` with `"tool_choice": "required"`. Its parameters: `analysis_models` (1-8 slugs, the panel), `model` (the judge slug), `max_tool_calls` (1-16, default 8 web calls per panel model), `max_completion_tokens`, `reasoning.effort` (low/medium/high), `temperature` (0-2).
+Fusion as a raw tool call is `"tools": [{"type": "openrouter:fusion", "parameters": {...}}]` with `"tool_choice": "auto"` plus a system message telling the outer model to call it once. Do not use `"required"`: Anthropic rejects forced tool use on Opus 5.5 and Fable 5.1 (`tool_choice: type "tool" and "any" are not supported for this model`), and fusion reports that only as an opaque `Model call failed: invalid request (400)` (2026-11-01). Its parameters: `analysis_models` (1-8 slugs, the panel), `model` (the judge slug), `max_tool_calls` (1-16, default 8 web calls per panel model), `max_completion_tokens`, `reasoning.effort` (low/medium/high), `temperature` (0-2).
 
 ## Reach for a neighbour instead when
 
