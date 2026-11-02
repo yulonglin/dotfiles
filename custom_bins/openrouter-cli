@@ -101,8 +101,16 @@ def get_json(url: str, headers: dict | None = None, timeout: int = 60) -> dict:
         die(f"cannot reach {url}: {e.reason}")
 
 
+# Every chat completion is STREAMED and reassembled into the non-streamed shape.
+# A non-streamed request sends no bytes until the whole answer exists, and
+# OpenRouter's edge closes a connection that stays silent for 60 s: on
+# 2026-11-01 a two-seat fusion over a 4 KB brief died at exactly 60.0 s with
+# RemoteDisconnected, while the same request streamed finished in 112 s, kept
+# open by ~240 ": OPENROUTER PROCESSING" comment lines. Fusion runs the panel,
+# the analyst and the chair inside one request, so any non-trivial brief passes
+# 60 s. The timeout below is per socket read, so those comments reset it.
 def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
-    body = json.dumps(payload).encode()
+    body = json.dumps({**payload, "stream": True}).encode()
     req = urllib.request.Request(
         url,
         data=body,
@@ -113,13 +121,66 @@ def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
             "X-OpenRouter-Title": "openrouter-cli (dotfiles)",
         },
     )
+    started = datetime.datetime.now()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r)
+            return assemble_stream(r)
     except urllib.error.HTTPError as e:
         die(f"HTTP {e.code}: {e.read()[:500].decode('utf-8', 'replace')}")
     except urllib.error.URLError as e:
         die(f"cannot reach {url}: {e.reason}")
+    except (http.client.HTTPException, ConnectionError, TimeoutError) as e:
+        # Not retried: the server may still finish, and bill, the first call.
+        secs = (datetime.datetime.now() - started).total_seconds()
+        die(f"connection lost after {secs:.0f}s ({type(e).__name__}: {e}); "
+            "the call may still be billed - check openrouter.ai/activity before retrying")
+
+
+def assemble_stream(lines) -> dict:
+    """Fold an SSE chat-completion stream into the non-streamed response shape.
+
+    Callers read `id`, `model`, `usage`, `error` and choices[0]'s
+    `finish_reason`, `native_finish_reason`, `error` and `message.content` /
+    `message.reasoning_details`. Fusion's record is one
+    `reasoning.server_tool_call` entry in a delta; reasoning entries that
+    arrive in fragments share an `index` and are joined back together.
+    """
+    resp: dict = {}
+    content: list[str] = []
+    details: list[dict] = []
+    choice: dict = {}
+    for raw in lines:
+        line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else raw.strip()
+        if not line.startswith("data:"):
+            continue  # blank separators and ": OPENROUTER PROCESSING" keep-alives
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        ev = json.loads(data)
+        for k in ("id", "model", "provider", "usage", "error"):
+            if ev.get(k):
+                resp[k] = ev[k]
+        for ch in ev.get("choices") or []:
+            delta = ch.get("delta") or {}
+            if delta.get("content"):
+                content.append(delta["content"])
+            for d in delta.get("reasoning_details") or []:
+                prev = details[-1] if details else None
+                if (prev is not None and "index" in d and prev.get("index") == d["index"]
+                        and prev.get("type") == d.get("type")):
+                    for f in ("text", "summary", "result"):
+                        if isinstance(d.get(f), str):
+                            prev[f] = (prev.get(f) or "") + d[f]
+                else:
+                    details.append(dict(d))
+            for k in ("finish_reason", "native_finish_reason", "error"):
+                if ch.get(k):
+                    choice[k] = ch[k]
+    message: dict = {"content": "".join(content)}
+    if details:
+        message["reasoning_details"] = details
+    resp["choices"] = [{**choice, "message": message}] if (content or details or choice) else []
+    return resp
 
 
 # Append-only provenance log. Every billed call records which concrete model
