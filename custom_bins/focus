@@ -159,14 +159,16 @@ def hand_back_focus(front: str | None) -> None:
 
     ScreenZen opens its main window on every launch, on top of everything, despite
     'open -g -j', and refuses to be hidden from outside (NSRunningApplication.hide
-    returns false). So wait until that window is on screen, then activate the app that
-    had the front: activating it from ScreenZen raises its windows above ScreenZen's.
-    Waiting for ScreenZen to become the front app instead fired before the window
-    existed, and the window then landed on top of the app just handed back (traced
-    2026-11-02). If the window still covers the screen, the previous app was already
-    active, so activate ScreenZen and hand back once more. FOCUS_TRACE=1 appends each
-    step to SZ_TRACE. With the screen locked, loginwindow is in front and there is no
-    app to hand back to."""
+    returns false; lsappinfo setfront gets permErr). So wait until that window is on
+    screen, then activate the app that had the front. Activating an app raises its
+    windows only if another app is active: when ScreenZen took the front, 'open -b'
+    the previous app is enough (tested 2026-11-03); when the window landed on top
+    while the previous app stayed active, 'open -b' does nothing, so activate Finder
+    first. Waiting for ScreenZen to become the front app instead of for its window
+    fired before the window existed (traced 2026-11-02). Keep watching until the
+    window has stayed below for 0.6 s, at most 4 s, since a first raise can land late.
+    FOCUS_TRACE=1 appends each step to SZ_TRACE. With the screen locked, loginwindow is
+    in front and there is no app to hand back to."""
     if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
         return
     t0 = time.monotonic()
@@ -174,24 +176,30 @@ def hand_back_focus(front: str | None) -> None:
 
     def check(step):
         on, top = sz_window()
-        log.append(f"{time.monotonic() - t0:5.2f}s {step}: window {on}, on top {top}")
-        return on, top
+        active = frontmost_bundle()
+        log.append(
+            f"{time.monotonic() - t0:5.2f}s {step}: window {on}, on top {top}, "
+            f"front {active}"
+        )
+        return on, top, active
 
     on = top = False
     while not on and time.monotonic() - t0 < 6:
-        on, top = check("waiting")
+        on, top, active = check("waiting")
         if not on:
             time.sleep(0.1)
-    if top:
-        subprocess.run(["open", "-b", front], capture_output=True)
+    raises = below = 0
+    window_up = time.monotonic()
+    while on and below < 2 and time.monotonic() - window_up < 4:
+        if top and raises < 3:
+            if active == front:  # already active, so 'open -b' alone would not raise
+                subprocess.run(["open", "-b", "com.apple.finder"], capture_output=True)
+                time.sleep(0.15)
+            subprocess.run(["open", "-b", front], capture_output=True)
+            raises += 1
         time.sleep(0.3)
-        on, top = check(f"after open -b {front}")
-    if top:
-        subprocess.run(["open", "-b", SZ_BUNDLE], capture_output=True)
-        time.sleep(0.2)
-        subprocess.run(["open", "-b", front], capture_output=True)
-        time.sleep(0.3)
-        check(f"after open -b ScreenZen, then {front}")
+        on, top, active = check(f"after {raises} raise(s)")
+        below = 0 if top else below + 1
     if os.environ.get("FOCUS_TRACE"):
         SZ_TRACE.parent.mkdir(parents=True, exist_ok=True)
         with SZ_TRACE.open("a") as f:

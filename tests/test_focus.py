@@ -837,9 +837,12 @@ def test_screenzen_follows_an_app_whose_bundle_id_changed(
     assert "Telegram (now new.id)" in capsys.readouterr().out
 
 
-def fake_screenzen_launch(monkeypatch, windows):
-    """Feed hand_back_focus a sequence of (on screen, on top) window states; record the
-    'open' calls it makes. The last state repeats once the sequence runs out."""
+REX = "com.superlogical.rex"
+
+
+def fake_screenzen_launch(monkeypatch, windows, active):
+    """Feed hand_back_focus a sequence of (on screen, on top) window states and a fixed
+    front app; record the 'open' calls it makes. The last state repeats."""
     states = iter(windows)
     last = [windows[-1]]
     opened = []
@@ -849,6 +852,7 @@ def fake_screenzen_launch(monkeypatch, windows):
         return last[0]
 
     monkeypatch.setattr(ct, "sz_window", sz_window)
+    monkeypatch.setattr(ct, "frontmost_bundle", lambda: active)
     monkeypatch.setattr(ct.time, "sleep", lambda s: None)
     monkeypatch.setattr(
         ct.subprocess, "run", lambda cmd, **k: opened.append(cmd) or None
@@ -856,41 +860,54 @@ def fake_screenzen_launch(monkeypatch, windows):
     return opened
 
 
-def test_focus_is_handed_back_only_once_screenzen_window_is_up(monkeypatch):
-    # ScreenZen becomes active before its window exists; handing back then let the
-    # window land on top afterwards. Wait for the window itself.
+def test_focus_is_handed_back_once_screenzen_window_is_up(monkeypatch):
+    # ScreenZen took the front: 'open -b' the previous app is enough, and only once
+    # the window exists (handing back before it existed let it land on top).
     opened = fake_screenzen_launch(
-        monkeypatch, [(False, False), (False, False), (True, True), (True, False)]
+        monkeypatch,
+        [(False, False), (False, False), (True, True), (True, False)],
+        active=ct.SZ_BUNDLE,
     )
-    ct.hand_back_focus("com.superlogical.rex")
-    assert opened == [["open", "-b", "com.superlogical.rex"]]
+    ct.hand_back_focus(REX)
+    assert opened == [["open", "-b", REX]]
 
 
-def test_screenzen_window_over_an_already_active_app_gets_a_second_hand_back(
+def test_window_over_a_still_active_app_is_raised_through_finder(monkeypatch):
+    # The previous app never lost the front, so activating it again would not raise it.
+    opened = fake_screenzen_launch(
+        monkeypatch, [(True, True), (True, False)], active=REX
+    )
+    ct.hand_back_focus(REX)
+    assert opened == [["open", "-b", "com.apple.finder"], ["open", "-b", REX]]
+
+
+def test_window_that_comes_back_on_top_is_raised_again_at_most_three_times(
     monkeypatch,
 ):
     opened = fake_screenzen_launch(
-        monkeypatch, [(True, True), (True, True), (True, False)]
+        monkeypatch,
+        [(True, True), (True, False), (True, True), (True, False), (True, False)],
+        active=ct.SZ_BUNDLE,
     )
-    ct.hand_back_focus("com.superlogical.rex")
-    assert opened == [
-        ["open", "-b", "com.superlogical.rex"],
-        ["open", "-b", ct.SZ_BUNDLE],
-        ["open", "-b", "com.superlogical.rex"],
-    ]
+    ct.hand_back_focus(REX)
+    assert opened == [["open", "-b", REX]] * 2
+    opened.clear()
+    clock = iter(range(100))
+    monkeypatch.setattr(ct.time, "monotonic", lambda: next(clock) * 0.3)
+    stuck = fake_screenzen_launch(monkeypatch, [(True, True)], active=ct.SZ_BUNDLE)
+    ct.hand_back_focus(REX)
+    assert stuck == [["open", "-b", REX]] * 3
 
 
-def test_no_hand_back_when_screenzen_window_never_covers_the_screen(
-    monkeypatch, tmp_path
-):
+def test_no_hand_back_when_screenzen_window_never_appears(monkeypatch, tmp_path):
     clock = iter(range(100))
     monkeypatch.setattr(ct.time, "monotonic", lambda: next(clock))
     monkeypatch.setattr(ct, "SZ_TRACE", tmp_path / "trace.log")
     monkeypatch.setenv("FOCUS_TRACE", "1")
-    opened = fake_screenzen_launch(monkeypatch, [(False, False)])
-    ct.hand_back_focus("com.superlogical.rex")
+    opened = fake_screenzen_launch(monkeypatch, [(False, False)], active=REX)
+    ct.hand_back_focus(REX)
     assert opened == []
-    assert "front was com.superlogical.rex" in (tmp_path / "trace.log").read_text()
+    assert f"front was {REX}" in (tmp_path / "trace.log").read_text()
     # nothing to do when ScreenZen itself was in front, the screen was locked, or
     # nothing was in front
     ct.hand_back_focus(ct.SZ_BUNDLE)
