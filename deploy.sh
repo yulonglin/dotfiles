@@ -1224,6 +1224,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     vault-sync-tripwire.service vault-sync-tripwire.timer \
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
+                    context-review.service context-review.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
                     cloud-spend-check.service cloud-spend-check.timer \
@@ -1256,7 +1257,12 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         # their own state directories. Enabled unconditionally for the same
         # reason as the tripwire above -- a check that is installed but never
         # scheduled reports nothing while looking healthy.
-        for timer in openrouter-drift.timer council-roster.timer; do
+        #
+        # context-review.timer rides the same loop: monthly, no API key, no
+        # pueue, and it writes only its own state directory plus one report
+        # copy in ~/vault. A box without transcripts produces a near-empty
+        # report rather than an error.
+        for timer in openrouter-drift.timer council-roster.timer context-review.timer; do
             [[ -f "$systemd_user_dir/$timer" ]] || continue
             if systemctl --user enable --now "$timer" 2>/dev/null; then
                 log_success "$timer enabled"
