@@ -60,7 +60,10 @@ def breakdown(files: list[Path]) -> str:
 # Set to the measured total rounded up, so the gate blocks growth rather than
 # being red on arrival. It only ever goes DOWN: lower it whenever the tier
 # shrinks -- 35,500 on 2026-09-15, 35,300 on 2026-09-20 after the rules were
-# cut back to what the checklists do not already own. Rounded up rather than
+# cut back to what the checklists do not already own. Held at 35,300 on
+# 2026-11-03: the tier had drifted to 36,080 and sat red in CI for 19 days;
+# moving detail the checklists own back to them brought it to 34,932, and the
+# gate now also runs in pre-commit so drift is caught at the edit. Rounded up rather than
 # set to the measured total, because a gate with 20 bytes of headroom fires on
 # the next clause anyone adds to any rule, which teaches people to raise it.
 # The standing target is 29,900, which is where it was set when the tier

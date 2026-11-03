@@ -483,6 +483,78 @@ _check_markdown_hard_wrap() {
     return 1
 }
 
+# === ALWAYS-ON GUARD TESTS ===
+#
+# The always-on byte budget and the bundled-skills check ran only in CI, where a
+# red run on a direct push to main blocks nothing. Both went red in October and
+# main stayed red for 19 days (2026-10-15 to 2026-11-03), so every later failure
+# was invisible too. Running them here stops the commit that breaks them, on the
+# machine that made the edit, including dotfiles-sync's automatic commits.
+#
+# Repo-scoped: a no-op unless the repo carries these test files. It judges the
+# STAGED content: the tier files, settings.json and the tests are copied out of
+# the index into a temp tree and the tests run there. A missing runner is a
+# failure, not a skip: a guard that silently stops running looks like a pass.
+
+_check_always_on_guards() {
+    local repo_root="$1"
+    local budget_test="tests/test_memory_tier_budget.py"
+    local settings_test="tests/test_validate_claude_settings.py"
+    [ -f "${repo_root}/${budget_test}" ] || return 0
+
+    local staged
+    staged=$(git diff --cached --name-only 2>/dev/null || true)
+    local nodes=()
+    if printf '%s\n' "${staged}" | grep -qE "^(claude/rules/[^/]+\.md|claude/CLAUDE\.md|claude/output-styles/[^/]+\.md|${budget_test})$"; then
+        nodes+=("${budget_test}::test_always_on_tier_total")
+    fi
+    if printf '%s\n' "${staged}" | grep -qxE "CLAUDE\.md|${budget_test}"; then
+        nodes+=("${budget_test}::test_repo_claude_md_total")
+    fi
+    if [ -f "${repo_root}/${settings_test}" ] \
+        && printf '%s\n' "${staged}" | grep -qxE "claude/settings\.json|${settings_test}"; then
+        nodes+=("${settings_test}::test_bundled_skills_enabled_but_claude_api_off")
+    fi
+    [ ${#nodes[@]} -eq 0 ] && return 0
+
+    local -a runner
+    if command -v uv &>/dev/null; then
+        runner=(uv run --quiet --no-project --with pytest python -m pytest)
+    elif python3 -c 'import pytest' &>/dev/null; then
+        runner=(python3 -m pytest)
+    else
+        echo ""
+        echo "⛔  Pre-commit: the always-on guard tests need pytest and nothing can run it."
+        echo "    Install uv (preferred) or pytest for python3, then commit again."
+        echo ""
+        return 1
+    fi
+
+    local snap
+    snap=$(mktemp -d "${TMPDIR:-/tmp}/always-on-guards.XXXXXX")
+    # A pathspec that matches nothing in the index makes ls-files print nothing,
+    # which is fine: the glob in the test then sees no file there.
+    git ls-files -z -- claude/rules claude/output-styles claude/CLAUDE.md \
+            claude/settings.json CLAUDE.md "${budget_test}" "${settings_test}" \
+        | git checkout-index -z --stdin --prefix="${snap}/"
+    local out rc=0
+    out=$(cd "${snap}" && "${runner[@]}" -q -p no:cacheprovider "${nodes[@]}" 2>&1) || rc=$?
+    rm -rf "${snap}"
+    [ ${rc} -eq 0 ] && return 0
+
+    echo ""
+    echo "⛔  Pre-commit: an always-on guard failed on the staged content"
+    printf '%s\n' "${out}" | grep -E "^(E |FAILED)" | head -30 | sed 's/^/    /'
+    echo ""
+    echo "    Over the byte budget: move activity-scoped detail into the checklist"
+    echo "    or skill that owns it (claude/checklists/), never raise the ceiling."
+    echo "    Re-run: python -m pytest ${nodes[*]}"
+    echo ""
+    echo "    To bypass: git commit --no-verify"
+    echo ""
+    return 1
+}
+
 # === ZSH SYNTAX CHECK ===
 #
 # ShellCheck cannot parse zsh (SC1071), so a zsh file's only static check is
@@ -549,6 +621,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 
 if [ -n "$REPO_ROOT" ]; then
     _check_markdown_hard_wrap "$REPO_ROOT" || exit 1
+    _check_always_on_guards "$REPO_ROOT" || exit 1
 
     # Check for pre-commit framework config
     if [ -f "$REPO_ROOT/.pre-commit-config.yaml" ] && command -v pre-commit &> /dev/null; then

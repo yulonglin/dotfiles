@@ -76,6 +76,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/test_pre_commit_zed_ssh_guard.sh
 
+      # The pre-commit copy of the budget and skills checks: CI alone let main
+      # sit red for 19 days, so the edit that breaks them is now stopped locally.
+      - name: Pre-commit always-on guard
+        if: ${{ !cancelled() }}
+        run: bash tests/test_pre_commit_always_on_guard.sh
+
       # The clean filter that strips that block before git stores the file.
       - name: Zed ssh_connections clean filter
         if: ${{ !cancelled() }}
