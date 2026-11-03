@@ -102,6 +102,8 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `review-pr-queue` | "address the comments on these PRs", "review and merge the queue", "clear the PR backlog" |
 | `babysit-pr` | "babysit this PR", "get it green", "fix CI" — one open PR driven to mergeable, one root cause per round |
 | `blast-radius` | "what could this break", "blast radius of X" — breakage beyond the diff, with the one safety fact proven by running code |
+| `why` | "why does X work this way", "where did this rule/threshold come from", "is this still needed" — parallel search of commits, session transcripts, specs, Slack, Granola, Gmail and docs; cited and tiered by confidence |
+| `sharpen` (user-invoked only) | /sharpen — make a task deeper, not bigger, then rewrite the prompt |
 | `correct` (user-invoked only) | /correct, "this keeps happening" — turns a repeated agent mistake into architecture, a type, a hook or a test |
 | `catch-me-up` | "catch me up", "what did I miss", "what needs me" — chat recap since the last message plus every open decision, bundled |
 | `superpowers:finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
