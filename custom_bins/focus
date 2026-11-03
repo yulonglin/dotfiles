@@ -160,15 +160,19 @@ def hand_back_focus(front: str | None) -> None:
     ScreenZen opens its main window on every launch, on top of everything, despite
     'open -g -j', and refuses to be hidden from outside (NSRunningApplication.hide
     returns false; lsappinfo setfront gets permErr). So wait until that window is on
-    screen, then activate the app that had the front. Activating an app raises its
-    windows only if another app is active: when ScreenZen took the front, 'open -b'
-    the previous app is enough (tested 2026-11-03); when the window landed on top
-    while the previous app stayed active, 'open -b' does nothing, so activate Finder
-    first. Waiting for ScreenZen to become the front app instead of for its window
-    fired before the window existed (traced 2026-11-02). Keep watching until the
-    window has stayed below for 0.6 s, at most 4 s, since a first raise can land late.
-    FOCUS_TRACE=1 appends each step to SZ_TRACE. With the screen locked, loginwindow is
-    in front and there is no app to hand back to."""
+    screen, then, while ScreenZen holds the front, 'open -b' the app that had it.
+    Waiting for ScreenZen to become the front app instead of for its window fired
+    before the window existed (traced 2026-11-02).
+
+    When that app is full screen (Rex, 2026-11-03), ScreenZen's window opens on a
+    desktop Space and macOS slides over to it; handing back slides back, which takes
+    up to a second, and until then the window list still shows ScreenZen on top. So
+    after a raise, wait while the app is active: raise again only if ScreenZen takes
+    the front again (at most three times). Re-raising during the slide by bouncing
+    through Finder left Finder in front. Stop once the window has been below or off
+    screen for two checks, or 4 s after it appeared. FOCUS_TRACE=1 appends each step
+    to SZ_TRACE. With the screen locked, loginwindow is in front and there is no app
+    to hand back to."""
     if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
         return
     t0 = time.monotonic()
@@ -191,10 +195,7 @@ def hand_back_focus(front: str | None) -> None:
     raises = below = 0
     window_up = time.monotonic()
     while on and below < 2 and time.monotonic() - window_up < 4:
-        if top and raises < 3:
-            if active == front:  # already active, so 'open -b' alone would not raise
-                subprocess.run(["open", "-b", "com.apple.finder"], capture_output=True)
-                time.sleep(0.15)
+        if top and active != front and raises < 3:
             subprocess.run(["open", "-b", front], capture_output=True)
             raises += 1
         time.sleep(0.3)

@@ -872,13 +872,17 @@ def test_focus_is_handed_back_once_screenzen_window_is_up(monkeypatch):
     assert opened == [["open", "-b", REX]]
 
 
-def test_window_over_a_still_active_app_is_raised_through_finder(monkeypatch):
-    # The previous app never lost the front, so activating it again would not raise it.
-    opened = fake_screenzen_launch(
-        monkeypatch, [(True, True), (True, False)], active=REX
-    )
+def test_no_second_raise_while_macos_slides_back_to_a_full_screen_app(monkeypatch):
+    # Handing back to a full-screen app slides Spaces for up to a second, during which
+    # ScreenZen still lists on top with the app already active. Bouncing through Finder
+    # then left Finder in front (2026-11-03), so wait instead.
+    states = iter([(True, True), (True, True), (True, True), (False, False)])
+    fronts = iter([ct.SZ_BUNDLE, REX, REX, REX])
+    opened = fake_screenzen_launch(monkeypatch, [(True, True)], active=None)
+    monkeypatch.setattr(ct, "sz_window", lambda: next(states))
+    monkeypatch.setattr(ct, "frontmost_bundle", lambda: next(fronts))
     ct.hand_back_focus(REX)
-    assert opened == [["open", "-b", "com.apple.finder"], ["open", "-b", REX]]
+    assert opened == [["open", "-b", REX]]
 
 
 def test_window_that_comes_back_on_top_is_raised_again_at_most_three_times(
