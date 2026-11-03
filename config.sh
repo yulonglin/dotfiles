@@ -74,6 +74,7 @@ DEPLOY_REGISTRY=(
     "bws|Bitwarden Secrets Manager CLI|all|true|Secrets"
     "obsidian-sync|Obsidian-headless vault secrets + pull-only-first enforcement|all|true|Secrets"
     "pkg-configs|Package manager security configs (min-release-age)|all|true|Security"
+    "sshd-key-only|ssh server: keys only, no password logins (needs sudo; refuses without an authorized key)|all|true|Security"
     "dep-audit|Weekly dependency audit (supply chain defense)|all|true|Security"
     "stale-claims|Weekly staleness audit of auto-loaded AI instructions|all|true|Security"
     "cleanup|Auto-cleanup Downloads/Screenshots (macOS)|all|true|Automation"
