@@ -5,7 +5,7 @@
 //! expected strings. Rebuild every platform asset you can and check
 //! scripts/check-claude-tools-fresh.sh — the committed binary is what runs.
 //!
-//! Layout: line 1 is location (machine, profiles, directory, branch); then the
+//! Layout: line 1 is location (OS icon, machine, profiles, directory, branch); then the
 //! session segments; then every coding agent's usage (Claude, the other Claude
 //! account, Codex). The session and usage rows are packed to the terminal width
 //! by pack_groups, so they stay one line each on a wide screen and wrap at
@@ -114,7 +114,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut output = String::with_capacity(256);
 
-    // 1. Machine name (SSH sessions only)
+    // 1. OS icon, then machine name (registered machines and SSH sessions)
+    format_os_icon(&mut output);
     format_machine_name(&mut output);
 
     // 2. Context profiles from context.yaml
@@ -262,6 +263,40 @@ fn pack_groups(groups: &[Vec<String>], width: Option<usize>) -> Vec<String> {
 }
 
 // --- Section formatters ---
+
+/// Nerd Font glyph for the OS, so a Mac and a Linux box read apart at a glance.
+/// The glyphs match p10k's `os_icon` under `nerdfont-complete`.
+fn format_os_icon(output: &mut String) {
+    let os_release = if cfg!(target_os = "linux") {
+        std::fs::read_to_string("/etc/os-release").ok()
+    } else {
+        None
+    };
+    if let Some(icon) = os_icon(std::env::consts::OS, os_release.as_deref()) {
+        let _ = write!(output, "{} ", icon);
+    }
+}
+
+/// Glyph for `os` (`std::env::consts::OS`); on Linux the distro comes from the
+/// `ID=` line of /etc/os-release, falling back to Tux.
+fn os_icon(os: &str, os_release: Option<&str>) -> Option<&'static str> {
+    match os {
+        "macos" => Some("\u{f179}"),
+        "linux" => {
+            let id = os_release
+                .into_iter()
+                .flat_map(str::lines)
+                .find_map(|l| l.strip_prefix("ID="))
+                .map(|v| v.trim().trim_matches('"'));
+            Some(match id {
+                Some("ubuntu") => "\u{f31b}",
+                Some("debian") => "\u{f306}",
+                _ => "\u{f17c}",
+            })
+        }
+        _ => None,
+    }
+}
 
 /// Machine name for registered machines + SSH fallback.
 /// Shells out to `machine-name` (custom_bins/) which checks the machine registry
@@ -860,6 +895,17 @@ mod tests {
         let g = groups(&[&["\x1b[32mabc\x1b[0m"], &["\x1b[2mdef\x1b[0m"]]);
         assert_eq!(pack_groups(&g, Some(8)).len(), 1);
         assert_eq!(pack_groups(&g, Some(7)).len(), 2);
+    }
+
+    #[test]
+    fn os_icon_picks_mac_ubuntu_and_falls_back_to_tux() {
+        assert_eq!(os_icon("macos", None), Some("\u{f179}"));
+        let ubuntu = "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n";
+        assert_eq!(os_icon("linux", Some(ubuntu)), Some("\u{f31b}"));
+        assert_eq!(os_icon("linux", Some("ID=\"debian\"\n")), Some("\u{f306}"));
+        assert_eq!(os_icon("linux", Some("ID=fedora\n")), Some("\u{f17c}"));
+        assert_eq!(os_icon("linux", None), Some("\u{f17c}"));
+        assert_eq!(os_icon("windows", None), None);
     }
 
     #[test]
