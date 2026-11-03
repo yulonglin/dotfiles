@@ -445,6 +445,16 @@ audit() {
         section "Third-party taps whose formulae config.sh declares (exception on record):"
         print -rl -- "${ok_taps[@]/#/  }"
     fi
+    # Orphans the provenance doc below cannot see: it trusts install records,
+    # as `brew autoremove` does, and so missed icu4c@78 on 2026-10-30.
+    if [[ -x "$SCRIPT_DIR/brew-orphans" ]]; then
+        local orphans="" orc=0
+        orphans="$("$SCRIPT_DIR/brew-orphans" --color=never)" || orc=$?
+        if (( orc == 1 || orc == 3 )); then
+            section "Formulae nothing needs, or cask dependencies missing (brew-orphans):"
+            print -r -- "$orphans"
+        fi
+    fi
 }
 
 # ─── --excluded: the rejected apps as one screen ────────────────────────
