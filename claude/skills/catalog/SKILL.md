@@ -100,6 +100,10 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `ship` | "ship this" or review, finish, merge, and push an authorized completed change |
 | `merge-worktree` | "merge this worktree", "merge my branch back", "finish this worktree" |
 | `review-pr-queue` | "address the comments on these PRs", "review and merge the queue", "clear the PR backlog" |
+| `babysit-pr` | "babysit this PR", "get it green", "fix CI" — one open PR driven to mergeable, one root cause per round |
+| `blast-radius` | "what could this break", "blast radius of X" — breakage beyond the diff, with the one safety fact proven by running code |
+| `correct` (user-invoked only) | /correct, "this keeps happening" — turns a repeated agent mistake into architecture, a type, a hook or a test |
+| `catch-me-up` | "catch me up", "what did I miss", "what needs me" — chat recap since the last message plus every open decision, bundled |
 | `superpowers:finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
 | `diagnosing-bugs` | "diagnose"/"debug this", something broken/throwing/failing/slow |
 | `deslop` | Before committing agent-written code — narrating comments, defensive guards, needless abstraction |
