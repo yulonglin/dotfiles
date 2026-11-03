@@ -30,6 +30,9 @@ MAX_ACTION=quit
 ALLOW_FOCUS_STEAL=false
 typeset -a ONLY_APPS=()
 typeset -a EXCEPT_APPS=()
+# What --except-browsers expands to. Names absent from this Mac cost nothing:
+# --except only ever drops apps from a run.
+typeset -a BROWSER_APPS=(Safari "Google Chrome" Firefox Arc "Brave Browser" "Microsoft Edge")
 # Every action that did not do what it said, as "<rung>: <app>". main()'s exit
 # status is derived from this, and the manual path reads it back to say which
 # app in a notification - so it is a global, not a counter local to main().
@@ -51,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             [[ -n "${2:-}" ]] || { echo "--except needs an app name" >&2; exit 1; }
             EXCEPT_APPS+=("$2")
             shift 2
+            ;;
+        --except-browsers)
+            EXCEPT_APPS+=("${BROWSER_APPS[@]}")
+            shift
             ;;
         --max-action)
             case "${2:-}" in
@@ -75,12 +82,14 @@ while [[ $# -gt 0 ]]; do
             exec "$CONFIG_HELPER" --migrate "$2"
             ;;
         --help|-h)
-            echo "Usage: clear-mac-apps [--dry-run|-n] [--only NAME]... [--except NAME]... [--max-action close|quit]"
+            echo "Usage: clear-mac-apps [--dry-run|-n] [--only NAME]... [--except NAME]... [--except-browsers] [--max-action close|quit]"
             echo "  --dry-run, -n     Show what would happen without making changes"
             echo "  --only NAME       Consider only this app (repeatable). Config still"
             echo "                    vetoes, so this can never act on a skipped app."
-            echo "  --except NAME     Leave this app alone this run (repeatable), as if"
-            echo "                    its config said skip. Matched by name, any case."
+            echo "  --except NAME     Leave this app out of this run entirely (repeatable)."
+            echo "                    Matched by name, any case."
+            echo "  --except-browsers Shorthand for --except on each of:"
+            echo "                    ${(j:, :)BROWSER_APPS}"
             echo "  --max-action ACT  Cap the action at close or quit (default: quit)."
             echo "                    Only ever does less than a bare run would."
             echo "  --allow-focus-steal"

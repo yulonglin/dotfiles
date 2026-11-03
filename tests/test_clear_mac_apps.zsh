@@ -223,6 +223,13 @@ check_not "Safari is not acted on"         "$OUT" "- Safari
 check_not "Chrome is not acted on"         "$OUT" "- Google Chrome"
 check     "Bear still closes its windows"  "$OUT" "- Bear"
 
+print -r -- "4c. --except-browsers leaves Safari and Chrome alone too"
+run --except-browsers --dry-run
+check_not "Safari is not acted on"         "$OUT" "- Safari
+"
+check_not "Chrome is not acted on"         "$OUT" "- Google Chrome"
+check     "Bear still closes its windows"  "$OUT" "- Bear"
+
 # --- 5. a protected tab downgrades quit to selective-close -----------------
 print -r -- "5. a Google Meet tab protects Chrome"
 run --dry-run
