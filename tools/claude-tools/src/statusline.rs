@@ -10,7 +10,8 @@
 //! account, Codex). The session and usage rows are packed to the terminal width
 //! by pack_groups, so they stay one line each on a wide screen and wrap at
 //! segment boundaries when narrow. On a phone (is_phone_width) the usage rows
-//! are left out. The only square brackets are the model's.
+//! and the session's timing, price and cache segments are left out. The only
+//! square brackets are the model's.
 
 use serde::Deserialize;
 use unicode_width::UnicodeWidthStr;
@@ -132,22 +133,32 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
     let width = available_width(std::env::var("COLUMNS").ok().as_deref());
-    let transcript = input.transcript_path.as_deref().map(std::path::Path::new);
-    let started = transcript.and_then(transcript_started_at);
-    let last_active = transcript.and_then(transcript_last_active_at);
+    let phone = is_phone_width(width);
 
-    // Session state: one group, so it splits only between segments.
+    // Session state: one group, so it splits only between segments. A phone
+    // keeps model, context and the classifier flag; the timing, price and
+    // cache segments would wrap to a row of their own, so they are left out.
+    let timing_parts: Vec<Option<String>> = if phone {
+        Vec::new()
+    } else {
+        let transcript = input.transcript_path.as_deref().map(std::path::Path::new);
+        let started = transcript.and_then(transcript_started_at);
+        let last_active = transcript.and_then(transcript_last_active_at);
+        vec![
+            format_duration_str(&input.cost),
+            format_since_str("age", started, now),
+            format_since_str("idle", last_active, now),
+            format_cost_str(input.cost.as_ref()),
+            format_prompt_cache_str(input.prompt_cache.as_ref(), now),
+        ]
+    };
     let session_parts: Vec<String> = [
         format_model_str(input.model.as_ref(), input.effort.as_ref()),
         format_context_usage_str(input.context_window.as_ref()),
-        format_duration_str(&input.cost),
-        format_since_str("age", started, now),
-        format_since_str("idle", last_active, now),
-        format_cost_str(input.cost.as_ref()),
-        format_prompt_cache_str(input.prompt_cache.as_ref(), now),
-        format_classifier_str(),
     ]
     .into_iter()
+    .chain(timing_parts)
+    .chain([format_classifier_str()])
     .flatten()
     .collect();
     if !session_parts.is_empty() {
@@ -160,7 +171,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Every coding agent's usage on one row: Claude (plus the other account),
     // then Codex, whose window durations come from its own API. A phone has
     // no room for it — it wraps to one row per bucket — so it is left out.
-    if !is_phone_width(width) {
+    if !phone {
         let mut usage_groups = crate::usage::usage_groups();
         usage_groups.extend(crate::codex_usage::usage_group());
         for line in pack_groups(&usage_groups, width) {
