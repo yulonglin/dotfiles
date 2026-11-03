@@ -1,4 +1,5 @@
 -- Rex keybindings. Lives in dotfiles (config/rex/init.lua); deploy.sh --rex symlinks it to ~/.config/rex/init.lua.
+-- Edits take effect only after a reload: ctrl+b r, or `rex config reload` (Rex does not watch this file).
 -- UI settings (sidebar, tabs, padding) are app defaults, not Lua: config/rex/ui-prefs.tsv, synced by custom_bins/rex-prefs.
 -- Migrated from tmux (~/.tmux.conf -> ~/code/dotfiles/config/tmux.conf) and Ghostty.
 -- tmux prefix ctrl+b becomes the first key of each sequence.
