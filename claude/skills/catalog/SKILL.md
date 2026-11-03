@@ -139,6 +139,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 
 | Skill | Use when |
 |---|---|
+| `apple-reminders` | Reading, adding, rescheduling or tidying Apple Reminders, repeating habits included, with `rem` (macOS) |
 | `bear` | Reading or editing Bear notes (macOS) |
 | `focus-modes` | Switching or changing the Cold Turkey and ScreenZen blocking modes (research, writing, admin) through `focus` and its vault note |
 | `evidence-packs` | Assembling attachments for a visa, insurance or expense claim, audit or employer request — source-system printouts only, never text transcriptions |
