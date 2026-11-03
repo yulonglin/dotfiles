@@ -485,15 +485,16 @@ _check_markdown_hard_wrap() {
 
 # === ALWAYS-ON GUARD TESTS ===
 #
-# The always-on byte budget and the bundled-skills check ran only in CI, where a
-# red run on a direct push to main blocks nothing. Both went red in October and
-# main stayed red for 19 days (2026-10-15 to 2026-11-03), so every later failure
-# was invisible too. Running them here stops the commit that breaks them, on the
-# machine that made the edit, including dotfiles-sync's automatic commits.
+# The bundled-skills check and this repo's CLAUDE.md budget ran only in CI, where
+# a red run on a direct push to main blocks nothing. Main stayed red for 19 days
+# (2026-10-15 to 2026-11-03), so every later failure was invisible too. Running
+# them here stops the commit that breaks them, on the machine that made the
+# edit, including dotfiles-sync's automatic commits. (The global tier's total
+# byte ceiling was removed the same day; Claude Code's startup warning owns size.)
 #
 # Repo-scoped: a no-op unless the repo carries these test files. It judges the
-# STAGED content: the tier files, settings.json and the tests are copied out of
-# the index into a temp tree and the tests run there. A missing runner is a
+# STAGED content: CLAUDE.md, settings.json and the tests are copied out of the
+# index into a temp tree and the tests run there. A missing runner is a
 # failure, not a skip: a guard that silently stops running looks like a pass.
 
 _check_always_on_guards() {
@@ -505,9 +506,6 @@ _check_always_on_guards() {
     local staged
     staged=$(git diff --cached --name-only 2>/dev/null || true)
     local nodes=()
-    if printf '%s\n' "${staged}" | grep -qE "^(claude/rules/[^/]+\.md|claude/CLAUDE\.md|claude/output-styles/[^/]+\.md|${budget_test})$"; then
-        nodes+=("${budget_test}::test_always_on_tier_total")
-    fi
     if printf '%s\n' "${staged}" | grep -qxE "CLAUDE\.md|${budget_test}"; then
         nodes+=("${budget_test}::test_repo_claude_md_total")
     fi
@@ -534,8 +532,7 @@ _check_always_on_guards() {
     snap=$(mktemp -d "${TMPDIR:-/tmp}/always-on-guards.XXXXXX")
     # A pathspec that matches nothing in the index makes ls-files print nothing,
     # which is fine: the glob in the test then sees no file there.
-    git ls-files -z -- claude/rules claude/output-styles claude/CLAUDE.md \
-            claude/settings.json CLAUDE.md "${budget_test}" "${settings_test}" \
+    git ls-files -z -- claude/settings.json CLAUDE.md "${budget_test}" "${settings_test}" \
         | git checkout-index -z --stdin --prefix="${snap}/"
     local out rc=0
     out=$(cd "${snap}" && "${runner[@]}" -q -p no:cacheprovider "${nodes[@]}" 2>&1) || rc=$?
@@ -546,8 +543,8 @@ _check_always_on_guards() {
     echo "⛔  Pre-commit: an always-on guard failed on the staged content"
     printf '%s\n' "${out}" | grep -E "^(E |FAILED)" | head -30 | sed 's/^/    /'
     echo ""
-    echo "    Over the byte budget: move activity-scoped detail into the checklist"
-    echo "    or skill that owns it (claude/checklists/), never raise the ceiling."
+    echo "    Repo CLAUDE.md over budget: its Learnings take transient state only;"
+    echo "    move anything durable to the file that owns the topic."
     echo "    Re-run: python -m pytest ${nodes[*]}"
     echo ""
     echo "    To bypass: git commit --no-verify"

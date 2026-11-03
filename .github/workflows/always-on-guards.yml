@@ -4,9 +4,10 @@ name: Always-on guards
 # none of them can be triggered by "its own file changed" — which is the trigger
 # every other workflow in this repo uses.
 #
-# The budget test fails from drift ACROSS files it does not own: no single edit
-# to a rule file looks wrong, and the total crosses a line nobody is watching. A
-# path filter cannot catch that shape, because the shape is the sum. The rest are
+# The protected-content test catches a trim that silently deletes a passage
+# from the always-on rules, which no single edit's own file trigger shows. (Its
+# total-bytes ceiling was removed on 2026-11-03: Claude Code's startup warning
+# owns size.) The rest are
 # security guards whose failure mode is silence: the approval classifier ran
 # blind for five months, the env-mask hook was inert from birth, and the
 # pre-commit gateway guard is the only thing standing between a loopback token
@@ -54,12 +55,12 @@ jobs:
         run: python -m pip install --quiet pytest
 
       # The context tier every session pays for, before it does any work.
-      - name: Always-on byte budget
+      - name: Always-on protected content and repo CLAUDE.md budget
         run: python -m pytest tests/test_memory_tier_budget.py -q
 
       # Each guard below carries `if: ${{ !cancelled() }}`: a step is skipped
-      # once an earlier one fails, so a red budget would otherwise silence
-      # every security guard after it. The job still fails on the budget.
+      # once an earlier one fails, so a red first step would otherwise silence
+      # every security guard after it. The job still fails on it.
 
       # The guard that keeps the tokened loopback URL out of a public repo.
       - name: Pre-commit gateway guard
@@ -76,8 +77,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash tests/test_pre_commit_zed_ssh_guard.sh
 
-      # The pre-commit copy of the budget and skills checks: CI alone let main
-      # sit red for 19 days, so the edit that breaks them is now stopped locally.
+      # The pre-commit copy of the CLAUDE.md budget and skills checks: CI alone
+      # let main sit red for 19 days, so the edit that breaks them stops locally.
       - name: Pre-commit always-on guard
         if: ${{ !cancelled() }}
         run: bash tests/test_pre_commit_always_on_guard.sh
@@ -104,20 +105,3 @@ jobs:
       - name: Artifacts are not built in throwaway paths
         if: ${{ !cancelled() }}
         run: bash tests/test_block_throwaway_artifact_path.sh
-
-      # A guard that cannot fail proves nothing. The budget gate is derived from
-      # a glob, so the case worth proving is that a NEW always-on file is counted
-      # the moment it exists — which is exactly what the previous hand-maintained
-      # list got wrong, leaving 3,674 bytes uncounted in every session.
-      - name: Mutation check — a new rule file must trip the budget
-        run: |
-          python -c "open('claude/rules/zz-ci-mutation-probe.md','w').write('x'*8000)"
-          if python -m pytest tests/test_memory_tier_budget.py -q > "$RUNNER_TEMP/mutation.log" 2>&1; then
-            rm -f claude/rules/zz-ci-mutation-probe.md
-            cat "$RUNNER_TEMP/mutation.log"
-            echo "::error::The budget gate passed with 8000 extra always-on bytes on disk — it is vacuous."
-            exit 1
-          fi
-          rm -f claude/rules/zz-ci-mutation-probe.md
-          echo "Budget gate correctly caught the injected file:"
-          grep -m1 "always-on tier is" "$RUNNER_TEMP/mutation.log" || true

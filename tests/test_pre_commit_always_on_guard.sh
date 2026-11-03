@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Pins the always-on guard in config/git-hooks/pre-commit.
 #
-# The byte budget and the bundled-skills check used to run only in CI, where a
-# red push to main blocks nothing; main stayed red for 19 days. The hook now
-# runs them on the STAGED content. Both directions are asserted: a clean commit
-# passes, an over-budget rule file and a protected skill switched off are each
-# blocked, and a dirty working tree does not block a clean index.
+# The repo CLAUDE.md budget and the bundled-skills check used to run only in CI,
+# where a red push to main blocks nothing; main stayed red for 19 days. The hook
+# now runs them on the STAGED content. Both directions are asserted: clean and
+# large-rule commits pass, an over-budget CLAUDE.md and a protected skill
+# switched off are each blocked, and a dirty working tree does not block a
+# clean index.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,23 +50,24 @@ expect_blocked() {
     git reset -q
 }
 
-# 1. A small rule edit within budget commits.
-printf '\nA short clause.\n' >> claude/rules/experiments.md
-git add claude/rules/experiments.md
-git commit -qm within-budget || fail "within-budget: blocked a commit under the ceiling"
-baseline="$(git rev-parse HEAD)"
-
-# 2. A new 8,000-byte rule file is blocked.
+# 1. Rule files carry no byte ceiling (removed 2026-11-03): a large one commits.
 python3 -c "open('claude/rules/zz-probe.md','w').write('x'*8000)"
 git add claude/rules/zz-probe.md
-expect_blocked over-budget "always-on tier is"
+git commit -qm large-rule || fail "large-rule: the removed tier ceiling still blocks"
+baseline="$(git rev-parse HEAD)"
+
+# 2. This repo's CLAUDE.md over its ceiling is blocked.
+cp CLAUDE.md "$WORK/CLAUDE.md.orig"
+python3 -c "open('CLAUDE.md','a').write('x'*20000)"
+git add CLAUDE.md
+expect_blocked repo-claude-md-over "CLAUDE.md is"
 
 # 3. The same file left unstaged does not block an unrelated clean commit.
 printf '\nOther.\n' >> claude/rules/experiments.md
 git add claude/rules/experiments.md
-git commit -qm dirty-tree-clean-index || fail "dirty-tree: an unstaged over-budget file blocked a clean index"
+git commit -qm dirty-tree-clean-index || fail "dirty-tree: an unstaged over-budget CLAUDE.md blocked a clean index"
 baseline="$(git rev-parse HEAD)"
-rm -f claude/rules/zz-probe.md
+cp "$WORK/CLAUDE.md.orig" CLAUDE.md
 
 # 4. Switching off a skill the Artifact tool needs is blocked.
 python3 - <<'PY'
@@ -90,4 +92,4 @@ PY
 git add claude/settings.json
 git commit -qm unprotected-skill-off || fail "unprotected-skill-off: blocked a deliberate toggle"
 
-echo "PASS: always-on guard blocks over-budget and protected-skill commits, passes clean ones"
+echo "PASS: always-on guard blocks over-budget CLAUDE.md and protected-skill commits, passes clean ones"
