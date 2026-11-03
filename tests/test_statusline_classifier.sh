@@ -475,18 +475,19 @@ check "profiles are unbracketed" \
     "[Opus] "
 rm -f "$FAKE/.claude/context.yaml"
 
-echo "=== a narrow COLUMNS wraps the session row between segments ==="
+echo "=== a phone-width COLUMNS keeps only model and context in the session row ==="
 narrow_input=$(costed_input '{"total_duration_ms":3900000,"total_cost_usd":7.42}' \
     '{"used_percentage":12,"total_input_tokens":129000,"context_window_size":1000000}')
 check "wide keeps one session row" \
     "$(render_rust_with "$narrow_input" | strip_ansi | sed -n 2p)" \
     "[Opus] · ctx:129k/1.0M (12%) · 1h 5m · \$7.42"
-# 34 columns is phone width, so the usage row is dropped and the session row
-# is the last line: no newline follows it.
-check "narrow splits it at a segment boundary" \
+# 34 columns is phone width: duration, price and the usage row are all left
+# out, so the session row is the last line and no newline follows it.
+# Wrapping between segments is pinned by the pack_groups unit tests.
+check "phone drops duration and price" \
     "$(printf '%s' "$narrow_input" | env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         COLUMNS=34 CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | sed -n '2,3p' | tr '\n' '|')" \
-    "[Opus] · ctx:129k/1.0M (12%)|1h 5m · \$7.42"
+    "[Opus] · ctx:129k/1.0M (12%)"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
