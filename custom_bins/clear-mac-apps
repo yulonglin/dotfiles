@@ -29,6 +29,7 @@ MAX_ACTION=quit
 # The idle job turns it on, since it closes only after the user has gone idle.
 ALLOW_FOCUS_STEAL=false
 typeset -a ONLY_APPS=()
+typeset -a EXCEPT_APPS=()
 # Every action that did not do what it said, as "<rung>: <app>". main()'s exit
 # status is derived from this, and the manual path reads it back to say which
 # app in a notification - so it is a global, not a counter local to main().
@@ -44,6 +45,11 @@ while [[ $# -gt 0 ]]; do
         --only)
             [[ -n "${2:-}" ]] || { echo "--only needs an app name" >&2; exit 1; }
             ONLY_APPS+=("$2")
+            shift 2
+            ;;
+        --except)
+            [[ -n "${2:-}" ]] || { echo "--except needs an app name" >&2; exit 1; }
+            EXCEPT_APPS+=("$2")
             shift 2
             ;;
         --max-action)
@@ -69,10 +75,12 @@ while [[ $# -gt 0 ]]; do
             exec "$CONFIG_HELPER" --migrate "$2"
             ;;
         --help|-h)
-            echo "Usage: clear-mac-apps [--dry-run|-n] [--only NAME]... [--max-action close|quit]"
+            echo "Usage: clear-mac-apps [--dry-run|-n] [--only NAME]... [--except NAME]... [--max-action close|quit]"
             echo "  --dry-run, -n     Show what would happen without making changes"
             echo "  --only NAME       Consider only this app (repeatable). Config still"
             echo "                    vetoes, so this can never act on a skipped app."
+            echo "  --except NAME     Leave this app alone this run (repeatable), as if"
+            echo "                    its config said skip. Matched by name, any case."
             echo "  --max-action ACT  Cap the action at close or quit (default: quit)."
             echo "                    Only ever does less than a bare run would."
             echo "  --allow-focus-steal"
@@ -807,6 +815,15 @@ main() {
                 [[ "${(L)name}" == "${(L)wanted}" ]] && { matched=true; break }
             done
             $matched || continue
+        fi
+        # --except drops an app before classification, so it lands in no
+        # bucket at all: this run behaves as though it were not running.
+        if (( ${#EXCEPT_APPS} > 0 )); then
+            local unwanted= excluded=false
+            for unwanted in "${EXCEPT_APPS[@]}"; do
+                [[ "${(L)name}" == "${(L)unwanted}" ]] && { excluded=true; break }
+            done
+            $excluded && continue
         fi
         running_entries+=("${name}${SEP}${bid}${SEP}${pid}")
     done <<< "$running"

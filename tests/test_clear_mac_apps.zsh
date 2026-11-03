@@ -215,6 +215,14 @@ check     "Ghostty lands in no-touch"      "$OUT" "Would SKIP (no-touch):
 check     "nothing would be quit"          "$OUT" "Would QUIT (0):"
 check     "nothing would be closed"        "$OUT" "Would CLOSE WINDOWS (0):"
 
+# --- 4b. --except leaves the named apps out of the run ----------------------
+print -r -- "4b. --except Safari and Chrome leaves both alone, case-insensitively"
+run --except safari --except "Google Chrome" --dry-run
+check_not "Safari is not acted on"         "$OUT" "- Safari
+"
+check_not "Chrome is not acted on"         "$OUT" "- Google Chrome"
+check     "Bear still closes its windows"  "$OUT" "- Bear"
+
 # --- 5. a protected tab downgrades quit to selective-close -----------------
 print -r -- "5. a Google Meet tab protects Chrome"
 run --dry-run
