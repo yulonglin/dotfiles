@@ -15,16 +15,18 @@ One PR, driven to mergeable. This skill does not merge: merging follows the rule
 
    ```bash
    gh pr view <number> \
-     --json number,title,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,headRefName
+     --json number,title,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,headRefName,headRepositoryOwner
    gh pr checks <number>
    ```
 
-   Read check state from `statusCheckRollup` (each entry's `conclusion`, `detailsUrl`, `workflowName`); `gh pr checks --json` is missing from older gh, including the 2.45 that Ubuntu 24.04 ships.
+   `gh pr checks` (exit code and table) is the authority on overall CI state. For per-check detail read `statusCheckRollup`, branching on `__typename`: a `CheckRun` has `conclusion` and `detailsUrl`; a `StatusContext` (an external status such as a deploy preview) has `state` and `targetUrl` instead. `gh pr checks --json` is missing from older gh, including the 2.45 that Ubuntu 24.04 ships.
+
+   **Before any edit, commit or push, confirm the checkout is this PR's branch**: `headRefName` (and `headRepositoryOwner` for a fork) must match `git branch --show-current` and the push remote. On a mismatch, stop — check the branch out in its own worktree rather than pushing from here.
 
 2. **Triage in priority order.**
    - **Conflicts** (`mergeStateStatus == DIRTY`): rebase or merge the base in. A rewrite of history on a branch anyone else may have pulled needs the user's approval first; never force-push `main`.
-   - **Failing checks** (`conclusion` is `FAILURE`, `TIMED_OUT` or `CANCELLED`): take the first failing job and read its log (`gh run view <run-id> --log-failed`, with the run ID from `detailsUrl`; for an external service, open `detailsUrl`). Extract the first actionable error, find its root cause, apply the smallest safe fix, commit, push. Fix one failure per iteration; a later failure is often a symptom of the first.
-   - **Review comments** (`gh api repos/{owner}/{repo}/pulls/<number>/comments` and `gh pr view <number> --comments`): act only on feedback you agree with. A comment with a single mechanical answer (a rename, a guard, a formatting nit) gets the edit, with the comment quoted in the commit message. A comment that hinges on judgement, or whose ask is unclear, is not guessed at: reply on the PR with what you would do, and add it to the decisions list.
+   - **Failing or blocked checks** (a `CheckRun` whose `conclusion` is `FAILURE`, `TIMED_OUT`, `CANCELLED`, `STARTUP_FAILURE` or `ACTION_REQUIRED`, or a `StatusContext` whose `state` is `FAILURE` or `ERROR`): take the first one and read its log (`gh run view <run-id> --log-failed`, with the run ID from `detailsUrl`; for an external status, open `targetUrl`). `ACTION_REQUIRED` usually needs a human (an approval to run workflows on a fork), so it goes on the decisions list, not into a fix. Extract the first actionable error, find its root cause, apply the smallest safe fix, commit, push. Fix one failure per iteration; a later failure is often a symptom of the first.
+   - **Review comments**: read all three sources, paginated — inline review comments (`gh api --paginate repos/{owner}/{repo}/pulls/<number>/comments`), review bodies (`gh api --paginate repos/{owner}/{repo}/pulls/<number>/reviews`) and conversation comments (`gh api --paginate repos/{owner}/{repo}/issues/<number>/comments`). `gh pr view --comments` omits inline review comments, and an unpaginated call silently drops later pages. Then act only on feedback you agree with. A comment with a single mechanical answer (a rename, a guard, a formatting nit) gets the edit, with the comment quoted in the commit message. A comment that hinges on judgement, or whose ask is unclear, is not guessed at: reply on the PR with what you would do, and add it to the decisions list.
    - **Bot comments** (Bugbot, Codex review, Copilot): classify each as fix, dismiss with a reason, or ask. Security, data-loss and high-severity findings default to ask.
 
 3. **Wait without polling.** An active CI run: `gh pr checks <number> --watch` with `run_in_background: true`, which re-invokes you when it exits. Waiting on a reviewer: a 20–30 minute `ScheduleWakeup` or `loop` heartbeat. Idle but watching for new comments: hourly.

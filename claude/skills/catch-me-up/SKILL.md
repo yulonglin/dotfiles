@@ -1,6 +1,6 @@
 ---
 name: catch-me-up
-description: Catch the user up in chat on what happened since their last message — outcomes in plain words, the live state of each PR, job or agent this session touched — then put every decision still waiting on them, from anywhere in the session, as one ranked bundle of questions. Use on /catch-me-up, "catch me up", "what did I miss", "where are we", "what needs me", or when the user returns to a long session. Lighter than `debrief` (no page, no review round) and fuller than the built-in `/recap` (which caps at 400 characters and lists no decisions).
+description: Catch the user up in chat on what happened since their last message — outcomes in plain words, the live state of each PR, job or agent this session touched — then put every decision still waiting on them, from anywhere in the session, as one ranked bundle of questions. Use only when the user explicitly asks for a catch-up or status — /catch-me-up, "catch me up", "what did I miss", "where are we", "what needs me" — never when a returning user's message asks for new work, since this turn is read-only. Lighter than `debrief` (no page, no review round) and fuller than the built-in `/recap` (which caps at 400 characters and lists no decisions).
 ---
 
 # Catch me up
