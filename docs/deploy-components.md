@@ -13,7 +13,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - VSCode/Cursor/Antigravity settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
 - Ghostty - Terminal emulator configuration (symlinked to platform-specific path); custom themes in `config/ghostty-themes/` symlinked to `~/.config/ghostty/themes`
-- Rex - Keybindings `config/rex/init.lua` symlinked to `~/.config/rex/init.lua`; on macOS, UI layout prefs from `config/rex/ui-prefs.tsv` written with `defaults write com.superlogical.rex` (overwrites the in-app value, so copy a change made in Rex Settings back into the file)
+- Rex - Keybindings `config/rex/init.lua` symlinked to `~/.config/rex/init.lua`; on macOS, Rex's Settings (kept in the `com.superlogical.rex` defaults domain, not a file) sync both ways through `config/rex/ui-prefs.tsv` via `rex-prefs`: `dotfiles-sync` runs `rex-prefs capture` before its daily commit, so a setting changed in Rex reaches git by itself; deploy runs `capture` then `apply`, so it never reverts a local change and a fresh Mac gets the file's rows. `rex-prefs check` shows drift. A setting reset to its default is not removed from the file — delete that row by hand
 - Zed - Editor config (settings + keymap, symlinked to ~/.config/zed/)
 - gitui - Theme (symlinked to ~/.config/gitui/theme.ron). Theme-reactive: uses named ANSI colors so gitui inherits whichever Ghostty theme the active window uses (default, g0-g9, SSH themes). Fixes gitui's default `disabled_fg: DarkGray`, which is unreadable on Catppuccin Mocha and similar dark backgrounds.
 - Claude Code - AI assistant configuration (symlinked)

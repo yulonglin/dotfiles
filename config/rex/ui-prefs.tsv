@@ -1,16 +1,20 @@
-# Rex app UI preferences (macOS defaults domain com.superlogical.rex).
-# deploy.sh --rex writes each row with: defaults write com.superlogical.rex Workspace.<key> -<type> <value>
-# These make Rex's chrome match Ghostty's: no sidebar, tabs in the (collapsed) sidebar, no pane headers, compact density, Ghostty-like padding.
-# Rex keeps these in its own prefs and rewrites them from Settings, so after changing one in the app, copy it here (defaults read com.superlogical.rex Workspace.<key>).
+# Rex app UI settings (macOS defaults domain com.superlogical.rex, keys Workspace.<key>).
+# Two-way: `rex-prefs capture` writes live values here (dotfiles-sync runs it before each daily commit);
+# `rex-prefs apply` writes these rows into Rex (deploy.sh --rex runs capture, then apply).
+# Change a setting in Rex Settings and it reaches git on the next sync; a row deleted here is not unset in Rex.
 # key	type	value
+appIconVisibility	string	dockAndMenuBar
+darkThemeID	string	static-noir
+inactivePaneFadeMode	string	both
+interfaceStyle	string	useTheme
+lightThemeID	string	merino-light
+paneDensity	string	compact
+showsPaneHeaders	bool	false
 sidebarCollapsed	bool	true
 sidebarPosition	string	left
+tabIconTintMode	string	off
 tabStyle	string	vertical
-showsPaneHeaders	bool	false
-paneDensity	string	compact
+tabsFillAvailableSpace	bool	true
 terminalPaddingX	float	2
 terminalPaddingY	float	0
-darkThemeID	string	static-noir
-lightThemeID	string	merino-light
-interfaceStyle	string	useTheme
-inactivePaneFadeMode	string	both
+usesStandardInactiveWindowPaneStyles	bool	true

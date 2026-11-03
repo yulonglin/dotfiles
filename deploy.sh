@@ -612,14 +612,11 @@ if [[ "$DEPLOY_REX" == "true" ]]; then
     log_info "Deploying Rex configuration..."
     safe_symlink "$DOT_DIR/config/rex/init.lua" "${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua"
 
-    # UI layout lives in the app's defaults domain, not in init.lua.
+    # UI settings live in the app's defaults domain, not in init.lua. Capture
+    # first so settings changed in Rex since the last sync are not reverted,
+    # then apply (on a fresh Mac, capture finds nothing and apply sets the file's rows).
     if is_macos; then
-        local_rex_prefs="$DOT_DIR/config/rex/ui-prefs.tsv"
-        while IFS=$'\t' read -r key type value; do
-            [[ -z "$key" || "$key" == \#* ]] && continue
-            defaults write com.superlogical.rex "Workspace.$key" "-$type" "$value"
-        done < "$local_rex_prefs"
-        log_success "Applied Rex UI prefs from config/rex/ui-prefs.tsv"
+        "$DOT_DIR/custom_bins/rex-prefs" capture --quiet && "$DOT_DIR/custom_bins/rex-prefs" apply
         if pgrep -xq Rex; then
             log_info "  Rex is running: quit and reopen it if the layout does not update"
         fi
