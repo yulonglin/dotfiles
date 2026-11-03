@@ -852,6 +852,7 @@ def fake_screenzen_launch(monkeypatch, windows, active):
         return last[0]
 
     monkeypatch.setattr(ct, "sz_window", sz_window)
+    monkeypatch.setattr(ct, "close_sz_window", lambda: False)  # no Accessibility
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: active)
     monkeypatch.setattr(ct.time, "sleep", lambda s: None)
     monkeypatch.setattr(
@@ -918,3 +919,15 @@ def test_no_hand_back_when_screenzen_window_never_appears(monkeypatch, tmp_path)
     ct.hand_back_focus("com.apple.loginwindow")
     ct.hand_back_focus(None)
     assert opened == []
+
+
+def test_screenzen_window_is_closed_then_the_front_handed_back(monkeypatch):
+    # Over a full-screen app no raise gets above ScreenZen's window, so close it.
+    opened = fake_screenzen_launch(
+        monkeypatch, [(False, False), (True, True)], active=ct.SZ_BUNDLE
+    )
+    closed = []
+    monkeypatch.setattr(ct, "close_sz_window", lambda: closed.append(1) or True)
+    ct.hand_back_focus(REX)
+    assert closed == [1]
+    assert opened == [["open", "-b", REX]]

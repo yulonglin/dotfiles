@@ -154,25 +154,47 @@ def sz_window() -> tuple[bool, bool]:
     return "ScreenZen" in owners, bool(owners) and owners[0] == "ScreenZen"
 
 
+# Clicks the close button of each ScreenZen window through Accessibility and prints
+# how many windows remain. Closing the window leaves ScreenZen running and blocking
+# (checked 2026-11-03); it has a menu-bar item and no Dock icon.
+SZ_CLOSE_APPLESCRIPT = """
+tell application "System Events" to tell process "ScreenZen"
+    repeat with w in (every window)
+        click (first button of w whose subrole is "AXCloseButton")
+    end repeat
+    delay 0.2
+    return count of windows
+end tell
+"""
+
+
+def close_sz_window() -> bool:
+    """Close ScreenZen's window; False when Accessibility is not granted to whatever
+    runs focus (Rex, Alfred, launchd) or the window would not close."""
+    r = subprocess.run(
+        ["osascript", "-e", SZ_CLOSE_APPLESCRIPT], capture_output=True, text=True
+    )
+    return r.returncode == 0 and r.stdout.strip() == "0"
+
+
 def hand_back_focus(front: str | None) -> None:
-    """Put the app that was in front back above ScreenZen's window after a relaunch.
+    """Get ScreenZen's window out of the way after a relaunch, and give the front back.
 
-    ScreenZen opens its main window on every launch, on top of everything, despite
-    'open -g -j', and refuses to be hidden from outside (NSRunningApplication.hide
-    returns false; lsappinfo setfront gets permErr). So wait until that window is on
-    screen, then, while ScreenZen holds the front, 'open -b' the app that had it.
-    Waiting for ScreenZen to become the front app instead of for its window fired
-    before the window existed (traced 2026-11-02).
+    ScreenZen opens its main window on every launch, despite 'open -g -j', and refuses
+    to be hidden from outside (NSRunningApplication.hide returns false; lsappinfo
+    setfront gets permErr). Over a full-screen app (Rex, 2026-11-03) that window
+    floats inside the full-screen Space, so no activation puts the app back above it.
+    So wait until the window is on screen, close it through Accessibility, and 'open
+    -b' the app that had the front (ScreenZen holds it after launch).
 
-    When that app is full screen (Rex, 2026-11-03), ScreenZen's window opens on a
-    desktop Space and macOS slides over to it; handing back slides back, which takes
-    up to a second, and until then the window list still shows ScreenZen on top. So
-    after a raise, wait while the app is active: raise again only if ScreenZen takes
-    the front again (at most three times). Re-raising during the slide by bouncing
-    through Finder left Finder in front. Stop once the window has been below or off
-    screen for two checks, or 4 s after it appeared. FOCUS_TRACE=1 appends each step
-    to SZ_TRACE. With the screen locked, loginwindow is in front and there is no app
-    to hand back to."""
+    Without Accessibility, fall back to raising that app while ScreenZen holds the
+    front: that works on a desktop Space (Cold Turkey, Safari, 2026-11-03), not over a
+    full-screen app. Raise again only if ScreenZen retakes the front (at most three
+    times), and stop once the window has been below or off screen for two checks, or
+    4 s after it appeared. Waiting for ScreenZen to become the front app instead of
+    for its window fired before the window existed (2026-11-02). FOCUS_TRACE=1 appends
+    each step to SZ_TRACE. With the screen locked, loginwindow is in front and there is
+    no app to hand back to."""
     if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
         return
     t0 = time.monotonic()
@@ -192,6 +214,11 @@ def hand_back_focus(front: str | None) -> None:
         on, top, active = check("waiting")
         if not on:
             time.sleep(0.1)
+    if on and close_sz_window():
+        if frontmost_bundle() != front:
+            subprocess.run(["open", "-b", front], capture_output=True)
+        check("closed ScreenZen's window")
+        on = False  # nothing left to raise above
     raises = below = 0
     window_up = time.monotonic()
     while on and below < 2 and time.monotonic() - window_up < 4:
@@ -1242,7 +1269,7 @@ def cmd_screenzen(
             f"focus: ScreenZen read-back differs; restore with defaults import from {backup}"
         )
     # -g and -j ask for a background, hidden launch; ScreenZen ignores both and opens
-    # its window on top, so hand_back_focus puts the previous app back above it.
+    # its window on top, so hand_back_focus closes that window and gives the front back.
     reopen = ["open", "-g", "-j", "-a", "ScreenZen"]
     if subprocess.run(reopen, capture_output=True).returncode:
         sys.exit(
