@@ -73,7 +73,7 @@ run_helper() {
         BREW_ORPHANS_BREW="$BIN/brew" "$HELPER" "$@" 2>&1
 }
 
-print "1. report: plain orphans, a dependency held by a stale record, a missing cask dep"
+print "1. report: plain orphans and a dependency held by a stale record"
 out="$(run_helper --color=never)"
 rc=$?
 (( rc == 1 )) && pass "exit 1 when something can be removed" || fail "exit was $rc"
@@ -82,8 +82,7 @@ has "plain orphan" "$out" "libold    no installed formula or cask needs it"
 has "orphan of an orphan" "$out" "libchain  needed only by libold, also removed"
 has "fix reinstalls the holder" "$out" "  brew reinstall poppler"
 has "then autoremoves" "$out" "  brew autoremove"
-has "missing cask dependency named" "$out" "py314  needed by gtool (cask)"
-has "missing dep install keeps it a dependency" "$out" "brew install --as-dependency py314"
+lacks "a missing cask dependency is not reported" "$out" "py314"
 lacks "needed dep is never listed" "$out" "icu4c@79"
 lacks "source build kept" "$out" "srcbuilt"
 lacks "build dep of a source build kept" "$out" "buildtool"
@@ -97,6 +96,7 @@ print "2. --reinstall-names and --json"
 json="$(run_helper --json)"
 has "json orphans" "$json" '"libchain",'
 has "json freed" "$json" '"icu4c@78"'
+has "json still lists the missing cask dependency" "$json" '"py314": ['
 
 print "3. colour only when asked or on a terminal, never under NO_COLOR"
 has "--color=always paints" "$(run_helper --color=always)" $'\e[1m'
