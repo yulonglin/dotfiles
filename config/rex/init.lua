@@ -20,3 +20,10 @@ rex.bind("ctrl+b>u", "pane.resize", { amount = 5, direction = "up" })
 rex.bind("ctrl+b>p", "pane.resize", { amount = 5, direction = "down" })
 rex.bind("ctrl+b>i", "pane.resize", { amount = 5, direction = "left" })
 rex.bind("ctrl+b>o", "pane.resize", { amount = 5, direction = "right" })
+
+-- ghostty.conf: keybind = f2=prompt_tab_title
+rex.bind("f2", "client.tab.rename")
+
+-- ghostty.conf: keybind = shift+enter=text:\n -- a newline in Claude Code's prompt instead of submitting.
+-- Rex has no send-text action; \n is the byte ctrl+j sends, so send that key. Untested: delete if shift+enter misbehaves.
+rex.bind("shift+enter", "pane.send_key", { key = "ctrl+j" })
