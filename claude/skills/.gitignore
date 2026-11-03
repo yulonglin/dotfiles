@@ -51,6 +51,13 @@
 synced/
 synced/**
 
+# Rex's agent skill, written by `rex skill setup` (remove with `rex skill remove`).
+# Rex owns and regenerates it; it is a stub that runs `rex __internal skill`, so
+# the guide updates with the Rex CLI. Its hard-wrapped SKILL.md failed the
+# pre-commit gate and blocked dotfiles-sync (2026-11-03).
+rex/
+rex/**
+
 # Skill dev/eval artifacts (A/B output comparisons, not skill definitions)
 anthropic-style-workspace/
 anthropic-style-workspace/**
