@@ -127,6 +127,115 @@ def frontmost_bundle() -> str | None:
     return m.group(1) if m else None
 
 
+# Lists the owners of on-screen app windows (layer 0), front to back. Read-only: needs
+# no Apple Events or Accessibility permission.
+SZ_WINDOWS_JXA = """
+ObjC.import("CoreGraphics");
+const w = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1, 0))) || [];
+JSON.stringify(w.filter((x) => x.kCGWindowLayer === 0).map((x) => x.kCGWindowOwnerName));
+"""
+SZ_TRACE = (
+    Path(os.environ.get("FOCUS_STATE", Path.home() / ".local/state/focus"))
+    / "screenzen-trace.log"
+)
+
+
+def sz_window() -> tuple[bool, bool]:
+    """(ScreenZen has an on-screen window, that window is the topmost app window)."""
+    r = subprocess.run(
+        ["osascript", "-l", "JavaScript", "-e", SZ_WINDOWS_JXA],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        owners = json.loads(r.stdout)
+    except ValueError:
+        return False, False
+    return "ScreenZen" in owners, bool(owners) and owners[0] == "ScreenZen"
+
+
+# Clicks the close button of each ScreenZen window through Accessibility and prints
+# how many windows remain. Closing the window leaves ScreenZen running and blocking
+# (checked 2026-11-03); it has a menu-bar item and no Dock icon.
+SZ_CLOSE_APPLESCRIPT = """
+tell application "System Events" to tell process "ScreenZen"
+    repeat with w in (every window)
+        click (first button of w whose subrole is "AXCloseButton")
+    end repeat
+    delay 0.2
+    return count of windows
+end tell
+"""
+
+
+def close_sz_window() -> bool:
+    """Close ScreenZen's window; False when Accessibility is not granted to whatever
+    runs focus (Rex, Alfred, launchd) or the window would not close."""
+    r = subprocess.run(
+        ["osascript", "-e", SZ_CLOSE_APPLESCRIPT], capture_output=True, text=True
+    )
+    return r.returncode == 0 and r.stdout.strip() == "0"
+
+
+def hand_back_focus(front: str | None) -> None:
+    """Get ScreenZen's window out of the way after a relaunch, and give the front back.
+
+    ScreenZen opens its main window on every launch, despite 'open -g -j', and refuses
+    to be hidden from outside (NSRunningApplication.hide returns false; lsappinfo
+    setfront gets permErr). Over a full-screen app (Rex, 2026-11-03) that window
+    floats inside the full-screen Space, so no activation puts the app back above it.
+    So wait until the window is on screen, close it through Accessibility, and 'open
+    -b' the app that had the front (ScreenZen holds it after launch).
+
+    Without Accessibility, fall back to raising that app while ScreenZen holds the
+    front: that works on a desktop Space (Cold Turkey, Safari, 2026-11-03), not over a
+    full-screen app. Raise again only if ScreenZen retakes the front (at most three
+    times), and stop once the window has been below or off screen for two checks, or
+    4 s after it appeared. Waiting for ScreenZen to become the front app instead of
+    for its window fired before the window existed (2026-11-02). FOCUS_TRACE=1 appends
+    each step to SZ_TRACE. With the screen locked, loginwindow is in front and there is
+    no app to hand back to."""
+    if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
+        return
+    t0 = time.monotonic()
+    log = [f" 0.00s front was {front}"]
+
+    def check(step):
+        on, top = sz_window()
+        active = frontmost_bundle()
+        log.append(
+            f"{time.monotonic() - t0:5.2f}s {step}: window {on}, on top {top}, "
+            f"front {active}"
+        )
+        return on, top, active
+
+    on = top = False
+    while not on and time.monotonic() - t0 < 6:
+        on, top, active = check("waiting")
+        if not on:
+            time.sleep(0.1)
+    if on and close_sz_window():
+        if frontmost_bundle() != front:
+            subprocess.run(["open", "-b", front], capture_output=True)
+        check("closed ScreenZen's window")
+        on = False  # nothing left to raise above
+    raises = below = 0
+    window_up = time.monotonic()
+    while on and below < 2 and time.monotonic() - window_up < 4:
+        if top and active != front and raises < 3:
+            subprocess.run(["open", "-b", front], capture_output=True)
+            raises += 1
+        time.sleep(0.3)
+        on, top, active = check(f"after {raises} raise(s)")
+        below = 0 if top else below + 1
+    if os.environ.get("FOCUS_TRACE"):
+        SZ_TRACE.parent.mkdir(parents=True, exist_ok=True)
+        with SZ_TRACE.open("a") as f:
+            f.write(
+                f"--- {dt.datetime.now():%Y-%m-%dT%H:%M:%S}\n" + "\n".join(log) + "\n"
+            )
+
+
 SZ_BACKUPS_KEPT = 50
 BACKUP_DIR = Path(
     os.environ.get("FOCUS_BACKUPS", Path.home() / "scratch/blocker-backups")
@@ -1159,22 +1268,15 @@ def cmd_screenzen(
         sys.exit(
             f"focus: ScreenZen read-back differs; restore with defaults import from {backup}"
         )
-    # -g keeps whatever app is in front there, and -j launches ScreenZen hidden, so a
-    # mode switch does not pull its window forward.
+    # -g and -j ask for a background, hidden launch; ScreenZen ignores both and opens
+    # its window on top, so hand_back_focus closes that window and gives the front back.
     reopen = ["open", "-g", "-j", "-a", "ScreenZen"]
     if subprocess.run(reopen, capture_output=True).returncode:
         sys.exit(
             f"focus: wrote ScreenZen (backup at {backup}) but could not reopen it, "
             "so its blocking is off until it runs. Reopen it: open -a ScreenZen"
         )
-    # ScreenZen activates itself on launch despite -g -j, so if it takes the front,
-    # give it back to whatever app had it.
-    if front and front != SZ_BUNDLE:
-        for _ in range(30):
-            if frontmost_bundle() == SZ_BUNDLE:
-                subprocess.run(["open", "-b", front], capture_output=True)
-                break
-            time.sleep(0.1)
+    hand_back_focus(front)
     if quiet:
         print(
             f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"

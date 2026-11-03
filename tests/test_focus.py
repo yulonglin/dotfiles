@@ -835,3 +835,99 @@ def test_screenzen_follows_an_app_whose_bundle_id_changed(
     )
     ct.cmd_screenzen(cfg, dry_run=True, modes=[])
     assert "Telegram (now new.id)" in capsys.readouterr().out
+
+
+REX = "com.superlogical.rex"
+
+
+def fake_screenzen_launch(monkeypatch, windows, active):
+    """Feed hand_back_focus a sequence of (on screen, on top) window states and a fixed
+    front app; record the 'open' calls it makes. The last state repeats."""
+    states = iter(windows)
+    last = [windows[-1]]
+    opened = []
+
+    def sz_window():
+        last[0] = next(states, last[0])
+        return last[0]
+
+    monkeypatch.setattr(ct, "sz_window", sz_window)
+    monkeypatch.setattr(ct, "close_sz_window", lambda: False)  # no Accessibility
+    monkeypatch.setattr(ct, "frontmost_bundle", lambda: active)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    monkeypatch.setattr(
+        ct.subprocess, "run", lambda cmd, **k: opened.append(cmd) or None
+    )
+    return opened
+
+
+def test_focus_is_handed_back_once_screenzen_window_is_up(monkeypatch):
+    # ScreenZen took the front: 'open -b' the previous app is enough, and only once
+    # the window exists (handing back before it existed let it land on top).
+    opened = fake_screenzen_launch(
+        monkeypatch,
+        [(False, False), (False, False), (True, True), (True, False)],
+        active=ct.SZ_BUNDLE,
+    )
+    ct.hand_back_focus(REX)
+    assert opened == [["open", "-b", REX]]
+
+
+def test_no_second_raise_while_macos_slides_back_to_a_full_screen_app(monkeypatch):
+    # Handing back to a full-screen app slides Spaces for up to a second, during which
+    # ScreenZen still lists on top with the app already active. Bouncing through Finder
+    # then left Finder in front (2026-11-03), so wait instead.
+    states = iter([(True, True), (True, True), (True, True), (False, False)])
+    fronts = iter([ct.SZ_BUNDLE, REX, REX, REX])
+    opened = fake_screenzen_launch(monkeypatch, [(True, True)], active=None)
+    monkeypatch.setattr(ct, "sz_window", lambda: next(states))
+    monkeypatch.setattr(ct, "frontmost_bundle", lambda: next(fronts))
+    ct.hand_back_focus(REX)
+    assert opened == [["open", "-b", REX]]
+
+
+def test_window_that_comes_back_on_top_is_raised_again_at_most_three_times(
+    monkeypatch,
+):
+    opened = fake_screenzen_launch(
+        monkeypatch,
+        [(True, True), (True, False), (True, True), (True, False), (True, False)],
+        active=ct.SZ_BUNDLE,
+    )
+    ct.hand_back_focus(REX)
+    assert opened == [["open", "-b", REX]] * 2
+    opened.clear()
+    clock = iter(range(100))
+    monkeypatch.setattr(ct.time, "monotonic", lambda: next(clock) * 0.3)
+    stuck = fake_screenzen_launch(monkeypatch, [(True, True)], active=ct.SZ_BUNDLE)
+    ct.hand_back_focus(REX)
+    assert stuck == [["open", "-b", REX]] * 3
+
+
+def test_no_hand_back_when_screenzen_window_never_appears(monkeypatch, tmp_path):
+    clock = iter(range(100))
+    monkeypatch.setattr(ct.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(ct, "SZ_TRACE", tmp_path / "trace.log")
+    monkeypatch.setenv("FOCUS_TRACE", "1")
+    opened = fake_screenzen_launch(monkeypatch, [(False, False)], active=REX)
+    ct.hand_back_focus(REX)
+    assert opened == []
+    assert f"front was {REX}" in (tmp_path / "trace.log").read_text()
+    # nothing to do when ScreenZen itself was in front, the screen was locked, or
+    # nothing was in front
+    ct.hand_back_focus(ct.SZ_BUNDLE)
+    ct.hand_back_focus("com.apple.loginwindow")
+    ct.hand_back_focus(None)
+    assert opened == []
+
+
+def test_screenzen_window_is_closed_then_the_front_handed_back(monkeypatch):
+    # Over a full-screen app no raise gets above ScreenZen's window, so close it.
+    opened = fake_screenzen_launch(
+        monkeypatch, [(False, False), (True, True)], active=ct.SZ_BUNDLE
+    )
+    closed = []
+    monkeypatch.setattr(ct, "close_sz_window", lambda: closed.append(1) or True)
+    ct.hand_back_focus(REX)
+    assert closed == [1]
+    assert opened == [["open", "-b", REX]]
