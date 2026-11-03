@@ -15,16 +15,16 @@ can be upgraded several times before it goes.
 
 This compares each record against what the current formula declares (transitively)
 and reports both kinds: formulae autoremove would drop now, and formulae it would drop
-once the formulae holding them by an out-of-date record are reinstalled. It also names
-any formula a cask depends on that is not installed: a cask upgrade does not install a
-new formula dependency (2026-11-02: gcloud-cli moved to python@3.14, which never arrived).
+once the formulae holding them by an out-of-date record are reinstalled.
 
 The keep rules follow Homebrew's own Utils::Autoremove and Cleanup.autoremove: formulae
 installed on request, formulae built from source and their build dependencies, and the
-dependencies of casks resolved through the current formula definitions.
+dependencies of casks resolved through the current formula definitions. A cask's formula
+dependency that is not installed appears only under "missing" in --json, never in the
+report: it is often satisfied another way (gcloud-cli lists python@3.14 but runs on the
+first python3.x on PATH, here uv's ~/.local/bin/python3.14).
 
-Exit status: 0 all clean, 1 something to remove, 2 brew failed,
-3 nothing to remove but a cask dependency is missing.
+Exit status: 0 nothing to remove, 1 something to remove, 2 brew failed.
 """
 
 import argparse
@@ -200,7 +200,6 @@ def main() -> int:
         print(f"brew-orphans: {e}", file=sys.stderr)
         return 2
     removable = result["orphans"] + result["freed_by_reinstall"]
-    missing = result["missing"]
 
     if args.json:
         print(json.dumps(result, indent=2))
@@ -231,22 +230,9 @@ def main() -> int:
             if result["reinstall"]:
                 print("  brew reinstall " + " ".join(result["reinstall"]))
             print("  brew autoremove")
-        if missing:
-            print(
-                paint(
-                    "brew-orphans: a cask needs a formula that is not installed", "33"
-                )
-            )
-            width = max(len(x) for x in missing)
-            for name, casks in missing.items():
-                print(
-                    f"  {paint(name.ljust(width), '1')}  {paint('needed by ' + ', '.join(c + ' (cask)' for c in casks), '2')}"
-                )
-            print("Install with:")
-            print("  brew install --as-dependency " + " ".join(missing))
-        if not removable and not missing:
+        else:
             print(paint("brew-orphans: every installed formula is needed", "32"))
-    return 1 if removable else 3 if missing else 0
+    return 1 if removable else 0
 
 
 if __name__ == "__main__":

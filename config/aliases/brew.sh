@@ -110,9 +110,8 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         local color=never report="" rc=0
         [[ -t 1 && -z "${NO_COLOR:-}" ]] && color=always
         report="$(brew-orphans --color="$color")" || rc=$?
-        (( rc == 1 || rc == 3 )) || return 0
-        print -r -- "$report"
         (( rc == 1 )) || return 0
+        print -r -- "$report"
         local answer=""
         read "answer?Remove them now? [Y/n] " || return 0
         [[ "$answer" == [nN]* ]] && return 0

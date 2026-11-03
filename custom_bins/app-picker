@@ -450,8 +450,8 @@ audit() {
     if [[ -x "$SCRIPT_DIR/brew-orphans" ]]; then
         local orphans="" orc=0
         orphans="$("$SCRIPT_DIR/brew-orphans" --color=never)" || orc=$?
-        if (( orc == 1 || orc == 3 )); then
-            section "Formulae nothing needs, or cask dependencies missing (brew-orphans):"
+        if (( orc == 1 )); then
+            section "Formulae nothing needs (brew-orphans):"
             print -r -- "$orphans"
         fi
     fi
