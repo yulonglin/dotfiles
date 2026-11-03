@@ -1,0 +1,37 @@
+[Unit]
+Description=Monthly review of Claude Code context cost and stale handoffs
+Documentation=file:%h/code/dotfiles/custom_bins/context-review
+
+[Service]
+Type=oneshot
+
+# deploy.sh copies this unit verbatim, and systemd --user does not inherit the
+# login shell's PATH. The command is stdlib-only Python with a python3 shebang
+# (no `uv run --script`), so it needs only python3 and git, both in /usr/bin.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+# Read-only on everything except its own report files: the state directory
+# below and one copy of report.md in the vault. It never deletes, moves or
+# edits a skill, rule, memory or transcript; acting on the report is the
+# /context-review skill's job, in a session where the change can be reviewed.
+ExecStart=%h/code/dotfiles/custom_bins/context-review run
+
+# Exit 3 means the report was written but the vault copy failed. That is left a
+# unit failure, but it is NOT the durable signal: reset-failed.timer wipes
+# failed-unit state hourly on this box. summary.json records vault_copy, and the
+# SessionStart nudge reports a failed copy from there.
+
+# %S/context-review = ~/.local/state/context-review, which the nudge reads.
+StateDirectory=context-review
+
+# ProtectHome=read-only with the state directory bind-mounted writable by
+# StateDirectory= (measured for the sibling openrouter-drift unit, 2026-08-28)
+# and the vault re-opened with ReadWritePaths=. The leading "-" makes a missing
+# ~/vault non-fatal: the unit still runs, the vault copy fails, and exit 3 plus
+# summary.json say so. UNTESTED as a running unit on this box --
+# `systemd-analyze verify` checks syntax, not sandbox semantics.
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=-%h/vault
+NoNewPrivileges=true

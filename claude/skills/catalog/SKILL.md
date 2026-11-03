@@ -151,6 +151,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | Skill | Use when |
 |---|---|
 | `interview-me` | Stress-testing a plan or decision — "interview me", "grill me", "poke holes in this" |
+| `context-review` | /context-review, or the SessionStart nudge naming an unreviewed monthly context review — keep, trim or drop each flagged skill, agent, rule and stale handoff, on a reviewable page, applied only on approval |
 | `my-insights` (user-invoked only) | Usage analytics across every Claude Code session — goals, outcomes and friction, as an HTML report |
 | `skill-invocation-modes` (user-invoked only) | Choosing model-invoked vs user-invoked when authoring a skill, and what each costs |
 | `superpowers:writing-skills` (user-invoked only) | Reference for writing and editing skills well — read before authoring a new one |
