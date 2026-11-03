@@ -17,7 +17,7 @@ A hypothesis inside the question ("I assume it's for performance?") is one candi
 
 ## 2. Build the code anchor inline
 
-Before spawning anything, collect: paths with line ranges; key symbols; recent commits (`git log --follow --oneline -20 -- <file>`); last-touch commits (`git blame -L <start>,<end> <file>`); commits that added or removed the exact text (`git log -S '<string>'`); PR numbers from merge subjects; then each substantive PR's body and review (`gh pr view <n> --json title,body,author,createdAt,mergedAt,comments,reviews`). The anchor, plus the commit dates, goes to every investigator and the synthesizer — the dates are what lets the transcript and chat investigators search the right window.
+Before spawning anything, collect: paths with line ranges; key symbols; recent commits (`git log --follow --oneline -20 -- <file>`); last-touch commits (`git blame -L <start>,<end> <file>`); commits that added or removed the exact text (`git log -S '<string>'`); PR numbers from merge subjects; then each substantive PR's summary (`gh pr view <n> --json title,body,author,createdAt,mergedAt,labels`). Review threads stay with the source-control investigator, since a long one would flood this context. The anchor, plus the commit dates, goes to every investigator and the synthesizer — the dates are what lets the transcript and chat investigators search the right window.
 
 ## 3. Spawn one investigator per available source, all in one message
 

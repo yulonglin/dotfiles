@@ -39,11 +39,11 @@ Holds the design rationale written before the code. `artifacts/<slug>/` (source 
 
 ## Long-form documents
 
-Notion (`notion-search`, `notion-fetch`), Google Drive and Docs (`search_files`, `read_file_content`; or `gws`), Bear (macOS only; load `bear` first). Search the feature or symbol name and the decision's vocabulary; read the whole page, since the reason is often in a comment or a later section.
+Notion (`notion-search`, `notion-fetch`), Google Drive and Docs (`search_files` with `pageSize` at most 10, paging with `pageToken`; `read_file_content`; or `gws`), Bear (macOS only; load `bear` first and follow its size-then-outline read playbook). Search the feature or symbol name and the decision's vocabulary. Read every section that matches, not only the title or first screen, since the reason is often in a comment or a later section — but never open an unsized note or page whole.
 
 ## Team chat
 
-Slack (`slack_search_public_and_private`, `slack_read_thread`). Search the symbol, the PR number and the feature name within the anchor's date window; read whole threads.
+Slack (`slack_search_public_and_private` with `limit` at most 10 and `include_context: false`, paging with the cursor — `block_bulky_mcp_search.sh` refuses anything larger; then `slack_read_thread`). Search the symbol, the PR number and the feature name within the anchor's date window; read whole threads.
 
 ## Meetings
 
@@ -51,7 +51,7 @@ Granola (`search_meetings` for the topic and window, then `search_transcripts` f
 
 ## Email
 
-Gmail (load `gmail-connector`; `search_threads` with a narrowed query and at most 10 results, then `get_thread`). Useful when the forcing function was external: a reviewer, a collaborator, a vendor, a deadline.
+Gmail (load `gmail-connector`; `search_threads` with a narrowed query and `pageSize` at most 10, then `get_thread`). Useful when the forcing function was external: a reviewer, a collaborator, a vendor, a deadline.
 
 ## Issue trackers
 
