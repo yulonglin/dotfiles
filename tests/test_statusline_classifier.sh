@@ -481,10 +481,12 @@ narrow_input=$(costed_input '{"total_duration_ms":3900000,"total_cost_usd":7.42}
 check "wide keeps one session row" \
     "$(render_rust_with "$narrow_input" | strip_ansi | sed -n 2p)" \
     "[Opus] · ctx:129k/1.0M (12%) · 1h 5m · \$7.42"
+# 34 columns is phone width, so the usage row is dropped and the session row
+# is the last line: no newline follows it.
 check "narrow splits it at a segment boundary" \
     "$(printf '%s' "$narrow_input" | env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         COLUMNS=34 CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | sed -n '2,3p' | tr '\n' '|')" \
-    "[Opus] · ctx:129k/1.0M (12%)|1h 5m · \$7.42|"
+    "[Opus] · ctx:129k/1.0M (12%)|1h 5m · \$7.42"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

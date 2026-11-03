@@ -9,7 +9,8 @@
 //! session segments; then every coding agent's usage (Claude, the other Claude
 //! account, Codex). The session and usage rows are packed to the terminal width
 //! by pack_groups, so they stay one line each on a wide screen and wrap at
-//! segment boundaries on a phone. The only square brackets are the model's.
+//! segment boundaries when narrow. On a phone (is_phone_width) the usage rows
+//! are left out. The only square brackets are the model's.
 
 use serde::Deserialize;
 use unicode_width::UnicodeWidthStr;
@@ -157,12 +158,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Every coding agent's usage on one row: Claude (plus the other account),
-    // then Codex, whose window durations come from its own API.
-    let mut usage_groups = crate::usage::usage_groups();
-    usage_groups.extend(crate::codex_usage::usage_group());
-    for line in pack_groups(&usage_groups, width) {
-        output.push('\n');
-        output.push_str(&line);
+    // then Codex, whose window durations come from its own API. A phone has
+    // no room for it — it wraps to one row per bucket — so it is left out.
+    if !is_phone_width(width) {
+        let mut usage_groups = crate::usage::usage_groups();
+        usage_groups.extend(crate::codex_usage::usage_group());
+        for line in pack_groups(&usage_groups, width) {
+            output.push('\n');
+            output.push_str(&line);
+        }
     }
 
     print!("{}", output);
@@ -191,6 +195,16 @@ const WIDTH_MARGIN: usize = 4;
 fn available_width(columns: Option<&str>) -> Option<usize> {
     let cols: usize = columns?.trim().parse().ok().filter(|c| *c > 0)?;
     Some(cols.saturating_sub(WIDTH_MARGIN).max(1))
+}
+
+/// Below this many usable columns the terminal is taken to be a phone, and the
+/// usage rows are dropped. An iPhone in portrait gives roughly 40–50 columns;
+/// a laptop split pane is rarely under 80.
+const PHONE_MAX_WIDTH: usize = 56;
+
+/// True when the usable width is phone-sized. Unknown width is not a phone.
+fn is_phone_width(width: Option<usize>) -> bool {
+    width.is_some_and(|w| w < PHONE_MAX_WIDTH)
 }
 
 /// Terminal columns a string occupies, ignoring ANSI CSI sequences.
@@ -850,6 +864,14 @@ mod tests {
         assert_eq!(available_width(Some("0")), None);
         assert_eq!(available_width(Some("wide")), None);
         assert_eq!(available_width(None), None);
+    }
+
+    #[test]
+    fn phone_width_only_when_narrow() {
+        assert!(is_phone_width(available_width(Some("45"))));
+        assert!(!is_phone_width(available_width(Some("60"))));
+        assert!(!is_phone_width(available_width(Some("120"))));
+        assert!(!is_phone_width(None));
     }
 
     #[test]
