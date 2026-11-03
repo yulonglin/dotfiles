@@ -835,3 +835,65 @@ def test_screenzen_follows_an_app_whose_bundle_id_changed(
     )
     ct.cmd_screenzen(cfg, dry_run=True, modes=[])
     assert "Telegram (now new.id)" in capsys.readouterr().out
+
+
+def fake_screenzen_launch(monkeypatch, windows):
+    """Feed hand_back_focus a sequence of (on screen, on top) window states; record the
+    'open' calls it makes. The last state repeats once the sequence runs out."""
+    states = iter(windows)
+    last = [windows[-1]]
+    opened = []
+
+    def sz_window():
+        last[0] = next(states, last[0])
+        return last[0]
+
+    monkeypatch.setattr(ct, "sz_window", sz_window)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    monkeypatch.setattr(
+        ct.subprocess, "run", lambda cmd, **k: opened.append(cmd) or None
+    )
+    return opened
+
+
+def test_focus_is_handed_back_only_once_screenzen_window_is_up(monkeypatch):
+    # ScreenZen becomes active before its window exists; handing back then let the
+    # window land on top afterwards. Wait for the window itself.
+    opened = fake_screenzen_launch(
+        monkeypatch, [(False, False), (False, False), (True, True), (True, False)]
+    )
+    ct.hand_back_focus("com.superlogical.rex")
+    assert opened == [["open", "-b", "com.superlogical.rex"]]
+
+
+def test_screenzen_window_over_an_already_active_app_gets_a_second_hand_back(
+    monkeypatch,
+):
+    opened = fake_screenzen_launch(
+        monkeypatch, [(True, True), (True, True), (True, False)]
+    )
+    ct.hand_back_focus("com.superlogical.rex")
+    assert opened == [
+        ["open", "-b", "com.superlogical.rex"],
+        ["open", "-b", ct.SZ_BUNDLE],
+        ["open", "-b", "com.superlogical.rex"],
+    ]
+
+
+def test_no_hand_back_when_screenzen_window_never_covers_the_screen(
+    monkeypatch, tmp_path
+):
+    clock = iter(range(100))
+    monkeypatch.setattr(ct.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(ct, "SZ_TRACE", tmp_path / "trace.log")
+    monkeypatch.setenv("FOCUS_TRACE", "1")
+    opened = fake_screenzen_launch(monkeypatch, [(False, False)])
+    ct.hand_back_focus("com.superlogical.rex")
+    assert opened == []
+    assert "front was com.superlogical.rex" in (tmp_path / "trace.log").read_text()
+    # nothing to do when ScreenZen itself was in front, the screen was locked, or
+    # nothing was in front
+    ct.hand_back_focus(ct.SZ_BUNDLE)
+    ct.hand_back_focus("com.apple.loginwindow")
+    ct.hand_back_focus(None)
+    assert opened == []

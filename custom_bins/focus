@@ -127,6 +127,79 @@ def frontmost_bundle() -> str | None:
     return m.group(1) if m else None
 
 
+# Lists the owners of on-screen app windows (layer 0), front to back. Read-only: needs
+# no Apple Events or Accessibility permission.
+SZ_WINDOWS_JXA = """
+ObjC.import("CoreGraphics");
+const w = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1, 0))) || [];
+JSON.stringify(w.filter((x) => x.kCGWindowLayer === 0).map((x) => x.kCGWindowOwnerName));
+"""
+SZ_TRACE = (
+    Path(os.environ.get("FOCUS_STATE", Path.home() / ".local/state/focus"))
+    / "screenzen-trace.log"
+)
+
+
+def sz_window() -> tuple[bool, bool]:
+    """(ScreenZen has an on-screen window, that window is the topmost app window)."""
+    r = subprocess.run(
+        ["osascript", "-l", "JavaScript", "-e", SZ_WINDOWS_JXA],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        owners = json.loads(r.stdout)
+    except ValueError:
+        return False, False
+    return "ScreenZen" in owners, bool(owners) and owners[0] == "ScreenZen"
+
+
+def hand_back_focus(front: str | None) -> None:
+    """Put the app that was in front back above ScreenZen's window after a relaunch.
+
+    ScreenZen opens its main window on every launch, on top of everything, despite
+    'open -g -j', and refuses to be hidden from outside (NSRunningApplication.hide
+    returns false). So wait until that window is on screen, then activate the app that
+    had the front: activating it from ScreenZen raises its windows above ScreenZen's.
+    Waiting for ScreenZen to become the front app instead fired before the window
+    existed, and the window then landed on top of the app just handed back (traced
+    2026-11-02). If the window still covers the screen, the previous app was already
+    active, so activate ScreenZen and hand back once more. FOCUS_TRACE=1 appends each
+    step to SZ_TRACE. With the screen locked, loginwindow is in front and there is no
+    app to hand back to."""
+    if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
+        return
+    t0 = time.monotonic()
+    log = [f" 0.00s front was {front}"]
+
+    def check(step):
+        on, top = sz_window()
+        log.append(f"{time.monotonic() - t0:5.2f}s {step}: window {on}, on top {top}")
+        return on, top
+
+    on = top = False
+    while not on and time.monotonic() - t0 < 6:
+        on, top = check("waiting")
+        if not on:
+            time.sleep(0.1)
+    if top:
+        subprocess.run(["open", "-b", front], capture_output=True)
+        time.sleep(0.3)
+        on, top = check(f"after open -b {front}")
+    if top:
+        subprocess.run(["open", "-b", SZ_BUNDLE], capture_output=True)
+        time.sleep(0.2)
+        subprocess.run(["open", "-b", front], capture_output=True)
+        time.sleep(0.3)
+        check(f"after open -b ScreenZen, then {front}")
+    if os.environ.get("FOCUS_TRACE"):
+        SZ_TRACE.parent.mkdir(parents=True, exist_ok=True)
+        with SZ_TRACE.open("a") as f:
+            f.write(
+                f"--- {dt.datetime.now():%Y-%m-%dT%H:%M:%S}\n" + "\n".join(log) + "\n"
+            )
+
+
 SZ_BACKUPS_KEPT = 50
 BACKUP_DIR = Path(
     os.environ.get("FOCUS_BACKUPS", Path.home() / "scratch/blocker-backups")
@@ -1159,22 +1232,15 @@ def cmd_screenzen(
         sys.exit(
             f"focus: ScreenZen read-back differs; restore with defaults import from {backup}"
         )
-    # -g keeps whatever app is in front there, and -j launches ScreenZen hidden, so a
-    # mode switch does not pull its window forward.
+    # -g and -j ask for a background, hidden launch; ScreenZen ignores both and opens
+    # its window on top, so hand_back_focus puts the previous app back above it.
     reopen = ["open", "-g", "-j", "-a", "ScreenZen"]
     if subprocess.run(reopen, capture_output=True).returncode:
         sys.exit(
             f"focus: wrote ScreenZen (backup at {backup}) but could not reopen it, "
             "so its blocking is off until it runs. Reopen it: open -a ScreenZen"
         )
-    # ScreenZen activates itself on launch despite -g -j, so if it takes the front,
-    # give it back to whatever app had it.
-    if front and front != SZ_BUNDLE:
-        for _ in range(30):
-            if frontmost_bundle() == SZ_BUNDLE:
-                subprocess.run(["open", "-b", front], capture_output=True)
-                break
-            time.sleep(0.1)
+    hand_back_focus(front)
     if quiet:
         print(
             f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
