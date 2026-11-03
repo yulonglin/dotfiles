@@ -95,6 +95,8 @@ def fx(tmp_path: Path) -> dict:
         "old-skill", "description: >-\n  Folded over\n  two lines."))
     write(repo / "claude/skills/used-skill/SKILL.md", skill(
         "used-skill", 'description: "Quoted: with a colon."'))
+    write(repo / "claude/skills/msg-first/SKILL.md", skill("msg-first", "description: Slash-invoked."))
+    write(repo / "claude/skills/moved-in/SKILL.md", skill("moved-in", "description: Was in a plugin."))
     write(repo / "claude/skills/renamed-old/SKILL.md", skill(
         "renamed-old", "description: Will be renamed."))
     write(repo / "claude/agents/used-agent.md",
@@ -132,6 +134,21 @@ def fx(tmp_path: Path) -> dict:
         json.dumps({"type": "user", "timestamp": days_ago(4), "uuid": "u-1",
                     "message": {"content": "<command-name>/plug:plug-skill</command-name>\n"
                                            "<command-message>plug-skill</command-message>"}}),
+        # The other real envelope order: command-message FIRST, then command-name
+        # (65+13 of 384 saved slash commands on 2026-11-03). Missing it reported
+        # /commit-push-sync as unused.
+        json.dumps({"type": "user", "timestamp": days_ago(6), "uuid": "u-3",
+                    "message": {"content": "<command-message>msg-first</command-message>\n"
+                                           "<command-name>/msg-first</command-name>\n"
+                                           "<command-args>do it</command-args>"}}),
+        # A skill that moved from a since-removed plugin keeps its old prefix.
+        json.dumps({"type": "user", "timestamp": days_ago(7), "uuid": "u-4",
+                    "message": {"content": "<command-message>gone:moved-in</command-message>\n"
+                                           "<command-name>/gone:moved-in</command-name>"}}),
+        # A teammate message quoting an envelope later in its text: not an invocation.
+        json.dumps({"type": "user", "timestamp": days_ago(5), "uuid": "u-5",
+                    "message": {"content": '<teammate-message teammate_id="x">\nsee '
+                                           "<command-name>/old-skill</command-name></teammate-message>"}}),
         # A tool result quoting a transcript that invoked old-skill: not an invocation.
         json.dumps({"type": "user", "timestamp": days_ago(3), "uuid": "u-2", "message": {"content": [
             {"type": "tool_result", "tool_use_id": "t", "content":
@@ -214,6 +231,18 @@ def test_usage_windows_renames_forks_and_quotes(fx):
     assert c["used-agent"]["uses_30d"] == 1
     assert c["plug-skill"]["uses_30d"] == 1
     assert c["old-skill"]["uses_90d"] == 0
+
+
+def test_slash_envelope_in_either_order_and_retired_plugin_prefix(fx):
+    run(fx, "run")
+    s = summary(fx)
+    c = rows(s)
+    unused = {u["name"] for u in s["unused_90d"]}
+    assert c["msg-first"]["uses_30d"] == 1 and "msg-first" not in unused
+    assert c["moved-in"]["uses_30d"] == 1 and "moved-in" not in unused
+    assert cr._SLASH.match("<command-name>/a</command-name>\n<command-message>a</command-message>").group(1) == "a"
+    assert cr._SLASH.match("<command-message>b</command-message>\n<command-name>/b</command-name>").group(1) == "b"
+    assert cr._SLASH.match("text first <command-name>/c</command-name>") is None
 
 
 def test_unused_list_exemptions_and_plugins(fx):

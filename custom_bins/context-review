@@ -291,7 +291,14 @@ def inventory(repo: Path, claude_home: Path) -> list[dict]:
 
 # --------------------------------------------------------------------------- usage
 
-_SLASH = re.compile(r"^\s*<command-name>/?([^<\s]+)\s*</command-name>")
+# A slash command is saved as a user message that OPENS with its envelope, in
+# either order (both seen in real transcripts, 2026-11-03: name first 306 times,
+# message first 78): `<command-name>/x</command-name>\n<command-message>x...` or
+# `<command-message>x</command-message>\n<command-name>/x</command-name>`.
+# Anchored at the start so command text quoted later (a teammate message, a
+# pasted transcript) is not an invocation.
+_SLASH = re.compile(
+    r"^\s*(?:<command-message>[^<]*</command-message>\s*)?<command-name>/?([^<\s]+)\s*</command-name>")
 
 
 def scan_transcript(path: str) -> list[tuple[str, str, str, str]]:
@@ -407,6 +414,19 @@ def attach_usage(rows: list[dict], u: dict, aliases: dict[str, set[str]], today:
     for (pool, name), days in events.items():
         by_pool[pool][name] = days
     cut = {w: (today - timedelta(days=w)).isoformat() for w in WINDOWS}
+    # Skills that moved from a plugin into dotfiles keep the plugin prefix in old
+    # transcripts (`research:spec-interview-research`, `workflow:done`). A
+    # namespaced name whose prefix is NOT a currently loaded plugin is credited
+    # to the dotfiles component of the same bare name; one whose prefix is a
+    # loaded plugin belongs to that plugin.
+    live_plugins = {r["plugin"] for r in rows if r["plugin"] != "dotfiles"}
+
+    def retired_bare(name: str) -> str | None:
+        prefix, sep, bare = name.partition(":")
+        if sep and "/" not in prefix and prefix not in live_plugins:
+            return bare
+        return None
+
     for r in rows:
         keys = {r["name"], r["dir_name"]}
         for k in list(keys):
@@ -419,7 +439,8 @@ def attach_usage(rows: list[dict], u: dict, aliases: dict[str, set[str]], today:
         for pool in pools:
             for name, ds in by_pool[pool].items():
                 bare = name.rsplit(":", 1)[-1] if "/" in name.split(":", 1)[0] else name
-                if name in keys or bare in keys:
+                retired = retired_bare(name) if r["plugin"] == "dotfiles" else None
+                if name in keys or bare in keys or (retired and retired in keys):
                     days.extend(ds)
         for w in WINDOWS:
             r[f"uses_{w}d"] = sum(1 for d in days if d >= cut[w])
