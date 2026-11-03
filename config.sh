@@ -62,6 +62,7 @@ DEPLOY_REGISTRY=(
     "editor|VSCode/Cursor settings + extensions (merges)|all|true|Shell & Editors"
     "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
     "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
+    "rex|Rex keybindings (symlinked) + UI layout prefs (macOS)|all|true|Shell & Editors"
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
     "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
@@ -409,6 +410,7 @@ apply_profile() {
             DEPLOY_EDITOR=false
             DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false
+            DEPLOY_REX=false
             DEPLOY_ZED=false
             DEPLOY_HTOP=false
             DEPLOY_GITUI=false

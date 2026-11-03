@@ -93,6 +93,7 @@ COMPONENTS:
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
                       schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
+    --rex             Deploy Rex keybindings (init.lua) and UI layout prefs (macOS)
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
@@ -602,6 +603,26 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         safe_symlink "$DOT_DIR/config/ghostty-themes" "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/themes"
     else
         log_warning "Ghostty config not found"
+    fi
+fi
+
+# ─── Rex ──────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_REX" == "true" ]]; then
+    log_info "Deploying Rex configuration..."
+    safe_symlink "$DOT_DIR/config/rex/init.lua" "${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua"
+
+    # UI layout lives in the app's defaults domain, not in init.lua.
+    if is_macos; then
+        local_rex_prefs="$DOT_DIR/config/rex/ui-prefs.tsv"
+        while IFS=$'\t' read -r key type value; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            defaults write com.superlogical.rex "Workspace.$key" "-$type" "$value"
+        done < "$local_rex_prefs"
+        log_success "Applied Rex UI prefs from config/rex/ui-prefs.tsv"
+        if pgrep -xq Rex; then
+            log_info "  Rex is running: quit and reopen it if the layout does not update"
+        fi
     fi
 fi
 

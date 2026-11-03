@@ -13,6 +13,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - VSCode/Cursor/Antigravity settings - Merges with existing settings
 - Finicky - Browser routing (macOS only, symlinked)
 - Ghostty - Terminal emulator configuration (symlinked to platform-specific path); custom themes in `config/ghostty-themes/` symlinked to `~/.config/ghostty/themes`
+- Rex - Keybindings `config/rex/init.lua` symlinked to `~/.config/rex/init.lua`; on macOS, UI layout prefs from `config/rex/ui-prefs.tsv` written with `defaults write com.superlogical.rex` (overwrites the in-app value, so copy a change made in Rex Settings back into the file)
 - Zed - Editor config (settings + keymap, symlinked to ~/.config/zed/)
 - gitui - Theme (symlinked to ~/.config/gitui/theme.ron). Theme-reactive: uses named ANSI colors so gitui inherits whichever Ghostty theme the active window uses (default, g0-g9, SSH themes). Fixes gitui's default `disabled_fg: DarkGray`, which is unreadable on Catppuccin Mocha and similar dark backgrounds.
 - Claude Code - AI assistant configuration (symlinked)
