@@ -72,6 +72,8 @@ Long or repeated units — samples, episodes, runs — each collapse independent
 
 Pages are explorable, not just readable: a table of contents with jump links, cross-links between related analyses and examples, and important context kept visible while scrolling long transcripts.
 
+**A page generated from linked text keeps its links and its line structure.** A diff, comparison, digest or export keeps the source's links clickable and its nested lists and indentation, via real lists or `white-space: pre-wrap`; a diff treats a line's indent as part of the line, not a word gap. A script may strip links to count or compare words, but must put them back in what it shows (2026-10-12).
+
 ## Slides: the first slide sets what the meeting is about
 
 **Open with a summary slide.** Where the project stands and this week's progress, the key takeaways from the previous meeting, and the main experimental outcome stated plainly, with a simple plot of the headline result where possible. Then the discussion points or decisions you want feedback on — especially **the things you are least certain about**, which is what surfaces the right samples and results for review. The audience manages many projects; the first slide reminds them where this one stands and what to think about while you talk.
