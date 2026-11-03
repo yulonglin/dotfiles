@@ -19,7 +19,7 @@ source: report.md
 built: skill-clarity-audit.html
 builds_with: |
   md2artifact report.md -o skill-clarity-audit.html --states open,fix,skip,discuss --title "Skill and Rule Clarity Audit"
-  publish with md2artifact --capabilities plus "downloads": {} until md2artifact prints it
+  publish with the capabilities md2artifact --capabilities prints
 evidence: |
   static audits at commit e2510cda, 2026-11-03: skills by GPT-6.1 Sol, agents and rules by GPT-6 Astra,
   both briefed fresh; cited lines re-read by Claude Opus 5.5 for every item marked Verified
