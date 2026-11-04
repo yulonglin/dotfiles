@@ -158,7 +158,7 @@ Sort each failed check by whether it is a scientific decision or a reversible im
 
 **Warnings only**: proceed, and record each warning and how you handled it in the validation report.
 
-**Before you launch any experiment run**, the two-stage pilot and the spend gate in `~/.claude/rules/experiments.md` must pass. If the cost estimate is $100 or more, return the estimate to the caller instead of launching.
+**Pilot before full scale**, per `~/.claude/rules/experiments.md`: run stage one first (n=1–2, correctness of every stage), then stage two (n≥4, memory and length) only after stage one passes, and launch full scale only after both pass. **The spend gate is separate:** estimate from measured rates, and at $100 or more return the estimate to the caller instead of launching (pre-paid cluster allocations are exempt).
 
 ### When to Skip Validation
 
