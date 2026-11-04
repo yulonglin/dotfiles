@@ -16,8 +16,10 @@ sidebarPosition	string	left
 tabIconTintMode	string	off
 tabStyle	string	horizontal
 tabsFillAvailableSpace	bool	true
+terminalCopyOnSelect	bool	true
 terminalCursorStyle	string	bar
 terminalFontPointSize	float	13
-terminalPaddingX	float	2
-terminalPaddingY	float	0
+terminalPaddingColor	string	extend-always
+terminalPaddingX	float	10
+terminalPaddingY	float	10
 usesStandardInactiveWindowPaneStyles	bool	true
