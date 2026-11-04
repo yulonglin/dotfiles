@@ -8,6 +8,8 @@
 
 **Report what happened** — every condition. Never quietly drop failed conditions, outliers or nulls, and investigate surprises rather than explaining them away.
 
+**Every model call is shown with its input beside its output** — per sample, for monitors, judges and graders, and every verdict carries a rationale; a verdict alone cannot be checked. Mechanics: `results-analysis.md`.
+
 **Say which findings you went looking for:** each is pre-specified or discovered in this data, with the number of slices and comparisons stated. A discovered finding is a hypothesis until fresh episodes test it.
 
 The rest — nulls, ceilings, intervals and their unit of analysis, causal register, scorer versus judge: `~/.claude/checklists/results-analysis.md`; statistical machinery and slicing: `results-artifact`.

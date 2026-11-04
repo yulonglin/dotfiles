@@ -1,0 +1,20 @@
+# Rex app UI settings (macOS defaults domain com.superlogical.rex, keys Workspace.<key>).
+# Two-way: `rex-prefs capture` writes live values here (dotfiles-sync runs it before each daily commit);
+# `rex-prefs apply` writes these rows into Rex (deploy.sh --rex runs capture, then apply).
+# Change a setting in Rex Settings and it reaches git on the next sync; a row deleted here is not unset in Rex.
+# key	type	value
+appIconVisibility	string	dockAndMenuBar
+darkThemeID	string	static-noir
+inactivePaneFadeMode	string	both
+interfaceStyle	string	useTheme
+lightThemeID	string	merino-light
+paneDensity	string	compact
+showsPaneHeaders	bool	false
+sidebarCollapsed	bool	true
+sidebarPosition	string	left
+tabIconTintMode	string	off
+tabStyle	string	vertical
+tabsFillAvailableSpace	bool	true
+terminalPaddingX	float	2
+terminalPaddingY	float	0
+usesStandardInactiveWindowPaneStyles	bool	true

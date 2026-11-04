@@ -62,6 +62,7 @@ DEPLOY_REGISTRY=(
     "editor|VSCode/Cursor settings + extensions (merges)|all|true|Shell & Editors"
     "zed|Zed editor config (symlinked)|all|true|Shell & Editors"
     "ghostty|Ghostty terminal config (symlinked)|all|true|Shell & Editors"
+    "rex|Rex keybindings (symlinked) + UI layout prefs (macOS)|all|true|Shell & Editors"
     "htop|htop config with dynamic CPU meters|all|true|Shell & Editors"
     "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
@@ -89,10 +90,12 @@ DEPLOY_REGISTRY=(
     "file-apps|Default editor for coding file types|macos|true|macOS"
     "keyboard|Keyboard repeat rate enforcement at login|macos|true|macOS"
     "kill-sky-cua|Kill OpenAI Sky Computer Use helpers (AX-polling lag watchdog)|macos|true|macOS"
+    "coreaudio-watch|Notify when CoreAudio wedges and audio apps hang (and when it recovers)|macos|true|macOS"
     "bedtime|Bedtime timezone enforcement|macos|false|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
     "mouseless|Keyboard-driven mouse control|macos|true|macOS"
     "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and watch for wedged workflow scripts|macos|true|macOS"
+    "focus|End Cold Turkey focus breaks on time (focus tick every minute via launchd)|macos|true|macOS"
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"
     "vpn|NordVPN + Tailscale split tunnel daemon|macos|true|macOS"
     "pueue|Pueue + systemd resource slices|linux|true|Linux"
@@ -407,6 +410,7 @@ apply_profile() {
             DEPLOY_EDITOR=false
             DEPLOY_SERENA=false
             DEPLOY_GHOSTTY=false
+            DEPLOY_REX=false
             DEPLOY_ZED=false
             DEPLOY_HTOP=false
             DEPLOY_GITUI=false
@@ -429,6 +433,8 @@ apply_profile() {
             # schedules a 5-minute launchd job, and "shared machine, no GUI" is
             # the last place that belongs.
             DEPLOY_ALFRED=false
+            # Schedules a once-a-minute launchd job for a GUI blocker a server never has.
+            DEPLOY_FOCUS=false
             ;;
         cloud)
             # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.

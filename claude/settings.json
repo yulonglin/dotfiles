@@ -181,19 +181,14 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-haiku-5-5",
-        "label": "Haiku 5.5",
-        "description": "Claude subscription"
-      },
-      {
-        "model": "claude-opus-4-6",
-        "label": "Opus 4.6",
-        "description": "Claude subscription"
-      },
-      {
         "model": "astra",
         "label": "GPT-6 Astra",
         "description": "ChatGPT subscription (Codex)"
+      },
+      {
+        "model": "gemini",
+        "label": "Gemini 4 Argon",
+        "description": "OpenRouter, pay per token"
       },
       {
         "model": "sol",
@@ -202,7 +197,7 @@
       },
       {
         "model": "kimi",
-        "label": "Kimi K3",
+        "label": "Kimi K3.1 Pro",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -218,11 +213,6 @@
       {
         "model": "grok",
         "label": "Grok 4.7",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "gemini",
-        "label": "Gemini 4 Argon",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -263,7 +253,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run permissions.approval-classifier -- $HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
             "timeout": 30
           }
         ]
@@ -653,6 +643,12 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.context-review -- $HOME/.claude/hooks/nudge_context_review.zsh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.dotfiles-sync -- $HOME/.claude/hooks/nudge_dotfiles_sync.sh",
             "timeout": 5,
             "async": true
@@ -993,10 +989,22 @@
     "astra": {
       "autoCompactWindow": 258400
     },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini": {
+      "autoCompactWindow": 1000000
+    },
     "gpt-6.1-sol": {
       "autoCompactWindow": 258400
     },
     "sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-terra": {
+      "autoCompactWindow": 258400
+    },
+    "terra": {
       "autoCompactWindow": 258400
     },
     "gpt-6-sol": {
@@ -1017,10 +1025,13 @@
     "gpt-5.6-luna": {
       "autoCompactWindow": 258400
     },
-    "kimi-k3": {
+    "kimi-k3.1-pro": {
       "autoCompactWindow": 250000
     },
     "kimi": {
+      "autoCompactWindow": 250000
+    },
+    "kimi-k3": {
       "autoCompactWindow": 250000
     },
     "glm-5.3": {
@@ -1040,12 +1051,6 @@
     },
     "grok": {
       "autoCompactWindow": 500000
-    },
-    "gemini-4-argon": {
-      "autoCompactWindow": 1000000
-    },
-    "gemini": {
-      "autoCompactWindow": 1000000
     },
     "qwen3.8-max": {
       "autoCompactWindow": 1000000
@@ -1081,7 +1086,7 @@
   ],
   "theme": "auto",
   "editorMode": "normal",
-  "verbose": true,
+  "verbose": false,
   "teammateMode": "in-process",
   "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,

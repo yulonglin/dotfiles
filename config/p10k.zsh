@@ -358,7 +358,7 @@
 
   # Formatter for Git status.
   #
-  # Example output: master wip ⇣42⇡42 *42 merge ~42 +42 !42 ?42.
+  # Example output: main · ⇡2 to push · +1 staged · !3 modified · ?1 untracked.
   #
   # You can edit the function to customize how Git status looks.
   #
@@ -424,45 +424,146 @@
       res+="${meta}:${clean}${(V)VCS_STATUS_REMOTE_BRANCH//\%/%%}"
     fi
 
-    # Display "wip" if the latest commit's summary contains "wip" or "WIP".
+    # Status parts: a symbol to scan plus a word to read, joined by " · "; only the
+    # non-zero ones show. Below 100 columns (a phone over mosh, a split tmux pane) the
+    # words drop and the parts collapse to the bare symbols: main !1 ?3.
+    # `prompt-legend` (config/aliases/prompt.sh) explains each part against the live
+    # prompt, so keep its key in step with this list.
+    local -a parts
+    local w=1
+    (( COLUMNS < 100 )) && w=
+
+    # 'wip' if the latest commit's summary contains "wip" or "WIP".
     if [[ $VCS_STATUS_COMMIT_SUMMARY == (|*[^[:alnum:]])(wip|WIP)(|[^[:alnum:]]*) ]]; then
-      res+=" ${modified}wip"
+      parts+=("${modified}wip")
     fi
 
-    # ⇣42 if behind the remote.
-    (( VCS_STATUS_COMMITS_BEHIND )) && res+=" ${clean}⇣${VCS_STATUS_COMMITS_BEHIND}"
-    # ⇡42 if ahead of the remote; no leading space if also behind the remote: ⇣42⇡42.
-    (( VCS_STATUS_COMMITS_AHEAD && !VCS_STATUS_COMMITS_BEHIND )) && res+=" "
-    (( VCS_STATUS_COMMITS_AHEAD  )) && res+="${clean}⇡${VCS_STATUS_COMMITS_AHEAD}"
-    # ⇠42 if behind the push remote.
-    (( VCS_STATUS_PUSH_COMMITS_BEHIND )) && res+=" ${clean}⇠${VCS_STATUS_PUSH_COMMITS_BEHIND}"
-    (( VCS_STATUS_PUSH_COMMITS_AHEAD && !VCS_STATUS_PUSH_COMMITS_BEHIND )) && res+=" "
-    # ⇢42 if ahead of the push remote; no leading space if also behind: ⇠42⇢42.
-    (( VCS_STATUS_PUSH_COMMITS_AHEAD  )) && res+="${clean}⇢${VCS_STATUS_PUSH_COMMITS_AHEAD}"
+    # ⇣42 to pull / ⇡42 to push against the upstream branch.
+    (( VCS_STATUS_COMMITS_BEHIND )) && parts+=("${clean}⇣${VCS_STATUS_COMMITS_BEHIND}${w:+ to pull}")
+    (( VCS_STATUS_COMMITS_AHEAD  )) && parts+=("${clean}⇡${VCS_STATUS_COMMITS_AHEAD}${w:+ to push}")
+    # ⇠42 / ⇢42 against the push remote, when it differs from the upstream (a fork).
+    (( VCS_STATUS_PUSH_COMMITS_BEHIND )) && parts+=("${clean}⇠${VCS_STATUS_PUSH_COMMITS_BEHIND}${w:+ behind push remote}")
+    (( VCS_STATUS_PUSH_COMMITS_AHEAD  )) && parts+=("${clean}⇢${VCS_STATUS_PUSH_COMMITS_AHEAD}${w:+ ahead of push remote}")
     # *42 if have stashes (disabled — not useful for this workflow).
-    # (( VCS_STATUS_STASHES        )) && res+=" ${clean}*${VCS_STATUS_STASHES}"
-    # 'merge' if the repo is in an unusual state.
-    [[ -n $VCS_STATUS_ACTION     ]] && res+=" ${conflicted}${VCS_STATUS_ACTION}"
-    # ~42 if have merge conflicts.
-    (( VCS_STATUS_NUM_CONFLICTED )) && res+=" ${conflicted}~${VCS_STATUS_NUM_CONFLICTED}"
-    # +42 if have staged changes.
-    (( VCS_STATUS_NUM_STAGED     )) && res+=" ${modified}+${VCS_STATUS_NUM_STAGED}"
-    # !42 if have unstaged changes.
-    (( VCS_STATUS_NUM_UNSTAGED   )) && res+=" ${modified}!${VCS_STATUS_NUM_UNSTAGED}"
-    # ?42 if have untracked files. It's really a question mark, your font isn't broken.
+    # (( VCS_STATUS_STASHES        )) && parts+=("${clean}*${VCS_STATUS_STASHES}${w:+ stashed}")
+    # 'merge in progress', 'rebase-i in progress' etc. if the repo is in an unusual state.
+    [[ -n $VCS_STATUS_ACTION     ]] && parts+=("${conflicted}${VCS_STATUS_ACTION}${w:+ in progress}")
+    # ~42 conflicts if have merge conflicts.
+    (( VCS_STATUS_NUM_CONFLICTED )) && parts+=("${conflicted}~${VCS_STATUS_NUM_CONFLICTED}${w:+ conflict${${VCS_STATUS_NUM_CONFLICTED:#1}:+s}}")
+    # +42 staged if have staged changes.
+    (( VCS_STATUS_NUM_STAGED     )) && parts+=("${modified}+${VCS_STATUS_NUM_STAGED}${w:+ staged}")
+    # !42 modified if have unstaged changes to tracked files.
+    (( VCS_STATUS_NUM_UNSTAGED   )) && parts+=("${modified}!${VCS_STATUS_NUM_UNSTAGED}${w:+ modified}")
+    # ?42 untracked if have untracked files. It's really a question mark, your font isn't broken.
     # See POWERLEVEL9K_VCS_UNTRACKED_ICON above if you want to use a different icon.
     # Remove the next line if you don't want to see untracked files at all.
-    (( VCS_STATUS_NUM_UNTRACKED  )) && res+=" ${untracked}${(g::)POWERLEVEL9K_VCS_UNTRACKED_ICON}${VCS_STATUS_NUM_UNTRACKED}"
-    # "─" if the number of unstaged files is unknown. This can happen due to
+    (( VCS_STATUS_NUM_UNTRACKED  )) && parts+=("${untracked}${(g::)POWERLEVEL9K_VCS_UNTRACKED_ICON}${VCS_STATUS_NUM_UNTRACKED}${w:+ untracked}")
+    # "─ unknown" if the number of unstaged files is unknown. This can happen due to
     # POWERLEVEL9K_VCS_MAX_INDEX_SIZE_DIRTY (see below) being set to a non-negative number lower
     # than the number of files in the Git index, or due to bash.showDirtyState being set to false
     # in the repository config. The number of staged and untracked files may also be unknown
     # in this case.
-    (( VCS_STATUS_HAS_UNSTAGED == -1 )) && res+=" ${modified}─"
+    (( VCS_STATUS_HAS_UNSTAGED == -1 )) && parts+=("${modified}─${w:+ unknown}")
+
+    # +108 −27 lines: diff size against HEAD (staged + modified, not untracked), as
+    # GitHub counts it. Wide terminals only; computed by _my_git_diffstat_start below.
+    if [[ -n $w && -n $_my_git_diffstat && $_my_git_diffstat_dir == ${VCS_STATUS_WORKDIR:A} ]] &&
+       (( VCS_STATUS_NUM_STAGED + VCS_STATUS_NUM_UNSTAGED )); then
+      parts+=("${clean}+${_my_git_diffstat[(w)1]} ${conflicted}−${_my_git_diffstat[(w)2]} ${meta}lines")
+    fi
+
+    local sep=" ${w:+${meta}· }"
+    (( $#parts )) && res+="${sep}${(pj:$sep:)parts}"
 
     typeset -g my_git_format=$res
   }
   functions -M my_git_formatter 2>/dev/null
+
+  # Lines changed for my_git_formatter. gitstatus counts files, not lines, and a
+  # synchronous `git diff` would stall every prompt in a big repo, so after each
+  # command the diff runs in the background and the prompt redraws when it lands.
+  # The result is "INSERTIONS DELETIONS" for the repo in _my_git_diffstat_dir.
+  # No initial values: a re-source (p10k reload) keeps a diff in flight and its fd.
+  typeset -g _my_git_diffstat _my_git_diffstat_dir
+  typeset -gi _my_git_diffstat_fd _my_git_diffstat_want
+  function _my_git_diffstat_start() {
+    emulate -L zsh -o extended_glob
+    # Words (and so line counts) only show at 100+ columns.
+    (( COLUMNS >= 100 )) || return
+    # One diff at a time. A prompt that arrives mid-diff may postdate its numbers,
+    # so it asks for a rerun when the diff lands. (A hung diff leaves the counts
+    # off for this shell; `exec zsh` clears it.)
+    if (( _my_git_diffstat_fd )); then
+      _my_git_diffstat_want=1
+      return
+    fi
+    # One write at the end: zle -F fires once the fd is readable, so printing the
+    # toplevel before the diff ends would leave the handler blocked in read.
+    # The -c/--no-* flags stop an untrusted repo's own config (say, a .git from an
+    # extracted archive) from running commands just because you cd'd into it:
+    # fsmonitor hook, external diff, textconv. Filter drivers have no such flag:
+    # a clean filter defined at repo level is replaced by `cat` for this diff, and
+    # a repo-level long-running process filter makes us skip the repo. Global and
+    # system filters (git-lfs) are yours and stay trusted. A filter name that a
+    # `-c key=value` override cannot spell exactly is treated like a process filter,
+    # and so is a git too old to report config scopes (< 2.26). Submodules are
+    # ignored (their own config would apply inside them). GIT_ALLOW_PROTOCOL=none
+    # overrides any repo protocol.*.allow, so a partial clone cannot start a
+    # transport from its config even on a git without GIT_NO_LAZY_FETCH (< 2.44).
+    # The diff runs from the toplevel so diff.relative cannot shrink the total,
+    # and in C locale so the English shortstat parses. $HOME as a repo is skipped,
+    # or every prompt outside another repo would diff the whole home directory.
+    exec {_my_git_diffstat_fd}< <(
+      exec </dev/null
+      local top stat line key out
+      local -a filters overrides
+      top=$(command git -c core.fsmonitor=false rev-parse --show-toplevel 2>/dev/null)
+      if [[ -n $top && ${top:A} != ${HOME:A} ]] && cd -q -- $top; then
+        # Lines look like "local<TAB>filter.NAME.clean COMMAND"; exit 1 = no match.
+        out=$(command git -c core.fsmonitor=false config --show-scope --includes \
+          --get-regexp '^filter\..*\.(clean|process)$' 2>/dev/null)
+        if (( $? <= 1 )); then
+          filters=(${(f)out})
+          for line in ${filters:#(global|system)$'\t'*}; do
+            key=${${line#*$'\t'}%% *}
+            [[ $key == filter.[A-Za-z0-9._-]##.clean ]] || { print -r -- "$top"$'\n'; exit }
+            overrides+=(-c "$key=cat")
+          done
+          stat=$(LC_ALL=C GIT_OPTIONAL_LOCKS=0 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL=none \
+            GIT_TERMINAL_PROMPT=0 command git -c core.fsmonitor=false $overrides \
+            diff --no-ext-diff --no-textconv --ignore-submodules=all --shortstat HEAD 2>/dev/null)
+        fi
+      fi
+      print -r -- "$top"$'\n'"$stat"
+    )
+    zle -F $_my_git_diffstat_fd _my_git_diffstat_done
+  }
+  function _my_git_diffstat_done() {
+    emulate -L zsh
+    local fd=$1 dir stat ins=0 del=0
+    zle -F $fd
+    IFS= read -r -u $fd dir
+    IFS= read -r -u $fd stat
+    exec {fd}<&-
+    # Only the current diff may free the slot.
+    (( fd == _my_git_diffstat_fd )) || return
+    _my_git_diffstat_fd=0
+    if (( _my_git_diffstat_want )); then
+      _my_git_diffstat_want=0
+      _my_git_diffstat_start
+      return
+    fi
+    [[ $stat =~ '([0-9]+) insertion' ]] && ins=$match[1]
+    [[ $stat =~ '([0-9]+) deletion' ]] && del=$match[1]
+    (( ins + del )) || stat=  # mode-only or binary changes: no lines to count
+    local new=${stat:+$ins $del}
+    dir=${dir:+${dir:A}}  # symlink-free, to compare with ${VCS_STATUS_WORKDIR:A}
+    [[ $new == $_my_git_diffstat && $dir == $_my_git_diffstat_dir ]] && return
+    typeset -g _my_git_diffstat=$new _my_git_diffstat_dir=$dir
+    p10k display -r
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _my_git_diffstat_start
 
   # Don't count the number of unstaged, untracked and conflicted files in Git repositories with
   # more than this many files in the index. Negative value means infinity.

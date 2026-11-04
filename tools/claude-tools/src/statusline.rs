@@ -5,11 +5,13 @@
 //! expected strings. Rebuild every platform asset you can and check
 //! scripts/check-claude-tools-fresh.sh — the committed binary is what runs.
 //!
-//! Layout: line 1 is location (machine, profiles, directory, branch); then the
+//! Layout: line 1 is location (OS icon, machine, profiles, directory, branch); then the
 //! session segments; then every coding agent's usage (Claude, the other Claude
 //! account, Codex). The session and usage rows are packed to the terminal width
 //! by pack_groups, so they stay one line each on a wide screen and wrap at
-//! segment boundaries on a phone. The only square brackets are the model's.
+//! segment boundaries when narrow. On a phone (is_phone_width) the usage rows
+//! and the session's timing, price and cache segments are left out. The only
+//! square brackets are the model's.
 
 use serde::Deserialize;
 use unicode_width::UnicodeWidthStr;
@@ -114,7 +116,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut output = String::with_capacity(256);
 
-    // 1. Machine name (SSH sessions only)
+    // 1. OS icon, then machine name (registered machines and SSH sessions)
+    format_os_icon(&mut output);
     format_machine_name(&mut output);
 
     // 2. Context profiles from context.yaml
@@ -130,22 +133,32 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
     let width = available_width(std::env::var("COLUMNS").ok().as_deref());
-    let transcript = input.transcript_path.as_deref().map(std::path::Path::new);
-    let started = transcript.and_then(transcript_started_at);
-    let last_active = transcript.and_then(transcript_last_active_at);
+    let phone = is_phone_width(width);
 
-    // Session state: one group, so it splits only between segments.
+    // Session state: one group, so it splits only between segments. A phone
+    // keeps model, context and the classifier flag; the timing, price and
+    // cache segments would wrap to a row of their own, so they are left out.
+    let timing_parts: Vec<Option<String>> = if phone {
+        Vec::new()
+    } else {
+        let transcript = input.transcript_path.as_deref().map(std::path::Path::new);
+        let started = transcript.and_then(transcript_started_at);
+        let last_active = transcript.and_then(transcript_last_active_at);
+        vec![
+            format_duration_str(&input.cost),
+            format_since_str("age", started, now),
+            format_since_str("idle", last_active, now),
+            format_cost_str(input.cost.as_ref()),
+            format_prompt_cache_str(input.prompt_cache.as_ref(), now),
+        ]
+    };
     let session_parts: Vec<String> = [
         format_model_str(input.model.as_ref(), input.effort.as_ref()),
         format_context_usage_str(input.context_window.as_ref()),
-        format_duration_str(&input.cost),
-        format_since_str("age", started, now),
-        format_since_str("idle", last_active, now),
-        format_cost_str(input.cost.as_ref()),
-        format_prompt_cache_str(input.prompt_cache.as_ref(), now),
-        format_classifier_str(),
     ]
     .into_iter()
+    .chain(timing_parts)
+    .chain([format_classifier_str()])
     .flatten()
     .collect();
     if !session_parts.is_empty() {
@@ -156,12 +169,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Every coding agent's usage on one row: Claude (plus the other account),
-    // then Codex, whose window durations come from its own API.
-    let mut usage_groups = crate::usage::usage_groups();
-    usage_groups.extend(crate::codex_usage::usage_group());
-    for line in pack_groups(&usage_groups, width) {
-        output.push('\n');
-        output.push_str(&line);
+    // then Codex, whose window durations come from its own API. A phone has
+    // no room for it — it wraps to one row per bucket — so it is left out.
+    if !phone {
+        let mut usage_groups = crate::usage::usage_groups();
+        usage_groups.extend(crate::codex_usage::usage_group());
+        for line in pack_groups(&usage_groups, width) {
+            output.push('\n');
+            output.push_str(&line);
+        }
     }
 
     print!("{}", output);
@@ -190,6 +206,16 @@ const WIDTH_MARGIN: usize = 4;
 fn available_width(columns: Option<&str>) -> Option<usize> {
     let cols: usize = columns?.trim().parse().ok().filter(|c| *c > 0)?;
     Some(cols.saturating_sub(WIDTH_MARGIN).max(1))
+}
+
+/// Below this many usable columns the terminal is taken to be a phone, and the
+/// usage rows are dropped. An iPhone in portrait gives roughly 40–50 columns;
+/// a laptop split pane is rarely under 80.
+const PHONE_MAX_WIDTH: usize = 56;
+
+/// True when the usable width is phone-sized. Unknown width is not a phone.
+fn is_phone_width(width: Option<usize>) -> bool {
+    width.is_some_and(|w| w < PHONE_MAX_WIDTH)
 }
 
 /// Terminal columns a string occupies, ignoring ANSI CSI sequences.
@@ -262,6 +288,40 @@ fn pack_groups(groups: &[Vec<String>], width: Option<usize>) -> Vec<String> {
 }
 
 // --- Section formatters ---
+
+/// Nerd Font glyph for the OS, so a Mac and a Linux box read apart at a glance.
+/// The glyphs match p10k's `os_icon` under `nerdfont-complete`.
+fn format_os_icon(output: &mut String) {
+    let os_release = if cfg!(target_os = "linux") {
+        std::fs::read_to_string("/etc/os-release").ok()
+    } else {
+        None
+    };
+    if let Some(icon) = os_icon(std::env::consts::OS, os_release.as_deref()) {
+        let _ = write!(output, "{} ", icon);
+    }
+}
+
+/// Glyph for `os` (`std::env::consts::OS`); on Linux the distro comes from the
+/// `ID=` line of /etc/os-release, falling back to Tux.
+fn os_icon(os: &str, os_release: Option<&str>) -> Option<&'static str> {
+    match os {
+        "macos" => Some("\u{f179}"),
+        "linux" => {
+            let id = os_release
+                .into_iter()
+                .flat_map(str::lines)
+                .find_map(|l| l.strip_prefix("ID="))
+                .map(|v| v.trim().trim_matches('"'));
+            Some(match id {
+                Some("ubuntu") => "\u{f31b}",
+                Some("debian") => "\u{f306}",
+                _ => "\u{f17c}",
+            })
+        }
+        _ => None,
+    }
+}
 
 /// Machine name for registered machines + SSH fallback.
 /// Shells out to `machine-name` (custom_bins/) which checks the machine registry
@@ -818,6 +878,14 @@ mod tests {
     }
 
     #[test]
+    fn phone_width_only_when_narrow() {
+        assert!(is_phone_width(available_width(Some("45"))));
+        assert!(!is_phone_width(available_width(Some("60"))));
+        assert!(!is_phone_width(available_width(Some("120"))));
+        assert!(!is_phone_width(None));
+    }
+
+    #[test]
     fn visible_width_ignores_ansi_and_counts_wide_glyphs() {
         assert_eq!(visible_width("\x1b[2m\x1b[36mabc\x1b[0m"), 3);
         assert_eq!(visible_width("\x1b[38;2;255;176;85m5h \u{25D4} 24%\x1b[0m"), 8);
@@ -860,6 +928,17 @@ mod tests {
         let g = groups(&[&["\x1b[32mabc\x1b[0m"], &["\x1b[2mdef\x1b[0m"]]);
         assert_eq!(pack_groups(&g, Some(8)).len(), 1);
         assert_eq!(pack_groups(&g, Some(7)).len(), 2);
+    }
+
+    #[test]
+    fn os_icon_picks_mac_ubuntu_and_falls_back_to_tux() {
+        assert_eq!(os_icon("macos", None), Some("\u{f179}"));
+        let ubuntu = "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n";
+        assert_eq!(os_icon("linux", Some(ubuntu)), Some("\u{f31b}"));
+        assert_eq!(os_icon("linux", Some("ID=\"debian\"\n")), Some("\u{f306}"));
+        assert_eq!(os_icon("linux", Some("ID=fedora\n")), Some("\u{f17c}"));
+        assert_eq!(os_icon("linux", None), Some("\u{f17c}"));
+        assert_eq!(os_icon("windows", None), None);
     }
 
     #[test]

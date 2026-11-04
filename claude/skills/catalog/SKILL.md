@@ -100,6 +100,12 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `ship` | "ship this" or review, finish, merge, and push an authorized completed change |
 | `merge-worktree` | "merge this worktree", "merge my branch back", "finish this worktree" |
 | `review-pr-queue` | "address the comments on these PRs", "review and merge the queue", "clear the PR backlog" |
+| `babysit-pr` | "babysit this PR", "get it green", "fix CI" — one open PR driven to mergeable, one root cause per round |
+| `blast-radius` | "what could this break", "blast radius of X" — breakage beyond the diff, with the one safety fact proven by running code |
+| `why` | "why does X work this way", "where did this rule/threshold come from", "is this still needed" — parallel search of commits, session transcripts, specs, Slack, Granola, Gmail and docs; cited and tiered by confidence |
+| `sharpen` (user-invoked only) | /sharpen — make a task deeper, not bigger, then rewrite the prompt |
+| `correct` (user-invoked only) | /correct, "this keeps happening" — turns a repeated agent mistake into architecture, a type, a hook or a test |
+| `catch-me-up` | "catch me up", "what did I miss", "what needs me" — chat recap since the last message plus every open decision, bundled |
 | `superpowers:finishing-a-development-branch` | Implementation is done, tests pass, deciding merge/PR/cleanup |
 | `diagnosing-bugs` | "diagnose"/"debug this", something broken/throwing/failing/slow |
 | `deslop` | Before committing agent-written code — narrating comments, defensive guards, needless abstraction |
@@ -134,6 +140,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | Skill | Use when |
 |---|---|
 | `bear` | Reading or editing Bear notes (macOS) |
+| `focus-modes` | Switching or changing the Cold Turkey and ScreenZen blocking modes (research, writing, admin) through `focus` and its vault note |
 | `evidence-packs` | Assembling attachments for a visa, insurance or expense claim, audit or employer request — source-system printouts only, never text transcriptions |
 | `gmail-connector` | Pulling receipts, invoices or attachments out of Gmail via the claude.ai connector — the RAW-MIME route for attachments, search operators, read-only rules |
 | `things3` | Reading or managing Things 3 tasks, projects, areas, tags |
@@ -144,6 +151,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | Skill | Use when |
 |---|---|
 | `interview-me` | Stress-testing a plan or decision — "interview me", "grill me", "poke holes in this" |
+| `context-review` | /context-review, or the SessionStart nudge naming an unreviewed monthly context review — keep, trim or drop each flagged skill, agent, rule and stale handoff, on a reviewable page, applied only on approval |
 | `my-insights` (user-invoked only) | Usage analytics across every Claude Code session — goals, outcomes and friction, as an HTML report |
 | `skill-invocation-modes` (user-invoked only) | Choosing model-invoked vs user-invoked when authoring a skill, and what each costs |
 | `superpowers:writing-skills` (user-invoked only) | Reference for writing and editing skills well — read before authoring a new one |

@@ -93,6 +93,7 @@ COMPONENTS:
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
                       schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
+    --rex             Deploy Rex keybindings (init.lua) and UI layout prefs (macOS)
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
@@ -112,6 +113,7 @@ COMPONENTS:
     --dotfiles-sync   Install daily commit + rebase + push of this repo (08:05, both platforms)
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
+    --focus           Install the once-a-minute job that ends Cold Turkey focus breaks on time (macOS only)
     --hide-idle-apps  Hide, then close, then quit apps left covered up, per config/app-lifecycle.yaml (macOS only, off by default)
     --file-apps       Set default editor for coding file types (macOS only)
     --bedtime         Install bedtime timezone enforcement (macOS only, off by default)
@@ -601,6 +603,23 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         safe_symlink "$DOT_DIR/config/ghostty-themes" "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/themes"
     else
         log_warning "Ghostty config not found"
+    fi
+fi
+
+# ─── Rex ──────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_REX" == "true" ]]; then
+    log_info "Deploying Rex configuration..."
+    safe_symlink "$DOT_DIR/config/rex/init.lua" "${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua"
+
+    # UI settings live in the app's defaults domain, not in init.lua. Capture
+    # first so settings changed in Rex since the last sync are not reverted,
+    # then apply (on a fresh Mac, capture finds nothing and apply sets the file's rows).
+    if is_macos; then
+        "$DOT_DIR/custom_bins/rex-prefs" capture --quiet && "$DOT_DIR/custom_bins/rex-prefs" apply
+        if pgrep -xq Rex; then
+            log_info "  Rex is running: quit and reopen it if the layout does not update"
+        fi
     fi
 fi
 
@@ -1205,6 +1224,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     vault-sync-tripwire.service vault-sync-tripwire.timer \
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
+                    context-review.service context-review.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
                     cloud-spend-check.service cloud-spend-check.timer \
@@ -1237,7 +1257,12 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         # their own state directories. Enabled unconditionally for the same
         # reason as the tripwire above -- a check that is installed but never
         # scheduled reports nothing while looking healthy.
-        for timer in openrouter-drift.timer council-roster.timer; do
+        #
+        # context-review.timer rides the same loop: monthly, no API key, no
+        # pueue, and it writes only its own state directory plus one report
+        # copy in ~/vault. A box without transcripts produces a near-empty
+        # report rather than an error.
+        for timer in openrouter-drift.timer council-roster.timer context-review.timer; do
             [[ -f "$systemd_user_dir/$timer" ]] || continue
             if systemctl --user enable --now "$timer" 2>/dev/null; then
                 log_success "$timer enabled"
@@ -1445,8 +1470,25 @@ queue_scheduled_job() {
             "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
+    # `focus break` stops a Cold Turkey mode and leaves a detached waiter to
+    # start it again. This job is the backstop: it ends an overdue break even
+    # after the waiter dies or the Mac restarts. The setup script skips quietly
+    # when Cold Turkey or its config note is absent.
+    if [[ "$DEPLOY_FOCUS" == "true" ]] && is_macos; then
+        queue_scheduled_job focus-tick "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)FOCUS]} )); then
+        # Gated on an EXPLICIT --no-focus, for the reason given at the alfred
+        # branch above: `--only vim` must not tear this job down.
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh" --uninstall >/dev/null 2>&1 || true
+    fi
+
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
+    fi
+
+    if [[ "$DEPLOY_COREAUDIO_WATCH" == "true" ]] && is_macos; then
+        queue_scheduled_job coreaudio-watch "$DOT_DIR/scripts/cleanup/setup_coreaudio_watch.sh"
     fi
 
     if [[ "$DEPLOY_HIDE_IDLE_APPS" == "true" ]] && is_macos; then

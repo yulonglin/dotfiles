@@ -172,7 +172,20 @@ def test_bundled_skills_enabled_but_claude_api_off():
     # artifact-design/artifact-capabilities skills the Artifact tool requires
     # and the /simplify pass. Only claude-api (the 922KB injector) stays off,
     # via the per-skill override, which the resolver honors pre-injection.
-    # Exact-match on the whole map: a later "artifact-design": "off" entry
-    # would recreate the same silent breakage while a key-wise check passes.
+    # Other skills may be switched off: Claude Code's own skills UI writes
+    # these overrides and dotfiles-sync commits them, so an exact match on the
+    # whole map went red on 2026-10-20 for a deliberate toggle and stayed red.
+    # What must never be off is the set the Artifact tool and /simplify need
+    # (5e2e7a12 names them); a denylist keeps that the invariant.
+    protected = {
+        "artifact-design",
+        "artifact-capabilities",
+        "artifact-diagramming",
+        "dataviz",
+        "simplify",
+    }
+    overrides = settings["skillOverrides"]
     assert settings["disableBundledSkills"] is False
-    assert settings["skillOverrides"] == {"claude-api": "off"}
+    assert overrides.get("claude-api") == "off"
+    switched_off = {name for name, value in overrides.items() if value == "off"}
+    assert not protected & switched_off, f"required skills switched off: {sorted(protected & switched_off)}"

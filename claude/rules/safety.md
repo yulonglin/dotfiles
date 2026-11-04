@@ -12,8 +12,6 @@ A document Yulong reads or edits — a draft, writeup, plan or note — lives in
 
 Before any write to a document Yulong may have touched, re-read it and keep his changes exactly where he put them: never relocate, condense or restore text he added or removed. A `cp -i` "overwrite?" prompt means stop and diff, never `cp -f`.
 
-The `block_destructive_git.sh` hook independently refuses `reset --hard`, `checkout -- <path>`, `clean -f`, bare `stash` and `stash pop`.
-
 ## A quarantine or malware-check block is the defense working
 
 Name the package, version and guard, then stop. Never bypass it, and never do any of these without explicit approval — adding a third-party Homebrew tap, installing from an arbitrary URL or git repo, re-enabling lifecycle scripts, bypassing `min-release-age`, unsetting `UV_MALWARE_CHECK`, or passing `--no-quarantine`.

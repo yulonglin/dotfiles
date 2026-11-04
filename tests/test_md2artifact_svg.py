@@ -57,7 +57,7 @@ def _render(src_text: str, tmp: Path) -> str:
     src.write_text(src_text, encoding="utf-8")
     out = tmp / "sample.html"
     result = subprocess.run(
-        [_interpreter(), str(MD2ARTIFACT), str(src), "-o", str(out)],
+        [_interpreter(), str(MD2ARTIFACT), str(src), "-o", str(out), "--no-mermaid-check"],
         capture_output=True,
         text=True,
         check=False,

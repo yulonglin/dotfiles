@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""Keep Rex's UI settings and config/rex/ui-prefs.tsv in step, both ways.
+
+Rex stores its Settings (sidebar, tab style, pane headers, padding, themes...) in
+the macOS defaults domain com.superlogical.rex as Workspace.* keys, not in
+init.lua, so they cannot be symlinked like a config file.
+
+  rex-prefs capture   live Rex settings -> the TSV (run by dotfiles-sync daily)
+  rex-prefs apply     the TSV -> live Rex settings (run by deploy.sh --rex)
+  rex-prefs check     exit 1 if they differ (prints the differences)
+
+Capture merges: every scalar Workspace.* key that Rex has set on this Mac is
+written with its live value; rows for keys this Mac has not set are kept. So a
+setting changed in Rex lands in dotfiles, and a fresh Mac keeps the file's rows.
+A setting reset to its default (key deleted) is not removed from the file;
+delete that row by hand.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import plistlib
+import subprocess
+import sys
+from pathlib import Path
+
+DOMAIN = "com.superlogical.rex"
+PREFIX = "Workspace."
+DEFAULT_FILE = (
+    Path(__file__).resolve().parent.parent / "config" / "rex" / "ui-prefs.tsv"
+)
+
+# Scalar keys that are app state, not settings. Data, array and dict values
+# (lastFocusedSession, programActivitySeen, sessionOrder, ...) are skipped by type.
+STATE_KEYS = {
+    "hasDismissedRaisedTextContrastNotice",
+}
+
+HEADER = """\
+# Rex app UI settings (macOS defaults domain com.superlogical.rex, keys Workspace.<key>).
+# Two-way: `rex-prefs capture` writes live values here (dotfiles-sync runs it before each daily commit);
+# `rex-prefs apply` writes these rows into Rex (deploy.sh --rex runs capture, then apply).
+# Change a setting in Rex Settings and it reaches git on the next sync; a row deleted here is not unset in Rex.
+# key\ttype\tvalue
+"""
+
+
+def paint(text: str, sgr: str) -> str:
+    """ANSI colour for a terminal; plain text when piped or when NO_COLOR is set."""
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    return f"\033[{sgr}m{text}\033[0m"
+
+
+def encode(value: object) -> tuple[str, str] | None:
+    """(type, text) for a defaults scalar, or None for data/array/dict."""
+    if isinstance(value, bool):
+        return "bool", "true" if value else "false"
+    if isinstance(value, int):
+        return "int", str(value)
+    if isinstance(value, float):
+        return "float", f"{value:g}"
+    if isinstance(value, str) and "\t" not in value and "\n" not in value:
+        return "string", value
+    return None
+
+
+def read_live() -> dict[str, tuple[str, str]] | None:
+    """Scalar Workspace.* settings Rex has set on this Mac; None if the domain is absent."""
+    proc = subprocess.run(
+        ["defaults", "export", DOMAIN, "-"], capture_output=True, check=False
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    prefs = plistlib.loads(proc.stdout)
+    live: dict[str, tuple[str, str]] = {}
+    for full_key, value in prefs.items():
+        if not full_key.startswith(PREFIX):
+            continue
+        key = full_key[len(PREFIX) :]
+        if key in STATE_KEYS:
+            continue
+        enc = encode(value)
+        if enc is not None:
+            live[key] = enc
+    return live
+
+
+def read_file(path: Path) -> dict[str, tuple[str, str]]:
+    rows: dict[str, tuple[str, str]] = {}
+    if not path.exists():
+        return rows
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        key, typ, value = line.split("\t", 2)
+        rows[key] = (typ, value)
+    return rows
+
+
+def write_file(path: Path, rows: dict[str, tuple[str, str]]) -> None:
+    body = "".join(f"{k}\t{t}\t{v}\n" for k, (t, v) in sorted(rows.items()))
+    text = HEADER + body
+    if not path.exists() or path.read_text() != text:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(text)
+        tmp.replace(path)
+
+
+def diff(file_rows: dict, live: dict) -> list[str]:
+    out = []
+    for key in sorted(set(file_rows) | set(live)):
+        f, l = file_rows.get(key), live.get(key)
+        if f == l:
+            continue
+        if l is None:
+            out.append(f"{paint(key, '1')}: file {f[1]}, Rex unset")
+        elif f is None:
+            out.append(f"{paint(key, '1')}: Rex {l[1]}, not in file")
+        else:
+            out.append(f"{paint(key, '1')}: file {f[1]}, Rex {l[1]}")
+    return out
+
+
+def cmd_capture(path: Path, quiet: bool) -> int:
+    live = read_live()
+    if live is None:
+        if not quiet:
+            print(paint("Rex has no settings on this Mac; file left as is", "33"))
+        return 0
+    rows = read_file(path)
+    changes = diff({k: rows[k] for k in rows if k in live}, live)
+    rows.update(live)
+    write_file(path, rows)
+    if not quiet:
+        if changes:
+            print(paint(f"captured {len(changes)} change(s) into {path}", "32"))
+            print("\n".join(f"  {c}" for c in changes))
+        else:
+            print(paint("in sync", "32") + f": {path} already matches Rex")
+    return 0
+
+
+def cmd_apply(path: Path) -> int:
+    rows = read_file(path)
+    if not rows:
+        print(paint(f"no rows in {path}", "31"), file=sys.stderr)
+        return 1
+    failed = 0
+    for key, (typ, value) in rows.items():
+        rc = subprocess.run(
+            ["defaults", "write", DOMAIN, PREFIX + key, f"-{typ}", value], check=False
+        ).returncode
+        failed += rc != 0
+    if failed:
+        print(
+            paint(f"{failed} of {len(rows)} settings failed to write", "31"),
+            file=sys.stderr,
+        )
+        return 1
+    print(paint(f"applied {len(rows)} Rex settings", "32") + f" from {path}")
+    return 0
+
+
+def cmd_check(path: Path) -> int:
+    live = read_live() or {}
+    changes = diff(read_file(path), live)
+    if changes:
+        print(paint("differs", "33") + f": {path} vs Rex")
+        print("\n".join(f"  {c}" for c in changes))
+        return 1
+    print(paint("in sync", "32"))
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("command", choices=["capture", "apply", "check"])
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=DEFAULT_FILE,
+        help=f"TSV to sync (default {DEFAULT_FILE})",
+    )
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="capture: print nothing"
+    )
+    args = parser.parse_args()
+    if sys.platform != "darwin":
+        if not args.quiet:
+            print(
+                "rex-prefs: macOS only (Rex settings live in macOS defaults); nothing to do"
+            )
+        return 0
+    if args.command == "capture":
+        return cmd_capture(args.file, args.quiet)
+    if args.command == "apply":
+        return cmd_apply(args.file)
+    return cmd_check(args.file)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -242,7 +242,7 @@ def test_capabilities_flag_prints_the_exact_json_without_a_source():
     assert r.stdout == (
         '{"db":{"rules":[{"path":"seen","read":"admin","write":"owner"},'
         '{"path":"seen/{self}","read":"interact","write":"interact"}]},'
-        '"user":{},"comments":{"composer_only":true}}\n'
+        '"user":{},"comments":{"composer_only":true},"downloads":{}}\n'
     )
     json.loads(r.stdout)
 

@@ -6,7 +6,8 @@
 # This wrapper only changes a bare `brew upgrade` on macOS: it lists outdated
 # casks whose app is running (brew-running-casks), offers to skip them or quit
 # them first, and runs `reset-mac-media --check` afterwards. `command brew upgrade` bypasses it,
-# and an upgrade that names packages passes straight through.
+# and an upgrade that names packages passes straight through. After a formula
+# upgrade it also offers to remove formulae nothing needs (_brew_tidy).
 
 if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
     brew() {
@@ -46,6 +47,7 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         fi
         if [[ -z "$running" ]]; then
             command brew upgrade "$@" || return
+            [[ "$only" == cask ]] || _brew_tidy
             reset-mac-media --check --since 15
             return 0
         fi
@@ -92,8 +94,33 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
                 fi
                 ;;
         esac
+        [[ "$only" == cask ]] || _brew_tidy
         reset-mac-media --check --since 15
         return 0
+    }
+
+    # Offer to remove formulae nothing needs. Homebrew autoremoves only on
+    # `brew uninstall` and its 30-day periodic cleanup, and never drops a
+    # dependency that an out-of-date install record still lists (2026-10-30:
+    # poppler's record held icu4c@78). brew-orphans finds both; the answer
+    # defaults to yes, and end of input (a pipe, a script) means no.
+    _brew_tidy() {
+        [[ -z "${HOMEBREW_NO_AUTOREMOVE:-}" ]] || return 0
+        (( $+commands[brew-orphans] )) || return 0
+        local color=never report="" rc=0
+        [[ -t 1 && -z "${NO_COLOR:-}" ]] && color=always
+        report="$(brew-orphans --color="$color")" || rc=$?
+        (( rc == 1 )) || return 0
+        print -r -- "$report"
+        local answer=""
+        read "answer?Remove them now? [Y/n] " || return 0
+        [[ "$answer" == [nN]* ]] && return 0
+        local -a holders=("${(@f)$(brew-orphans --reinstall-names)}")
+        holders=(${holders:#})
+        if (( ${#holders} )); then
+            command brew reinstall "${holders[@]}" || return 0
+        fi
+        command brew autoremove
     }
 
     # Quit each listed app the normal way (it may ask to save), then wait up to

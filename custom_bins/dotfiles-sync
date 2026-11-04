@@ -259,6 +259,14 @@ sync_repo() {
     fi
     git rev-parse -q --verify "$upstream" >/dev/null || { fail_repo "$name" "no $remote/$branch to sync with"; return 1; }
 
+    # ── 0. capture app settings kept outside files ───────────────────────────
+    # Rex keeps its Settings in macOS defaults, not a file we can symlink, so
+    # pull the live values into config/rex/ui-prefs.tsv and let them commit
+    # like any other edit.
+    if (( ! DRY_RUN )) && [[ -x "$repo/custom_bins/rex-prefs" ]]; then
+        "$repo/custom_bins/rex-prefs" capture --quiet || log "$name: rex-prefs capture failed; Rex settings not captured"
+    fi
+
     # ── 1. commit ────────────────────────────────────────────────────────────
     local held="" dirty_after=0 committed=0 msg
     msg="sync: $(hostname -s 2>/dev/null || hostname) $(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -1,0 +1,1799 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml>=6.0", "ruamel.yaml>=0.18"]
+# ///
+"""Switch Cold Turkey Blocker between work modes defined in one config note.
+
+    focus research            # stop the other 'mode: …' blocks, start this one
+    focus off                 # stop every unlocked 'mode: …' block
+    focus status              # which blocks Cold Turkey has enabled, and drift from the config
+    focus sync                # add missing sites to existing mode blocks through the CLI
+    focus export [PATH]       # write a .ctbbl file for Blocks → Import blocks…
+    focus screenzen [--dry-run]  # write ScreenZen's groups from the same note
+    focus add travel westjet.com  # add to a group in the note, then sync both apps
+    focus pull [--dry-run]    # copy sites and apps added inside Cold Turkey into the note
+    focus deep [MINUTES]      # a timer: block its groups on top of any mode, locked
+    focus alfred [QUERY]      # Alfred script-filter JSON (config/alfred/workflows/focus)
+    focus install-agent       # launchd job that ends an overdue break every minute
+    focus uninstall-agent     # remove that job (deploy.sh --no-focus)
+
+Every site and app is defined once, in a named group. Modes and the always-on
+blocklists only name groups:
+
+    groups:       {papers: {sites: [arxiv.org]}, comms: {apps: [Telegram]}}
+    always_allow: [papers]                     # allowed in every mode
+    modes:        {research: {allow: [papers], block: [comms]}}
+    blocklists:   {screenzen: {"🚫 distractions": {block: [comms]}},
+                   cold_turkey: {"always": {block: [comms], allow: [papers]}}}
+
+Two layers. ScreenZen gives friction and follows the mode: focus owns one allow
+group per mode, '✅ focus: <mode>', plus '✅ focus: shared' for no mode, each
+holding the shared list plus that mode's sites minus what ScreenZen's own 🚫
+groups block; the no-mode group holds every mode's sites, so a mode only
+tightens it. Exactly one is on, so ScreenZen shows the mode; every other site
+gets a pause screen. A switch or 'off' turns the right one on. Its 🚫 groups are
+written from `blocklists.screenzen`, and all other ✅ groups are off. ScreenZen has
+no CLI, so each write saves a
+backup to $FOCUS_BACKUPS (default ~/scratch/blocker-backups), closes it,
+writes its preferences with `defaults`, reads them back and reopens it.
+ScreenZen matches by substring, so an allow pattern is cut at its first '*' (it
+then allows at least what Cold Turkey does) and a block pattern loses its '*'s.
+
+Cold Turkey blocks hard, one mode at a time. Each mode is a block named
+'mode: <name>' whose website list is '*.*' and whose exceptions are the sites of
+`always_allow` plus the mode's `allow` groups; it blocks the apps of its `block`
+groups, since Cold Turkey cannot allowlist apps. Only one mode runs at a time:
+two running allowlist blocks would allow only the sites that are in both.
+`blocklists.cold_turkey` describes the always-on blocks; `status` reports their
+drift but nothing writes them, because their delay locks stop the CLI. A site a
+mode allows but an always-on block bans stays banned, and `status` flags it.
+
+An agent (CLAUDECODE=1) loosens only after a delay (`agent_loosen_delay_minutes`,
+default 10): stopping a mode, switching modes, a sync that allows new sites, or
+a ScreenZen write that allows more or blocks less. The first call queues that
+exact request and exits 3; the same call after the delay runs it. Starting a
+mode from none, and any change that only tightens, run at once. People are
+never delayed.
+
+The config is a Markdown note with one fenced ```yaml block, kept in the vault so
+personal entries stay out of this public repo. Override its path with
+--config or $FOCUS_CONFIG.
+
+Cold Turkey's CLI can start and stop blocks and add sites, but cannot create a
+block, add an app or remove anything. `export` covers those: it writes the mode
+blocks in Cold Turkey's own export format, which Import blocks… reads. `status`
+reads Cold Turkey's settings database (an obfuscated JSON blob) and never writes it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import datetime as dt
+import json
+import os
+import plistlib
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+from pathlib import Path
+
+import yaml
+
+DEFAULT_CONFIG = Path.home() / "vault/tooling/dotfiles/config/cold-turkey.md"
+CONFIG_PATH = DEFAULT_CONFIG  # set from --config in main; children are given the same
+AGENT_LABEL = "com.yulonglin.focus.tick"
+AGENT_PLIST = Path.home() / f"Library/LaunchAgents/{AGENT_LABEL}.plist"
+CT_BIN = Path(
+    "/Applications/Cold Turkey Blocker.app/Contents/MacOS/Cold Turkey Blocker"
+)
+CT_DB = Path("/Library/Application Support/Cold Turkey/data-app.db")
+APP_DIRS = [
+    Path("/Applications"),
+    Path("/System/Applications"),
+    Path.home() / "Applications",
+]
+PREFIX = "mode: "
+TIMER_PREFIX = "timer: "
+BLOCK_ALL = "*.*"
+SZ_DOMAIN = (
+    Path.home()
+    / "Library/Group Containers/group.ScreenZen.macos/Library/Preferences/group.ScreenZen.macos"
+)
+SZ_MODE_PREFIX = "✅ focus: "  # ScreenZen allow groups this tool owns, one per mode
+SZ_BUNDLE = "com.scottharvey.screenzenapp.ios"
+
+
+def frontmost_bundle() -> str | None:
+    """Bundle id of the app in front, via lsappinfo (no Apple Events permission needed)."""
+    try:
+        asn = subprocess.run(
+            ["lsappinfo", "front"], capture_output=True, text=True
+        ).stdout
+        out = subprocess.run(
+            ["lsappinfo", "info", "-only", "bundleid", asn.strip()],
+            capture_output=True,
+            text=True,
+        ).stdout
+    except OSError:
+        return None
+    m = re.search(r'"CFBundleIdentifier"="([^"]+)"', out)
+    return m.group(1) if m else None
+
+
+# Lists the owners of on-screen app windows (layer 0), front to back. Read-only: needs
+# no Apple Events or Accessibility permission.
+SZ_WINDOWS_JXA = """
+ObjC.import("CoreGraphics");
+const w = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1, 0))) || [];
+JSON.stringify(w.filter((x) => x.kCGWindowLayer === 0).map((x) => x.kCGWindowOwnerName));
+"""
+SZ_TRACE = (
+    Path(os.environ.get("FOCUS_STATE", Path.home() / ".local/state/focus"))
+    / "screenzen-trace.log"
+)
+
+
+def sz_window() -> tuple[bool, bool]:
+    """(ScreenZen has an on-screen window, that window is the topmost app window)."""
+    r = subprocess.run(
+        ["osascript", "-l", "JavaScript", "-e", SZ_WINDOWS_JXA],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        owners = json.loads(r.stdout)
+    except ValueError:
+        return False, False
+    return "ScreenZen" in owners, bool(owners) and owners[0] == "ScreenZen"
+
+
+# Clicks the close button of each ScreenZen window through Accessibility and prints
+# how many windows remain. Closing the window leaves ScreenZen running and blocking
+# (checked 2026-11-03); it has a menu-bar item and no Dock icon.
+SZ_CLOSE_APPLESCRIPT = """
+tell application "System Events" to tell process "ScreenZen"
+    repeat with w in (every window)
+        click (first button of w whose subrole is "AXCloseButton")
+    end repeat
+    delay 0.2
+    return count of windows
+end tell
+"""
+
+
+def close_sz_window() -> bool:
+    """Close ScreenZen's window; False when Accessibility is not granted to whatever
+    runs focus (Rex, Alfred, launchd) or the window would not close."""
+    r = subprocess.run(
+        ["osascript", "-e", SZ_CLOSE_APPLESCRIPT], capture_output=True, text=True
+    )
+    return r.returncode == 0 and r.stdout.strip() == "0"
+
+
+def hand_back_focus(front: str | None) -> None:
+    """Get ScreenZen's window out of the way after a relaunch, and give the front back.
+
+    ScreenZen opens its main window on every launch, despite 'open -g -j', and refuses
+    to be hidden from outside (NSRunningApplication.hide returns false; lsappinfo
+    setfront gets permErr). Over a full-screen app (Rex, 2026-11-03) that window
+    floats inside the full-screen Space, so no activation puts the app back above it.
+    So wait until the window is on screen, close it through Accessibility, and 'open
+    -b' the app that had the front (ScreenZen holds it after launch).
+
+    Without Accessibility, fall back to raising that app while ScreenZen holds the
+    front: that works on a desktop Space (Cold Turkey, Safari, 2026-11-03), not over a
+    full-screen app. Raise again only if ScreenZen retakes the front (at most three
+    times), and stop once the window has been below or off screen for two checks, or
+    4 s after it appeared. Waiting for ScreenZen to become the front app instead of
+    for its window fired before the window existed (2026-11-02). FOCUS_TRACE=1 appends
+    each step to SZ_TRACE. With the screen locked, loginwindow is in front and there is
+    no app to hand back to."""
+    if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
+        return
+    t0 = time.monotonic()
+    log = [f" 0.00s front was {front}"]
+
+    def check(step):
+        on, top = sz_window()
+        active = frontmost_bundle()
+        log.append(
+            f"{time.monotonic() - t0:5.2f}s {step}: window {on}, on top {top}, "
+            f"front {active}"
+        )
+        return on, top, active
+
+    on = top = False
+    while not on and time.monotonic() - t0 < 6:
+        on, top, active = check("waiting")
+        if not on:
+            time.sleep(0.1)
+    if on and close_sz_window():
+        if frontmost_bundle() != front:
+            subprocess.run(["open", "-b", front], capture_output=True)
+        check("closed ScreenZen's window")
+        on = False  # nothing left to raise above
+    raises = below = 0
+    window_up = time.monotonic()
+    while on and below < 2 and time.monotonic() - window_up < 4:
+        if top and active != front and raises < 3:
+            subprocess.run(["open", "-b", front], capture_output=True)
+            raises += 1
+        time.sleep(0.3)
+        on, top, active = check(f"after {raises} raise(s)")
+        below = 0 if top else below + 1
+    if os.environ.get("FOCUS_TRACE"):
+        SZ_TRACE.parent.mkdir(parents=True, exist_ok=True)
+        with SZ_TRACE.open("a") as f:
+            f.write(
+                f"--- {dt.datetime.now():%Y-%m-%dT%H:%M:%S}\n" + "\n".join(log) + "\n"
+            )
+
+
+SZ_BACKUPS_KEPT = 50
+BACKUP_DIR = Path(
+    os.environ.get("FOCUS_BACKUPS", Path.home() / "scratch/blocker-backups")
+)
+PENDING = (
+    Path(os.environ.get("FOCUS_STATE", Path.home() / ".local/state/focus"))
+    / "pending.json"
+)
+DEFAULT_DELAY_MIN = 10
+EXPIRE_S = 3600  # a due request not run within this long must be queued again
+
+
+def paint(text: str, sgr: str) -> str:
+    """ANSI colour for a terminal; plain text when piped (Alfred) or when NO_COLOR is set."""
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    return f"\033[{sgr}m{text}\033[0m"
+
+
+def by_agent() -> bool:
+    # Claude Code sets CLAUDECODE=1 in every shell it runs.
+    return os.environ.get("CLAUDECODE") == "1"
+
+
+def gate(cfg: dict, request: str, why: str) -> None:
+    """Make an agent wait before it loosens blocking; return only when it may go ahead.
+
+    The first call queues the exact request and exits; the same call repeated after
+    the delay runs it. A person running focus is never delayed: Cold Turkey and
+    ScreenZen already give them their own friction. This is a speed bump, not a
+    lock: an agent that edits this file or the queue gets past it.
+    """
+    if not by_agent():
+        return
+    delay = int(cfg.get("agent_loosen_delay_minutes", DEFAULT_DELAY_MIN))
+    now = time.time()
+    try:
+        pending = json.loads(PENDING.read_text())
+    except (FileNotFoundError, ValueError):
+        pending = {}
+    pending = {k: v for k, v in pending.items() if now < v + EXPIRE_S}
+    due = pending.get(request)
+    if due is not None and now >= due:
+        del pending[request]
+        PENDING.write_text(json.dumps(pending))
+        return
+    if due is None:
+        due = now + delay * 60
+        pending[request] = due
+        PENDING.parent.mkdir(parents=True, exist_ok=True)
+        PENDING.write_text(json.dumps(pending))
+    at = dt.datetime.fromtimestamp(due).strftime("%H:%M:%S")
+    print(
+        f"focus: {why}. An agent's loosening waits {delay} min: queued; "
+        f"run the same command again after {at} to apply it."
+    )
+    sys.exit(3)
+
+
+def load_config(path: Path) -> dict:
+    text = path.read_text()
+    if path.suffix == ".md":
+        m = re.search(r"^```ya?ml\n(.*?)^```", text, re.S | re.M)
+        if not m:
+            sys.exit(f"focus: no ```yaml block in {path}")
+        text = m.group(1)
+    cfg = yaml.safe_load(text) or {}
+    problems = []
+    unknown = set(cfg) - {
+        "groups",
+        "always_allow",
+        "modes",
+        "blocklists",
+        "timers",
+        "agent_loosen_delay_minutes",
+        "off_hours",
+        "break_max_minutes",
+        "no_mode_allow",
+    }
+    if unknown:
+        problems.append(f"unknown top-level keys: {sorted(unknown)}")
+    for span in cfg.get("off_hours") or []:
+        if not re.fullmatch(r"\d\d:\d\d-\d\d:\d\d", str(span)):
+            problems.append(f"off_hours entry {span!r} must look like '22:00-23:15'")
+    groups = cfg.setdefault("groups", {})
+    for name, g in groups.items():
+        if set(g or {}) - {"sites", "apps"}:
+            problems.append(f"group {name!r} may only have 'sites' and 'apps'")
+    refs = [
+        ("always_allow", cfg.get("always_allow") or []),
+        ("no_mode_allow", cfg.get("no_mode_allow") or []),
+    ]
+    for name, mode in (cfg.get("modes") or {}).items():
+        if set(mode or {}) - {"allow", "block"}:
+            problems.append(f"mode {name!r} may only have 'allow' and 'block'")
+        refs += [
+            (f"mode {name}", (mode.get("allow") or []) + (mode.get("block") or []))
+        ]
+    for app, lists in (cfg.get("blocklists") or {}).items():
+        if app not in ("cold_turkey", "screenzen"):
+            problems.append(f"blocklists key {app!r} must be cold_turkey or screenzen")
+        for name, bl in (lists or {}).items():
+            keys = {"block", "allow"} | ({"off_in"} if app == "screenzen" else set())
+            if set(bl or {}) - keys:
+                problems.append(f"{app} {name!r} may only have {sorted(keys)}")
+            for m in bl.get("off_in") or []:
+                if m != "none" and m not in (cfg.get("modes") or {}):
+                    problems.append(f"{app} {name!r} off_in names unknown mode {m!r}")
+            refs += [
+                (f"{app} {name}", (bl.get("block") or []) + (bl.get("allow") or []))
+            ]
+    for name, t in (cfg.get("timers") or {}).items():
+        if set(t or {}) - {"block", "minutes"}:
+            problems.append(f"timer {name!r} may only have 'block' and 'minutes'")
+        if name in (cfg.get("modes") or {}):
+            problems.append(f"timer {name!r} has the same name as a mode")
+        refs += [(f"timer {name}", t.get("block") or [])]
+    for where, names in refs:
+        for n in names:
+            if n not in groups:
+                problems.append(f"{where} names unknown group {n!r}")
+    if problems:
+        sys.exit(f"focus: {path}:\n  " + "\n  ".join(problems))
+    return cfg
+
+
+def group_items(cfg: dict, names: list[str], kind: str) -> list[str]:
+    seen: dict[str, None] = {}
+    for n in names:
+        for item in cfg["groups"][n].get(kind) or []:
+            seen[str(item)] = None
+    return list(seen)
+
+
+def desired_exceptions(cfg: dict, mode: str) -> list[str]:
+    names = (cfg.get("always_allow") or []) + (cfg["modes"][mode].get("allow") or [])
+    return group_items(cfg, names, "sites")
+
+
+def resolve_app(name: str) -> tuple[Path, str] | None:
+    """Return the app bundle and its bundle id, or None if it is not installed."""
+    for d in APP_DIRS:
+        bundle = d / f"{name}.app"
+        info = bundle / "Contents/Info.plist"
+        if info.exists():
+            with info.open("rb") as f:
+                bid = plistlib.load(f).get("CFBundleIdentifier")
+            if bid:
+                return bundle, bid
+    return None
+
+
+def ct_apps(names: list[str]) -> tuple[list[str], list[str]]:
+    """Cold Turkey app entries ('app:<Name>.app:<bundle id>') and the names not found."""
+    found, missing = [], []
+    for name in names:
+        r = resolve_app(name)
+        if r:
+            found.append(f"app:{r[0].name}:{r[1]}")
+        else:
+            missing.append(name)
+    return found, missing
+
+
+def desired_apps(cfg: dict, mode: str) -> tuple[list[str], list[str]]:
+    return ct_apps(group_items(cfg, cfg["modes"][mode].get("block") or [], "apps"))
+
+
+def conflicts(cfg: dict) -> list[str]:
+    """A Cold Turkey exception only overrides its own block, so a site another block bans stays banned."""
+    out = []
+    for bl_name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
+        banned = set(group_items(cfg, bl.get("block") or [], "sites"))
+        for mode in cfg["modes"]:
+            for site in desired_exceptions(cfg, mode):
+                if site in banned:
+                    out.append(
+                        f"{site!r} is allowed in mode {mode!r} but blocked by {bl_name!r}"
+                    )
+    return out
+
+
+def decode_settings(value: str) -> dict:
+    """Cold Turkey stores its settings as a short tag plus hex bytes shifted by 0x11."""
+    for off in range(0, 9):
+        h = value[off:]
+        h = h[: len(h) // 2 * 2]
+        try:
+            raw = bytes(
+                (int(h[i : i + 2], 16) - 0x11) % 256 for i in range(0, len(h), 2)
+            )
+            return json.loads(raw.decode())
+        except (ValueError, UnicodeDecodeError):
+            continue
+    raise ValueError("unrecognised Cold Turkey settings encoding")
+
+
+def read_blocks() -> dict:
+    # Copy the database with its WAL so the read sees writes not yet checkpointed.
+    with tempfile.TemporaryDirectory() as tmp:
+        for suffix in ("", "-wal", "-shm"):
+            src = Path(f"{CT_DB}{suffix}")
+            if src.exists():
+                shutil.copyfile(src, Path(tmp) / f"data-app.db{suffix}")
+        con = sqlite3.connect(Path(tmp) / "data-app.db")
+        try:
+            (value,) = con.execute(
+                "select value from settings where key='settings'"
+            ).fetchone()
+        finally:
+            con.close()
+    return decode_settings(value)["blocks"]
+
+
+def ct(*args: str) -> None:
+    out = subprocess.run([str(CT_BIN), *args], capture_output=True, text=True)
+    text = (out.stdout + out.stderr).strip()
+    if out.returncode or "isn't responding" in text:
+        sys.exit(
+            f"focus: Cold Turkey CLI failed for {' '.join(args)!r}: {text or out.returncode}"
+        )
+
+
+def switch(name: str, on: bool) -> None:
+    """Start or stop a block, then confirm in the database: the CLI exits 0 even when it fails."""
+    ct("-start" if on else "-stop", name)
+    want = "true" if on else "false"
+    for _ in range(50):
+        if read_blocks().get(name, {}).get("enabled") == want:
+            return
+        time.sleep(0.1)
+    sys.exit(f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}")
+
+
+def mode_blocks(blocks: dict) -> dict:
+    return {n: b for n, b in blocks.items() if n.startswith(PREFIX)}
+
+
+def is_locked(block: dict) -> bool:
+    return block.get("lock", "none") != "none"
+
+
+BREAK_FILE = PENDING.parent / "break.json"
+DEFAULT_BREAK_MAX = 30
+
+
+def read_break() -> dict | None:
+    """The current break, {'modes': [...], 'until': epoch}, or None. A file that does
+    not parse is treated as an ended break with nothing to restore, so it never blocks
+    a resume."""
+    try:
+        b = json.loads(BREAK_FILE.read_text())
+    except FileNotFoundError:
+        return None
+    except ValueError:
+        return {"modes": [], "until": 0}
+    if not isinstance(b, dict):
+        return {"modes": [], "until": 0}
+    modes = b.get("modes") or ([b["mode"]] if b.get("mode") else [])
+    until = b.get("until")
+    return {
+        "modes": [m for m in modes if isinstance(m, str)],
+        "until": until if isinstance(until, (int, float)) else 0,
+    }
+
+
+def end_break(cfg: dict) -> bool:
+    """If a break is over, start every mode it stopped that is not running now, and
+    clear it. Three things call it: the waiter that 'break' starts, the start of every
+    focus command, and the once-a-minute launchd job ('focus install-agent'). Without
+    that job, a killed waiter or a reboot leaves the break open until focus next runs."""
+    b = read_break()
+    if b is None or time.time() < b["until"]:
+        return False
+    back = [m for m in b["modes"] if m in cfg["modes"]]
+    running = set(running_modes(cfg))
+    for m in back:
+        if m not in running:
+            switch(PREFIX + m, on=True)  # exits on failure, leaving the record to retry
+    # Clear the record only once every mode is back, so a failed start is retried by the
+    # next focus command instead of being forgotten.
+    BREAK_FILE.unlink(missing_ok=True)
+    if back:
+        sz_follow(cfg, running_modes(cfg), switched=True)
+        print(f"break over: {', '.join(back)} running again")
+    return True
+
+
+def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
+    """Whether now falls in one of the note's off_hours spans ('22:00-23:15')."""
+    now = now or dt.datetime.now()
+    t = now.strftime("%H:%M")
+    for span in cfg.get("off_hours") or []:
+        start, end = str(span).split("-")
+        if (start <= t < end) if start <= end else (t >= start or t < end):
+            return True
+    return False
+
+
+def cmd_break(cfg: dict, args: list[str]) -> None:
+    """Stop the running modes for N minutes; they start again when the break ends."""
+    cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    minutes = args[0] if args else "15"
+    if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
+        sys.exit(f"focus: a break is 1 to {cap} minutes, got {minutes!r}")
+    if (b := read_break()) and time.time() < b["until"]:
+        end = dt.datetime.fromtimestamp(b["until"])
+        sys.exit(
+            f"focus: already on a break until {end:%H:%M:%S} (back to {', '.join(b['modes'])})"
+        )
+    blocks = read_blocks()
+    running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
+    if not running:
+        sys.exit("focus: no mode is running, so there is nothing to take a break from")
+    gate(
+        cfg, f"break:{','.join(sorted(running))}:{minutes}", f"a {minutes}-minute break"
+    )
+    until = time.time() + int(minutes) * 60
+    BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    BREAK_FILE.write_text(json.dumps({"modes": running, "until": until}))
+    # Start the waiter before anything is switched off: if it cannot start, no mode stops.
+    # Any later focus command also ends an expired break, so the waiter is not the only way.
+    try:
+        subprocess.Popen(
+            [sys.executable, sys.argv[0], "--config", str(CONFIG_PATH), "resume"],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as e:
+        BREAK_FILE.unlink(missing_ok=True)
+        sys.exit(f"focus: could not start the break timer ({e}); no mode was stopped")
+    for name in running:
+        switch(PREFIX + name, on=False)
+    sz_follow(cfg, running_modes(cfg), switched=True)
+    end = dt.datetime.fromtimestamp(until)
+    print(f"break until {end:%H:%M:%S}; {', '.join(running)} starts again by itself")
+    if not AGENT_PLIST.exists():
+        print("tip: 'focus install-agent' makes sure a break ends even after a restart")
+
+
+def cmd_install_agent() -> None:
+    """Install the once-a-minute launchd job that ends overdue breaks, so a break ends
+    even if its waiter dies, the Mac restarts, or focus is never run again."""
+    path = os.environ.get("PATH", "")
+    extra = ["/opt/homebrew/bin", str(Path.home() / ".local/bin"), "/usr/bin", "/bin"]
+    plist = {
+        "Label": AGENT_LABEL,
+        "ProgramArguments": [
+            str(Path(sys.argv[0]).resolve()),
+            "--config",
+            str(CONFIG_PATH),
+            "tick",
+        ],
+        "StartInterval": 60,
+        "RunAtLoad": True,
+        "EnvironmentVariables": {"PATH": ":".join(extra + [path])},
+        "StandardOutPath": str(Path.home() / "Library/Logs/focus-tick.log"),
+        "StandardErrorPath": str(Path.home() / "Library/Logs/focus-tick.log"),
+    }
+    AGENT_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    AGENT_PLIST.write_bytes(plistlib.dumps(plist))
+    domain = f"gui/{os.getuid()}"
+    subprocess.run(
+        ["launchctl", "bootout", f"{domain}/{AGENT_LABEL}"], capture_output=True
+    )
+    r = subprocess.run(
+        ["launchctl", "bootstrap", domain, str(AGENT_PLIST)],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode:
+        sys.exit(
+            f"focus: wrote {AGENT_PLIST} but launchctl refused it: {r.stderr.strip()}"
+        )
+    print(f"installed {AGENT_LABEL}: checks every minute for a break that is over")
+
+
+def cmd_uninstall_agent() -> None:
+    """Remove the launchd job that 'install-agent' installs. Safe to run when it is absent."""
+    loaded = not subprocess.run(
+        ["launchctl", "bootout", f"gui/{os.getuid()}/{AGENT_LABEL}"],
+        capture_output=True,
+    ).returncode
+    present = AGENT_PLIST.exists()
+    AGENT_PLIST.unlink(missing_ok=True)
+    if loaded or present:
+        print(f"removed {AGENT_LABEL}")
+
+
+def cmd_resume(cfg: dict) -> None:
+    """Wait for the break to end, then start its modes again (run detached by 'break')."""
+    while (b := read_break()) and time.time() < b["until"]:
+        time.sleep(min(20, max(1, b["until"] - time.time())))
+    end_break(cfg)
+
+
+def cmd_start(cfg: dict, mode: str) -> None:
+    if mode not in cfg["modes"]:
+        sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
+    blocks = read_blocks()
+    target = PREFIX + mode
+    if target not in blocks:
+        sys.exit(
+            f"focus: Cold Turkey has no block {target!r}. Run 'focus export' and import the file."
+        )
+    running = [
+        n
+        for n, b in mode_blocks(blocks).items()
+        if n != target and b.get("enabled") == "true"
+    ]
+    for name in running:
+        if is_locked(blocks[name]):
+            sys.exit(
+                f"focus: {name!r} is locked, so it cannot be stopped; not starting {target!r}."
+            )
+    if running:
+        # Starting from no mode only tightens; switching may allow sites the current mode blocks.
+        # The key names the current state too, so an approval for one switch does not
+        # carry over to a different one.
+        gate(
+            cfg,
+            f"switch:{','.join(sorted(running))}->{mode}",
+            f"switching from {', '.join(running)} to {target!r}",
+        )
+    # Start the target before stopping the others: for a moment both run, which only blocks
+    # more, and if the start fails the old mode is still on. Failing closed, not open.
+    switched = blocks[target].get("enabled") != "true"
+    if switched:
+        switch(target, on=True)
+    # A mode started by hand ends any break, but only once it is confirmed running, so a
+    # failed start leaves the break to be restored.
+    BREAK_FILE.unlink(missing_ok=True)
+    for name in running:
+        switch(name, on=False)
+    # ScreenZen follows the mode. A real switch already passed the agent gate; re-running
+    # the mode that already runs approved nothing, so it waives nothing either.
+    sz_follow(cfg, [mode], switched=switched)
+    print(f"started {target!r}")
+
+
+def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
+    """Point ScreenZen's allow list at the running modes. Cold Turkey has already switched,
+    so a ScreenZen failure is reported without undoing that."""
+    if not Path(f"{SZ_DOMAIN}.plist").exists():
+        return  # ScreenZen is not installed here
+    try:
+        loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
+        # When the mode really changed, allowing its own sites is what the switch already
+        # approved. Anything else that loosens ScreenZen (a note edit since the last write:
+        # a block removed, a shared site added) still waits, under the key that
+        # 'focus screenzen' would use.
+        mode_sites, mode_off = set(), set()
+        if switched:
+            # Measured against the shared list, not the no-mode list, which holds every
+            # mode's sites.
+            mode_sites = set(sz_allow_sites(cfg, modes)) - sz_shared_sites(cfg)
+            # So is standing aside a 🚫 group whose off_in names the new mode.
+            mode_off = {
+                f"{name}:off"
+                for name, bl in (cfg.get("blocklists") or {})
+                .get("screenzen", {})
+                .items()
+                if sz_group_off(bl, modes)
+            }
+        other = [
+            x
+            for x in loosen
+            if x not in mode_off
+            and not (":+" in x and x.split(":+", 1)[1] in mode_sites)
+        ]
+        if other:
+            try:
+                gate(
+                    cfg, "screenzen:" + ",".join(sorted(loosen)), "loosening ScreenZen"
+                )
+            except SystemExit:
+                print(
+                    "ScreenZen not updated yet; run 'focus screenzen' after the wait."
+                )
+                return
+        cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
+    except (subprocess.CalledProcessError, OSError, ValueError) as e:
+        print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+
+
+def cmd_off(cfg: dict) -> None:
+    running = {
+        n: b
+        for n, b in mode_blocks(read_blocks()).items()
+        if b.get("enabled") == "true"
+    }
+    locked = [n for n, b in running.items() if is_locked(b)]
+    for name in locked:
+        print(f"{name!r} is locked; left running")
+        del running[name]
+    on_break = read_break()
+    if not running:
+        # Always say something, so 'off' is never silent.
+        if on_break and time.time() < on_break["until"]:
+            end = dt.datetime.fromtimestamp(on_break["until"])
+            print(
+                f"on a break until {end:%H:%M:%S}; {', '.join(on_break['modes'])} starts again then"
+            )
+        elif not locked:
+            print("no mode was running; nothing to stop")
+        return
+    # Leaving every mode is for off hours only; otherwise a break, which ends by itself,
+    # so 'off' is not a way past everything (Yulong, 2026-10-30).
+    if cfg.get("off_hours") and not in_off_hours(cfg):
+        hours = ", ".join(cfg["off_hours"])
+        sys.exit(
+            f"focus: 'off' works only in {hours}. Take 'focus break 15' instead, "
+            f"or switch to another mode."
+        )
+    gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
+    BREAK_FILE.unlink(missing_ok=True)
+    for name in running:
+        switch(name, on=False)
+    # Back to the no-mode list, or a locked mode's; the gate above approved that state.
+    sz_follow(cfg, running_modes(cfg), switched=True)
+    print(f"stopped {', '.join(running)}")
+
+
+def drift(cfg: dict, blocks: dict, mode: str) -> dict:
+    block = blocks.get(PREFIX + mode)
+    want_exc = desired_exceptions(cfg, mode)
+    want_apps, missing_apps = desired_apps(cfg, mode)
+    if block is None:
+        return {"exists": False, "missing_apps": missing_apps}
+    have_exc, have_apps = block.get("exceptions", []), block.get("apps", [])
+    return {
+        "exists": True,
+        "add_web": [] if BLOCK_ALL in block.get("web", []) else [BLOCK_ALL],
+        "extra_web": [w for w in block.get("web", []) if w != BLOCK_ALL],
+        "add_exc": [e for e in want_exc if e not in have_exc],
+        "extra_exc": [e for e in have_exc if e not in want_exc],
+        "add_apps": [a for a in want_apps if a not in have_apps],
+        "extra_apps": [a for a in have_apps if a not in want_apps],
+        "missing_apps": missing_apps,
+    }
+
+
+def cmd_status(cfg: dict) -> None:
+    blocks = read_blocks()
+    for name, block in blocks.items():
+        on = block.get("enabled") == "true"
+        state = paint(f"{'enabled' if on else 'off':8}", "1;32" if on else "2")
+        lock = "" if not is_locked(block) else f", lock {block['lock'].split(',')[0]}"
+        detail = paint(f"({block.get('type')}{lock})", "2")
+        print(f"{state} {name}  {detail}")
+    print()
+    for mode in cfg["modes"]:
+        d = drift(cfg, blocks, mode)
+        if not d["exists"]:
+            print(f"{PREFIX}{mode}: missing; run 'focus export' and import it")
+            continue
+        issues = {k: v for k, v in d.items() if k != "exists" and v}
+        verdict = paint("in sync", "32") if not issues else paint("differs", "33")
+        print(f"{PREFIX}{mode}: {verdict}")
+        for k, v in issues.items():
+            print(f"  {k}: {', '.join(v)}")
+    # Always-on blocks are reported, never written: they carry delay locks the CLI cannot get past.
+    fixed = []
+    for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
+        apps, missing = ct_apps(group_items(cfg, bl.get("block") or [], "apps"))
+        fixed.append(
+            (
+                name,
+                group_items(cfg, bl.get("block") or [], "sites"),
+                group_items(cfg, bl.get("allow") or [], "sites"),
+                apps,
+                missing,
+            )
+        )
+    for t in cfg.get("timers") or {}:
+        web, apps, missing = timer_lists(cfg, t)
+        fixed.append((TIMER_PREFIX + t, web, ["file://*.*"], apps, missing))
+    for name, want_web, want_exc, want_apps, missing in fixed:
+        block = blocks.get(name)
+        if block is None:
+            print(f"{name}: not in Cold Turkey; import a fresh 'focus export'")
+            continue
+        issues = {
+            "add_web": [w for w in want_web if w not in block["web"]],
+            "extra_web": [w for w in block["web"] if w not in want_web],
+            "add_exc": [e for e in want_exc if e not in block["exceptions"]],
+            "extra_exc": [e for e in block["exceptions"] if e not in want_exc],
+            "add_apps": [a for a in want_apps if a not in block["apps"]],
+            "extra_apps": [a for a in block["apps"] if a not in want_apps],
+            "missing_apps": missing,
+        }
+        issues = {k: v for k, v in issues.items() if v}
+        verdict = (
+            paint("in sync", "32")
+            if not issues
+            else paint("differs (edit by hand in Cold Turkey)", "33")
+        )
+        print(f"{name}: {verdict}")
+        for k, v in issues.items():
+            print(f"  {k}: {', '.join(v)}")
+    for line in conflicts(cfg):
+        print(f"conflict: {line}")
+
+
+def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
+    """The allowed sites a sync would add to mode blocks: the part of a sync that loosens."""
+    return sorted(
+        f"{m}:{e}"
+        for m in cfg["modes"]
+        for e in drift(cfg, blocks, m).get("add_exc", [])
+    )
+
+
+def landed(name: str, kind: str, site: str) -> bool:
+    """The CLI exits 0 even when it changes nothing, so check the database, briefly polling."""
+    for _ in range(30):
+        if site in read_blocks().get(name, {}).get(kind, []):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def cmd_sync(cfg: dict, gated: bool = True) -> None:
+    blocks = read_blocks()
+    sz_on = Path(f"{SZ_DOMAIN}.plist").exists()
+    # One gate for both apps, so an agent's repeat after the delay applies all of it.
+    loosen = sync_loosen(cfg, blocks)
+    if sz_on:
+        loosen += cmd_screenzen(cfg, dry_run=True, quiet=True)
+    if loosen and gated:
+        gate(
+            cfg,
+            "sync:" + ",".join(sorted(loosen)),
+            f"allowing new sites ({', '.join(loosen)})",
+        )
+    needs_import, failed = [], []
+    for mode in cfg["modes"]:
+        name, d = PREFIX + mode, drift(cfg, blocks, mode)
+        if not d["exists"]:
+            needs_import.append(f"{name}: block missing")
+            continue
+        # Exceptions before '*.*', so a running block never blocks a site it should allow.
+        added = 0
+        for kind, flag, sites in (
+            ("exceptions", "-exception", d["add_exc"]),
+            ("web", "-web", d["add_web"]),
+        ):
+            for site in sites:
+                ct("-add", name, flag, site)
+                if landed(name, kind, site):
+                    added += 1
+                else:
+                    failed.append(f"{name}: {site} ({kind})")
+        print(f"{name}: added {added} site(s)")
+        for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
+            if d[k]:
+                needs_import.append(f"{name}: {k} {', '.join(d[k])}")
+        if d["missing_apps"]:
+            print(f"  apps not found on this Mac: {', '.join(d['missing_apps'])}")
+    # Always-on blocks: adding a banned site only tightens, so try it even though they are
+    # locked. Whether Cold Turkey's CLI accepts an addition to a locked block is untested.
+    for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
+        block = blocks.get(name)
+        if block is None:
+            continue
+        for site in group_items(cfg, bl.get("block") or [], "sites"):
+            if site in block["web"]:
+                continue
+            out = subprocess.run(
+                [str(CT_BIN), "-add", name, "-web", site],
+                capture_output=True,
+                text=True,
+            )
+            ok = landed(name, "web", site)
+            print(f"{name}: {'added' if ok else 'could not add'} {site}")
+            if not ok:
+                needs_import.append(
+                    f"{name}: add_web {site} (CLI said: {out.stdout.strip() or out.returncode})"
+                )
+    if needs_import:
+        print(
+            "\nThe CLI cannot make these changes. Make them by hand in Cold Turkey "
+            "(a missing mode or timer block comes from importing a fresh 'focus export'):"
+        )
+        print("\n".join(f"  {line}" for line in needs_import))
+    # One command applies the note everywhere: ScreenZen too, for the running mode.
+    if sz_on:
+        print()
+        cmd_screenzen(cfg, dry_run=False, gated=False, quiet=True)
+    if failed:
+        sys.exit(
+            "focus: Cold Turkey's CLI accepted these but they did not appear in its "
+            "settings, so the mode blocks still differ from the note:\n  "
+            + "\n  ".join(failed)
+        )
+
+
+def timer_lists(cfg: dict, name: str) -> tuple[list[str], list[str], list[str]]:
+    """A timer blocks its groups' sites and apps outright: (web, apps, apps not found)."""
+    names = cfg["timers"][name].get("block") or []
+    apps, missing = ct_apps(group_items(cfg, names, "apps"))
+    return group_items(cfg, names, "sites"), apps, missing
+
+
+def build_block(
+    web: list[str], exceptions: list[str], apps: list[str], now: dt.datetime
+) -> dict:
+    return {
+        "apps": apps,
+        "customUsers": [],
+        "enabled": "false",
+        "lock": "none",
+        "pomodoroTime": "",
+        "exceptions": exceptions,
+        "window": "",
+        "restartUnblock": "true",
+        "password": "",
+        "type": "continuous",
+        "startTime": f"{now.year},{now.month},{now.day},{now.hour},{now.minute}",
+        "lockUnblock": "true",
+        "break": "none",
+        "timer": "",
+        "schedule": [],
+        "autostart": "none",
+        "users": "all",
+        "randomTextLength": "",
+        "web": web,
+    }
+
+
+def cmd_export(cfg: dict, out: Path) -> None:
+    now = dt.datetime.now()
+    data, missing = {}, {}
+    for m in cfg["modes"]:
+        apps, missing[PREFIX + m] = desired_apps(cfg, m)
+        data[PREFIX + m] = build_block(
+            [BLOCK_ALL], desired_exceptions(cfg, m), apps, now
+        )
+    for t in cfg.get("timers") or {}:
+        web, apps, missing[TIMER_PREFIX + t] = timer_lists(cfg, t)
+        data[TIMER_PREFIX + t] = build_block(web, ["file://*.*"], apps, now)
+    out.write_text(json.dumps(data, ensure_ascii=False))
+    print(f"wrote {out}: {', '.join(data)}")
+    for name, names in missing.items():
+        if names:
+            print(f"  {name}: apps not found on this Mac, left out: {', '.join(names)}")
+    print(
+        "Import it: Cold Turkey → Blocks → menu → Import blocks from another installation…"
+    )
+
+
+def sz_export() -> bytes:
+    return subprocess.run(
+        ["defaults", "export", str(SZ_DOMAIN), "-"], capture_output=True, check=True
+    ).stdout
+
+
+def sz_groups(raw: bytes) -> list[dict]:
+    return json.loads(plistlib.loads(raw)["pauseShieldInstances"])
+
+
+def sz_allow_pattern(site: str) -> str | None:
+    """ScreenZen matches by substring. Cut a wildcard pattern at its first '*', so it allows
+    at least what Cold Turkey allows ('github.com/*/*/pull/*' -> 'github.com/'), and drop
+    a cut that leaves no domain ('file://*.*' -> 'file://')."""
+    if "*" not in site:
+        return site
+    head = site.split("*", 1)[0]
+    return head if "." in head else None
+
+
+def sz_shared_sites(cfg: dict) -> set[str]:
+    """The always_allow sites as ScreenZen patterns: what every state lets through."""
+    sites = group_items(cfg, cfg.get("always_allow") or [], "sites")
+    return {p for s in sites if (p := sz_allow_pattern(s))}
+
+
+def sz_group_off(bl: dict, modes: list[str]) -> bool:
+    """Whether a ScreenZen 🚫 group stands aside: one of its off_in modes runs, or no
+    mode runs and its off_in names 'none'."""
+    off_in = bl.get("off_in") or []
+    return any(m in off_in for m in modes) or (not modes and "none" in off_in)
+
+
+def sz_allow_sites(cfg: dict, modes: list[str] | None = None) -> list[str]:
+    """ScreenZen's allow list follows the mode: always_allow plus the allow groups of the
+    given modes (the running ones), as ScreenZen patterns, minus what the ScreenZen 🚫
+    groups that stay on for those modes block.
+    No mode ([]: a break, off hours, a day not started) allows every mode's sites plus
+    no_mode_allow, so each mode only tightens it (Yulong, 2026-11-01).
+    modes=None means every mode with every 🚫 group on."""
+    blocked = {
+        s.replace("*", "")
+        for bl in (cfg.get("blocklists") or {}).get("screenzen", {}).values()
+        if modes is None or not sz_group_off(bl, modes)
+        for s in group_items(cfg, bl.get("block") or [], "sites")
+    }
+    seen: dict[str, None] = {}
+    shared = group_items(cfg, cfg.get("always_allow") or [], "sites")
+    names = modes or list(cfg["modes"])
+    sources = [shared] + [desired_exceptions(cfg, m) for m in names]
+    if not modes:  # no mode (a break, or off hours), or every mode
+        sources.append(group_items(cfg, cfg.get("no_mode_allow") or [], "sites"))
+    for sites in sources:
+        for site in sites:
+            pattern = sz_allow_pattern(site)
+            # ScreenZen matches by substring, so a blocked 'x.com' also covers an allowed
+            # 'x.com/' or 'm.x.com': compare the same way.
+            if pattern and not any(b in pattern for b in blocked if b):
+                seen[pattern] = None
+    return list(seen)
+
+
+def sz_site(pattern: str, action: str) -> dict:
+    # Field set copied from the entries ScreenZen writes itself.
+    return {
+        "action": action,
+        "ruleType": "contains",
+        "pattern": pattern,
+        "id": str(uuid.uuid4()).upper(),
+        "highPriority": False,
+        **{f"bool{i}": False for i in range(1, 5)},
+        **{f"int{i}": 0 for i in range(1, 3)},
+        **{f"string{i}": "" for i in range(1, 4)},
+    }
+
+
+def sz_app(name: str, template: dict) -> dict | None:
+    r = resolve_app(name)
+    if not r:
+        return None
+    return {**template, "appName": name, "appBundle": r[1], "appUrl": str(r[0])}
+
+
+def sz_set_sites(
+    group: dict, want: list[str], action: str
+) -> tuple[list[str], list[str]]:
+    """Replace the group's rules for one action, keeping ids of rules that stay."""
+    have = {s["pattern"]: s for s in group["customSites"] if s["action"] == action}
+    group["customSites"] = [have.get(p) or sz_site(p, action) for p in want] + [
+        s for s in group["customSites"] if s["action"] != action
+    ]
+    return [p for p in want if p not in have], [p for p in have if p not in want]
+
+
+APP_TEMPLATE = {
+    "bool1": False,
+    "bool2": False,
+    "bool3": False,
+    "bool4": False,
+    "int1": 0,
+    "int2": 0,
+    "string1": "",
+    "string2": "",
+    "string3": "",
+}
+
+
+def running_modes(cfg: dict) -> list[str]:
+    """Modes whose Cold Turkey block is on now."""
+    return [
+        n[len(PREFIX) :]
+        for n, b in mode_blocks(read_blocks()).items()
+        if b.get("enabled") == "true" and n[len(PREFIX) :] in cfg["modes"]
+    ]
+
+
+def sz_mode_group(mode: str | None) -> str:
+    """Name of the ScreenZen allow group focus owns for a mode (None: no mode runs)."""
+    return f"{SZ_MODE_PREFIX}{mode or 'shared'}"
+
+
+def sz_effective_allow(groups: list[dict]) -> set[str]:
+    """Allow patterns of every enabled ✅ group: what passes without a pause screen."""
+    return {
+        s["pattern"]
+        for g in groups
+        if g["groupName"].startswith("✅") and not g["isDisabled"]
+        for s in g["customSites"]
+        if s["action"] == "allow"
+    }
+
+
+def cmd_screenzen(
+    cfg: dict,
+    dry_run: bool,
+    gated: bool = True,
+    modes: list[str] | None = None,
+    quiet: bool = False,
+) -> list[str]:
+    """Write ScreenZen's groups from the note and switch on the group of the given modes
+    (default: the ones Cold Turkey runs now); return what the write loosens.
+
+    focus owns one allow group per mode plus one for no mode ('✅ focus: shared'), each
+    holding the shared list plus that mode's sites (every mode's, for no mode); exactly
+    one is on, so ScreenZen's own
+    screen shows the mode. Missing groups are created by copying an existing ✅ group.
+    Every other ✅ group is switched off."""
+    if modes is None:
+        modes = running_modes(cfg)
+    raw = sz_export()
+    groups = sz_groups(raw)
+    before = copy.deepcopy(groups)
+    by_name = {g["groupName"]: g for g in groups}
+    # Copy an all-day allow group, so a new group inherits no time window.
+    allow_groups = [g for g in groups if g["groupName"].startswith("✅")]
+    template = next(
+        (g for g in allow_groups if g.get("alwaysActive")),
+        next(iter(allow_groups), None),
+    )
+    if template is None:
+        sys.exit(
+            "focus: ScreenZen has no ✅ group to copy; create one in ScreenZen first"
+        )
+    loosen: list[str] = []  # allows gained, blocks lost
+    report_lines: list[str] = []
+
+    # One allow group per mode, plus the no-mode group; keep each list current.
+    want_on = {sz_mode_group(m) for m in modes} or {sz_mode_group(None)}
+    for mode in [None, *cfg["modes"]]:
+        name = sz_mode_group(mode)
+        group = by_name.get(name)
+        if group is None:
+            group = copy.deepcopy(template)
+            group.update(
+                groupName=name, id=str(uuid.uuid4()).upper(), customSites=[], apps=[]
+            )
+            groups.append(group)
+            by_name[name] = group
+            report_lines.append(f"{name}: created")
+        added, removed = sz_set_sites(
+            group, sz_allow_sites(cfg, [mode] if mode else []), "allow"
+        )
+        if added or removed:
+            report_lines.append(f"{name}: +{len(added)} -{len(removed)} sites")
+    for g in groups:
+        if g["groupName"].startswith("✅"):
+            g["isDisabled"] = g["groupName"] not in want_on
+
+    for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items():
+        group = by_name.get(name)
+        if group is None:
+            sys.exit(
+                f"focus: ScreenZen has no group {name!r}; create it in ScreenZen first"
+            )
+        sites = [
+            s.replace("*", "") for s in group_items(cfg, bl.get("block") or [], "sites")
+        ]
+        added, removed = sz_set_sites(group, [s for s in sites if s], "block")
+        want_apps, missing = [], []
+        for app in group_items(cfg, bl.get("block") or [], "apps"):
+            old = next((a for a in group["apps"] if a["appName"] == app), None)
+            # Re-read the installed app each time: an update can change its bundle id
+            # (Open Grind went from org.opengrind to org.opengrind.app), and ScreenZen
+            # matches by id, so a stale entry silently stops blocking.
+            entry = sz_app(app, old or APP_TEMPLATE) or old
+            (want_apps.append(entry) if entry else missing.append(app))
+            if old and entry and old.get("appBundle") != entry["appBundle"]:
+                added.append(f"app {app} (now {entry['appBundle']})")
+        have_apps = [a["appName"] for a in group["apps"]]
+        added += [
+            f"app {a['appName']}" for a in want_apps if a["appName"] not in have_apps
+        ]
+        removed += [
+            f"app {n}" for n in have_apps if n not in [a["appName"] for a in want_apps]
+        ]
+        group["apps"] = want_apps
+        loosen.extend(f"{name}:-{x}" for x in removed)
+        # A 🚫 group can stand aside while certain modes run (off_in), e.g. messaging
+        # apps during admin; it is back on for every other mode and for no mode.
+        was_off = group["isDisabled"]
+        group["isDisabled"] = sz_group_off(bl, modes)
+        if group["isDisabled"] and not was_off:
+            loosen.append(f"{name}:off")
+        if group["isDisabled"] != was_off:
+            report_lines.append(f"{name}: {'off' if group['isDisabled'] else 'on'}")
+        if added or removed:
+            report_lines.append(
+                f"{name}: add {', '.join(added) or '-'}; remove {', '.join(removed) or '-'}"
+            )
+        if missing:
+            report_lines.append(
+                f"{name}: apps not found on this Mac, left out: {', '.join(missing)}"
+            )
+
+    # What now passes without a pause screen that did not before.
+    loosen.extend(
+        f"screenzen:+{s}"
+        for s in sorted(sz_effective_allow(groups) - sz_effective_allow(before))
+    )
+    changed = groups != before
+    if not quiet:
+        print(
+            f"ScreenZen follows: {', '.join(modes) or 'no mode'}; on: {', '.join(sorted(want_on))}"
+        )
+        print("\n".join(f"  {line}" for line in report_lines) or "  no changes")
+    if dry_run or not changed:
+        return loosen
+    if loosen and gated:
+        gate(cfg, "screenzen:" + ",".join(sorted(loosen)), "loosening ScreenZen")
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup = BACKUP_DIR / f"screenzen-{dt.datetime.now():%Y-%m-%dT%H%M%S}.plist"
+    backup.write_bytes(raw)
+    # Every mode switch writes ScreenZen, so keep the newest backups only.
+    for old in sorted(BACKUP_DIR.glob("screenzen-*.plist"))[:-SZ_BACKUPS_KEPT]:
+        old.unlink()
+    front = frontmost_bundle()  # to hand the focus back if ScreenZen grabs it
+    # ScreenZen must be closed, or it writes its in-memory groups back over ours. Wait
+    # only as long as it takes to exit, instead of a fixed second.
+    subprocess.run(["killall", "ScreenZen"], capture_output=True)
+    for _ in range(30):
+        if subprocess.run(["pgrep", "-x", "ScreenZen"], capture_output=True).returncode:
+            break
+        time.sleep(0.1)
+    blob = json.dumps(groups, ensure_ascii=False, separators=(",", ":")).encode()
+    subprocess.run(
+        [
+            "defaults",
+            "write",
+            str(SZ_DOMAIN),
+            "pauseShieldInstances",
+            "-data",
+            blob.hex(),
+        ],
+        check=True,
+    )
+    if sz_groups(sz_export()) != groups:
+        sys.exit(
+            f"focus: ScreenZen read-back differs; restore with defaults import from {backup}"
+        )
+    # -g and -j ask for a background, hidden launch; ScreenZen ignores both and opens
+    # its window on top, so hand_back_focus closes that window and gives the front back.
+    reopen = ["open", "-g", "-j", "-a", "ScreenZen"]
+    if subprocess.run(reopen, capture_output=True).returncode:
+        sys.exit(
+            f"focus: wrote ScreenZen (backup at {backup}) but could not reopen it, "
+            "so its blocking is off until it runs. Reopen it: open -a ScreenZen"
+        )
+    hand_back_focus(front)
+    if quiet:
+        print(
+            f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
+        )
+    else:
+        print(f"wrote ScreenZen and reopened it; backup at {backup}")
+    return loosen
+
+
+def edit_note(path: Path, change) -> object:
+    """Run change(doc) on the note's YAML block and write it back if it returns a truthy
+    result, keeping the note's comments and layout (ruamel round-trip)."""
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    text = path.read_text()
+    m = re.search(r"^```ya?ml\n(.*?)^```", text, re.S | re.M)
+    if not m:
+        sys.exit(f"focus: no ```yaml block in {path}")
+    rt = YAML()
+    rt.preserve_quotes = True
+    rt.width = 4096
+    rt.indent(mapping=2, sequence=4, offset=2)  # the note's own layout
+    doc = rt.load(m.group(1))
+    result = change(doc)
+    if result:
+        out = StringIO()
+        rt.dump(doc, out)
+        path.write_text(text[: m.start(1)] + out.getvalue() + text[m.end(1) :])
+    return result
+
+
+def add_to_note(path: Path, group: str, items: list[str], kind: str) -> list[str]:
+    """Append items to a group in the note's YAML block."""
+
+    def change(doc):
+        groups = doc.get("groups") or {}
+        if group not in groups:
+            sys.exit(f"focus: no group {group!r}; groups are {', '.join(groups)}")
+        if groups[group] is None or kind not in groups[group]:
+            sys.exit(
+                f"focus: group {group!r} has no '{kind}' list; add the first entry by hand"
+            )
+        added = [i for i in items if i not in groups[group][kind]]
+        groups[group][kind].extend(added)
+        return added
+
+    return edit_note(path, change)
+
+
+def slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "block"
+
+
+def app_name(entry: str) -> str:
+    """'app:Example App.app:com.example.app' -> 'Example App'."""
+    parts = entry.split(":")
+    return parts[1].removesuffix(".app") if len(parts) >= 3 else entry
+
+
+def pull_plan(cfg: dict, blocks: dict) -> list[dict]:
+    """What Cold Turkey holds that the note lacks, and where each item would go.
+
+    Each entry: {group, sites, apps, ref: (section, owner, list)} - the new items land in a
+    group named 'from-<block>', which the owning mode, timer or blocklist then names.
+    Only additions are pulled. A site removed in Cold Turkey is reported by status and
+    put back by sync; deciding that it should go is an edit to the note.
+    """
+    plan = []
+
+    def entry(block_name, sites, apps, ref):
+        sites = [s for s in sites if s != BLOCK_ALL]
+        apps = [app_name(a) for a in apps]
+        if sites or apps:
+            plan.append(
+                {
+                    "group": "from-" + slug(block_name),
+                    "sites": sites,
+                    "apps": apps,
+                    "ref": ref,
+                }
+            )
+
+    for mode in cfg["modes"]:
+        d = drift(cfg, blocks, mode)
+        if d["exists"]:
+            entry(PREFIX + mode, d["extra_exc"], [], ("modes", mode, "allow"))
+            entry(
+                PREFIX + mode + " apps", [], d["extra_apps"], ("modes", mode, "block")
+            )
+    for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
+        block = blocks.get(name)
+        if block is None:
+            continue
+        web = group_items(cfg, bl.get("block") or [], "sites")
+        exc = group_items(cfg, bl.get("allow") or [], "sites")
+        apps, _ = ct_apps(group_items(cfg, bl.get("block") or [], "apps"))
+        entry(
+            name,
+            [w for w in block["web"] if w not in web],
+            [a for a in block["apps"] if a not in apps],
+            ("blocklists.cold_turkey", name, "block"),
+        )
+        entry(
+            name + " exceptions",
+            [e for e in block["exceptions"] if e not in exc],
+            [],
+            ("blocklists.cold_turkey", name, "allow"),
+        )
+    for t in cfg.get("timers") or {}:
+        block = blocks.get(TIMER_PREFIX + t)
+        if block is None:
+            continue
+        web, apps, _ = timer_lists(cfg, t)
+        entry(
+            TIMER_PREFIX + t,
+            [w for w in block["web"] if w not in web],
+            [a for a in block["apps"] if a not in apps],
+            ("timers", t, "block"),
+        )
+    return plan
+
+
+def cmd_pull(cfg_path: Path, dry_run: bool) -> None:
+    cfg = load_config(cfg_path)
+    plan = pull_plan(cfg, read_blocks())
+    if not plan:
+        print("Cold Turkey holds nothing the note lacks.")
+        return
+    for p in plan:
+        section, owner, key = p["ref"]
+        items = p["sites"] + [f"app {a}" for a in p["apps"]]
+        print(f"{p['group']} ({section} {owner!r} {key}): {', '.join(items)}")
+    if dry_run:
+        return
+    # A pulled site that ends up allowed reaches ScreenZen's allow groups on the next write by
+    # anyone, so for an agent it is loosening like any other. Judge that from the effect:
+    # apply the plan to an in-memory copy and compare what every mode and ScreenZen would
+    # allow, since a from-… group may already exist and be named by an allow list.
+    after = copy.deepcopy(cfg)
+    for p in plan:
+        g = after["groups"].setdefault(p["group"], {})
+        for kind in ("sites", "apps"):
+            if p[kind]:
+                lst = g.setdefault(kind, [])
+                lst.extend(i for i in p[kind] if i not in lst)
+        section, owner, key = p["ref"]
+        node = after
+        for part in section.split("."):
+            node = node[part]
+        refs = node[owner].setdefault(key, [])
+        if p["group"] not in refs:
+            refs.append(p["group"])
+
+    def allowed(c: dict) -> set[str]:
+        sites = {f"{m}:{s}" for m in c["modes"] for s in desired_exceptions(c, m)}
+        # The no-mode list is the widest; modes=None also counts sites a 🚫 group blocks.
+        widest = sz_allow_sites(c) + sz_allow_sites(c, [])
+        return sites | {f"screenzen:{s}" for s in widest}
+
+    loosen = sorted(allowed(after) - allowed(cfg))
+    if loosen:
+        gate(
+            cfg,
+            "pull:" + ",".join(loosen),
+            f"pulling allowed sites ({', '.join(loosen)})",
+        )
+
+    def change(doc):
+        from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+        for p in plan:
+            g = doc["groups"].setdefault(p["group"], CommentedMap())
+            for kind in ("sites", "apps"):
+                if p[kind]:
+                    seq = g.setdefault(kind, CommentedSeq())
+                    seq.extend(i for i in p[kind] if i not in seq)
+            section, owner, key = p["ref"]
+            node = doc
+            for part in section.split("."):
+                node = node[part]
+            refs = node[owner].setdefault(key, CommentedSeq())
+            if p["group"] not in refs:
+                refs.append(p["group"])
+        return True
+
+    edit_note(cfg_path, change)
+    load_config(cfg_path)  # validates the edited note
+    print(
+        f"\nwrote {cfg_path}; move the items out of the from-… groups when convenient"
+    )
+
+
+def cmd_add(cfg_path: Path, group: str, items: list[str], app: bool) -> None:
+    kind = "apps" if app else "sites"
+    # Work out what the add would loosen from an in-memory copy, and pass the gate before
+    # the note is written: otherwise a queued agent add would already sit in the note, and
+    # the next sync run by anyone would apply it without the delay.
+    cfg = copy.deepcopy(load_config(cfg_path))
+    if group not in cfg["groups"]:
+        sys.exit(f"focus: no group {group!r}; groups are {', '.join(cfg['groups'])}")
+    lst = cfg["groups"][group].setdefault(kind, [])
+    lst.extend(i for i in items if i not in lst)
+    # Reconcile both apps even when the note already had the items: a repeat of a queued
+    # 'add' must still apply it. One gate covers both apps, keyed by everything both would
+    # loosen, so the repeat after the delay runs the whole thing in one go.
+    print("ScreenZen changes:")
+    # An app add never runs sync, so sync's pending loosening is not this command's to gate.
+    loosen = ([] if app else sync_loosen(cfg, read_blocks())) + cmd_screenzen(
+        cfg, dry_run=True
+    )
+    if loosen:
+        gate(cfg, "add:" + ",".join(sorted(loosen)), f"allowing {', '.join(loosen)}")
+    added = add_to_note(cfg_path, group, items, kind)
+    print(f"\n{group}: added {', '.join(added) or 'nothing new (already listed)'}")
+    cfg = load_config(cfg_path)  # re-read: validates the edited note
+    if app:
+        print("Apps need a manual edit in Cold Turkey; focus status names it.")
+        cmd_screenzen(cfg, dry_run=False, gated=False)
+    else:
+        cmd_sync(cfg, gated=False)  # writes ScreenZen too
+
+
+def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
+    """Start a timer block locked for N minutes; Cold Turkey ends it when the lock runs out."""
+    block = TIMER_PREFIX + name
+    minutes = args[0] if args else str(cfg["timers"][name].get("minutes", 50))
+    if not minutes.isdigit() or int(minutes) < 1:
+        sys.exit(f"focus: minutes must be a whole number, got {minutes!r}")
+    blocks = read_blocks()
+    if block not in blocks:
+        sys.exit(
+            f"focus: Cold Turkey has no block {block!r}. Import a fresh 'focus export'."
+        )
+    if blocks[block].get("enabled") == "true" and is_locked(blocks[block]):
+        sys.exit(f"focus: {block!r} is already running and locked")
+    # Tightening only, so no agent delay; the lock means nobody can end it early.
+    ct("-start", block, "-lock", minutes)
+    for _ in range(50):
+        if read_blocks().get(block, {}).get("enabled") == "true":
+            end = dt.datetime.now() + dt.timedelta(minutes=int(minutes))
+            print(f"started {block!r}, locked until about {end:%H:%M:%S}")
+            return
+        time.sleep(0.1)
+    sys.exit(f"focus: Cold Turkey did not start {block!r}")
+
+
+def cmd_alfred(cfg: dict, query: str) -> None:
+    """Alfred script-filter JSON: modes, 'off' and timers, filtered by what was typed.
+
+    'add GROUP SITE' offers to add a site to a group: 'focus add' lists the groups.
+    """
+    words = query.split()
+    if words and words[0] == "add":
+        groups = cfg["groups"]
+        if len(words) >= 3 and words[1] in groups:
+            g, sites = words[1], words[2:]
+            row = {
+                "uid": "add",
+                "title": f"Add {', '.join(sites)} to {g}",
+                "subtitle": "edits the note, then syncs Cold Turkey and ScreenZen",
+                "arg": " ".join(words),
+            }
+            print(json.dumps({"items": [row]}))
+            return
+        prefix = words[1] if len(words) > 1 else ""
+        rows = [
+            {
+                "uid": f"add-{g}",
+                "title": f"add to {g}",
+                "subtitle": ", ".join((spec or {}).get("sites") or [])[:120]
+                or "apps only",
+                "autocomplete": f"add {g} ",
+                "valid": False,
+            }
+            for g, spec in groups.items()
+            if g.startswith(prefix) and (spec or {}).get("sites") is not None
+        ]
+        print(json.dumps({"items": rows}))
+        return
+    try:
+        running = {
+            n[len(PREFIX) :]
+            for n, b in mode_blocks(read_blocks()).items()
+            if b.get("enabled") == "true"
+        }
+    except (OSError, sqlite3.Error, ValueError):
+        running = set()
+    items = []
+    for mode, spec in cfg["modes"].items():
+        on = mode in running
+        items.append(
+            {
+                "uid": mode,
+                "title": f"{mode} (running)" if on else mode,
+                "subtitle": "allows " + ", ".join(spec.get("allow") or []),
+                "arg": mode,
+                "valid": not on,
+            }
+        )
+    items.append(
+        {
+            "uid": "off",
+            "title": "off",
+            "subtitle": "stop "
+            + (", ".join(sorted(running)) if running else "nothing: no mode runs"),
+            "arg": "off",
+            "valid": bool(running),
+        }
+    )
+    words_ = query.split()
+    mins = (
+        words_[1]
+        if len(words_) == 2 and words_[0] == "break" and words_[1].isdigit()
+        else "15"
+    )
+    items.append(
+        {
+            "uid": "break",
+            "title": f"break for {mins} min",
+            "subtitle": "stop "
+            + (", ".join(sorted(running)) if running else "nothing: no mode runs")
+            + "; it starts again by itself. Type minutes after 'break' to change it",
+            "arg": f"break {mins}",
+            "autocomplete": "break ",
+            "valid": bool(running),
+        }
+    )
+    # Timers: 'focus deep 90' runs for 90 minutes; plain 'focus deep' uses the default.
+    words = query.split()
+    for name, spec in (cfg.get("timers") or {}).items():
+        minutes = spec.get("minutes", 50)
+        if len(words) == 2 and words[0] == name and words[1].isdigit():
+            minutes = int(words[1])
+        items.append(
+            {
+                "uid": f"timer-{name}",
+                "title": f"{name} for {minutes} min",
+                "subtitle": "blocks "
+                + ", ".join(spec.get("block") or [])
+                + "; locked until it ends. Type minutes after the name to change it",
+                "arg": f"{name} {minutes}",
+                "autocomplete": f"{name} ",
+            }
+        )
+    items.append(
+        {
+            "uid": "add",
+            "title": "add a site to a group…",
+            "subtitle": "then type the group and the site, e.g. add travel jetblue.com",
+            "autocomplete": "add ",
+            "valid": False,
+        }
+    )
+    first = words[0].lower() if words else ""
+    items = [i for i in items if i["uid"].removeprefix("timer-").startswith(first)]
+    print(json.dumps({"items": items}))
+
+
+def cmd_overview(cfg: dict) -> None:
+    """What 'focus' with no command prints: the modes, the timers, and what runs now."""
+    try:
+        blocks = read_blocks()
+    except (OSError, sqlite3.Error, ValueError):
+        blocks = {}
+
+    brk = read_break()
+    on_break = brk["modes"] if brk and time.time() < brk["until"] else []
+
+    def mark(block: str, mode: str | None = None) -> tuple[str, bool]:
+        """A one-character state, colour-coded and explained by the legend below."""
+        if blocks.get(block, {}).get("enabled") == "true":
+            return paint("●", "1;32"), True
+        if mode and mode in on_break:
+            return paint("◐", "1;33"), False
+        return paint("○", "2"), False
+
+    def head(title: str, usage: str) -> None:
+        print(paint(title, "1") + "  " + paint(usage, "2"))
+
+    width = max(len(n) for n in [*cfg["modes"], *(cfg.get("timers") or {})])
+
+    def row(sym_on: tuple[str, bool], name: str, detail: str) -> None:
+        sym, on = sym_on
+        label = paint(f"{name:<{width}}", "1;32" if on else "1")
+        print(f"  {sym} {label}  {detail}")
+
+    head("Modes", "focus <mode>")
+    for m, spec in cfg["modes"].items():
+        row(mark(PREFIX + m, m), m, paint(", ".join(spec.get("allow") or []), "2"))
+    for t, spec in (cfg.get("timers") or {}).items():
+        print()
+        head("Timer", f"focus {t} [minutes]")
+        blocked = ", ".join(spec.get("block") or [])
+        row(
+            mark(TIMER_PREFIX + t),
+            t,
+            paint(f"blocks {blocked} · {spec.get('minutes', 50)} min by default", "2"),
+        )
+    cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    print()
+    head("Break", "focus break [minutes]")
+    if on_break:
+        end = dt.datetime.fromtimestamp(brk["until"])
+        print(
+            f"  {paint('◐', '1;33')} "
+            + paint(
+                f"until {end:%H:%M:%S}, then {', '.join(on_break)} starts again", "1;33"
+            )
+        )
+    else:
+        print(
+            "    "
+            + paint(f"up to {cap} min, then the mode starts again by itself", "2")
+        )
+    hours = ", ".join(cfg.get("off_hours") or []) or "any time"
+    print()
+    print(
+        paint("Always allowed", "1")
+        + "  "
+        + paint(", ".join(cfg.get("always_allow") or []), "2")
+    )
+    print(
+        paint("Also", "1")
+        + "  "
+        + paint(
+            f"off ({hours} only) · status · sync · add GROUP SITE · pull · export", "2"
+        )
+    )
+    print()
+    print(
+        f"{paint('●', '1;32')} running   {paint('◐', '1;33')} on a break   "
+        f"{paint('○', '2')} off"
+    )
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(
+        prog="focus",
+        description="Switch Cold Turkey and ScreenZen between work modes defined in one note.",
+        epilog="Run 'focus' with no command to list the modes and what is running.",
+    )
+    p.add_argument(
+        "--config",
+        type=Path,
+        default=Path(os.environ.get("FOCUS_CONFIG", DEFAULT_CONFIG)),
+        help=f"the config note (default {DEFAULT_CONFIG})",
+    )
+    p.add_argument(
+        "command",
+        nargs="?",
+        help="a mode or timer name, or break | off | status | sync | screenzen | add | pull | export"
+        " | install-agent | uninstall-agent",
+    )
+    p.add_argument(
+        "args", nargs="*", help="export: output file; add: GROUP SITE [SITE…]"
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="screenzen, pull: show changes only"
+    )
+    p.add_argument("--app", action="store_true", help="add: the items are app names")
+    a = p.parse_args()
+    # Before load_config: uninstalling must work when the config note is gone.
+    if a.command == "uninstall-agent":
+        cmd_uninstall_agent()
+        return
+    global CONFIG_PATH
+    CONFIG_PATH = a.config.expanduser().resolve()
+    cfg = load_config(CONFIG_PATH)
+    if not cfg.get("modes"):
+        sys.exit(f"focus: no modes in {a.config}")
+    # Any focus command ends a break that is over, so a lost waiter cannot leave it open.
+    if a.command not in ("resume", "alfred", "tick", "install-agent"):
+        try:
+            end_break(cfg)
+        except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
+            print(f"focus: could not end an expired break: {e}")
+    match a.command:
+        case None:
+            cmd_overview(cfg)
+        case "off":
+            cmd_off(cfg)
+        case "break":
+            cmd_break(cfg, a.args)
+        case "resume":  # internal: the detached waiter that 'break' starts
+            cmd_resume(cfg)
+        case "tick":  # internal: the launchd job; ends an overdue break, else silent
+            end_break(cfg)
+        case "install-agent":
+            cmd_install_agent()
+        case "status":
+            cmd_status(cfg)
+        case "sync":
+            cmd_sync(cfg)
+        case "export":
+            out = (
+                Path(a.args[0])
+                if a.args
+                else Path.home() / "Downloads/focus-blocks.ctbbl"
+            )
+            cmd_export(cfg, out)
+        case "pull":
+            cmd_pull(a.config, a.dry_run)
+        case "add":
+            if len(a.args) < 2:
+                sys.exit("focus: usage: focus add GROUP SITE [SITE…] (--app for apps)")
+            cmd_add(a.config, a.args[0], a.args[1:], a.app)
+        case "screenzen":
+            cmd_screenzen(cfg, a.dry_run)
+        case "alfred":
+            cmd_alfred(cfg, " ".join(a.args))
+        case name if name in (cfg.get("timers") or {}):
+            cmd_timer(cfg, name, a.args)
+        case mode:
+            cmd_start(cfg, mode)
+
+
+if __name__ == "__main__":
+    main()
