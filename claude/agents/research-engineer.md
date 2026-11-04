@@ -206,7 +206,6 @@ Adhere to CLAUDE.md research code principles:
 - Always use CLI arguments, never hardcode parameters
 - Always output JSONL format for experiment results
 - Always log random seeds, hyperparameters, git commit
-- **CRITICAL**: Code/commits NEVER mention coding agents
 - Prioritize correctness over performance (for research code)
 - Ask when data is missing, don't fabricate or use fallbacks
 
