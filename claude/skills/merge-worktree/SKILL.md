@@ -42,7 +42,7 @@ git status --porcelain
 ```
 
 If there are uncommitted changes:
-- **`.claude/settings.json`**: This file is auto-managed by Claude Code at runtime. Deep-compare (parse JSON, compare key-value pairs ignoring order) against the committed version. If semantically equivalent, `git restore` it. If there are real value differences, `git restore` it anyway — runtime settings changes are ephemeral and should not be merged.
+- **`.claude/settings.json`**: Claude Code rewrites this file at runtime, but people also edit it on purpose. Deep-compare (parse JSON, compare key-value pairs ignoring order) against the committed version. If semantically equivalent, `git restore` it. If there are real value differences, first find out who changed it: show the diff, and treat a change as disposable only when it is Claude Code's own write (re-serialisation, or keys that its commands such as `/model` or `/plugin` set). Any other value change is a deliberate edit: commit it or ask the user, and never `git restore` it silently.
 - **Other files**: Commit them first using the `/commit` skill or ask the user.
 
 ### 3. Commit Plan Files
@@ -136,5 +136,4 @@ Or continue working — run /merge-worktree again later to sync new commits.
 
 - **Never force-push or rebase** the parent branch
 - **Never delete the worktree branch** — `cwrm` handles that
-- **Prefer the worktree's version** when both sides changed the same thing and intent is unclear (the worktree has the newer work)
 - **Main tree uncommitted changes** are checked in step 5 — do not skip this check
