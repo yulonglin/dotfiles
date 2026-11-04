@@ -39,7 +39,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `reduce-ambiguity` | "is this clear", "will this be misread" — red-teaming a draft before it is sent or acted on |
 | `check-prose-claims` | Fact-checking stats, comparatives and quotes in slides, reports and PDFs |
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
-| `strategic-communication` | Messages needing negotiation or persuasion — rentals, salary, declining an offer |
+| `anthropic-skills:strategic-communication` | Messages needing negotiation or persuasion — rentals, salary, declining an offer (the local copy was archived to `archive/2026-11-03_strategic-communication/` because both loaded every session) |
 | `externalise-handover` | Handing this conversation to another person or agent — next tasks, what ran, bugs, open uncertainties |
 | `debrief` | "debrief", "what did you do while I was away" — one commentable review page of a finished session, rendered by the hive CLI, iterated in rounds |
 

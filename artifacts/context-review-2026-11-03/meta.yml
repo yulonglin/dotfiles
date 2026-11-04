@@ -1,0 +1,25 @@
+title: Context Review, November 2026
+url: https://claude.ai/artifact/84VWYe5GqeUpLshkAheeRr
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-11-03
+last_updated: 2026-11-03
+status: live
+
+public: no
+
+summary: >-
+  the first monthly context review: of 49 skills and agents with zero uses in 90 days on this server,
+  most stay (user-invoked only, routed to by a rule, Mac-side, or inside a plugin kept whole), leaving
+  5 trim-or-drop proposals (hookify plugin, two unused generated agents, a duplicated
+  strategic-communication skill, duplicated model-router agents) and 5 questions, the largest being
+  the Effortful Learning output style at about 1,271 tokens every session. Keep/trim/drop per item
+
+source: review.md
+built: context-review-2026-11-03.html
+builds_with: |
+  md2artifact review.md -o context-review-2026-11-03.html --states keep,trim,drop --title "Context Review, November 2026"
+  publish with the capabilities md2artifact --capabilities prints
+evidence: |
+  context-review run on 2026-11-03 (state: ~/.local/state/context-review/2026-11-03/, vault copy
+  ~/vault/tooling/dotfiles/context-review/2026-11-03.md); per-item routing checked with rg -w across
+  claude/ and CLAUDE.md at origin/main 7b1cbdc9
