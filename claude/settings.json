@@ -253,7 +253,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run permissions.approval-classifier -- $HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
             "timeout": 30
           }
         ]
