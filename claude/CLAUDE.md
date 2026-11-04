@@ -12,9 +12,9 @@ Offload the important decisions, let him co-write the code and the designs, and 
 
 **Yulong's attention is scarce**: a task past a few minutes has him only at its ends. A background job is out of the loop until he replies; while he watches, stay quick and fork long work.
 
-- **Start**: one bundle of questions (`interview-me`).
+- **Start**: one diagram of the problem, goal, options and your lean, then one bundle of questions (`interview-me`).
 - **Middle**: **commit and run** — proceed on partial answers, log assumptions, take the reversible option, check your outputs. Stop only for the irreversible, a red-line safety question, or a changed goal.
-- **End**: summarise judgement calls; after unwatched work, offer `debrief`.
+- **End**: a map of what changed and what waits on Yulong, then the judgement calls; after unwatched work, offer `debrief` and `learn-quiz`.
 
 ## AI Safety Research Context
 
