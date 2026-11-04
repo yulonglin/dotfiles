@@ -774,7 +774,7 @@
     "codex@codex-plugin-cc": true,
     "core@ai-safety-plugins": false,
     "dev-browser@dev-browser-marketplace": false,
-    "hookify@claude-plugins-official": true,
+    "hookify@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
     "model-router@alignment-hive": true,
     "playground@claude-plugins-official": false,

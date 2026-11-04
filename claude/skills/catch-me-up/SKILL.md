@@ -27,4 +27,4 @@ This turn changes nothing: no edits, no new jobs, no posts.
 
 If nothing happened and nothing waits on the user, say so in one sentence and stop.
 
-Use a diagram only when it carries something prose cannot (a PR stack with each PR's state, a before-and-after); never draw a status list. For a long unattended stretch that deserves a reviewable record, offer `debrief` in one line instead of growing this reply.
+When more than one piece of work moved, open "What happened" with one small diagram of how the pieces connect and where each stands (a few boxes, plain labels); never draw a status list. For a long unattended stretch, end with one line offering `debrief` for a reviewable record and `learn-quiz` to understand the work, instead of growing this reply.
