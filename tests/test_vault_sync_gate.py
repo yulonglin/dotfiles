@@ -122,6 +122,9 @@ def make_sync_root(vs, monkeypatch, tmp_path, rows, *, wal=False, local_rows=(),
         db.close()
 
     monkeypatch.setattr(vs, "SYNC_ROOT", root)
+    # The gate is under test, not the obsidian-headless install: without this the
+    # unblocked path dies in resolve_ob() on a machine with no `ob`.
+    monkeypatch.setattr(vs, "resolve_ob", lambda: "/nonexistent/ob")
     return state
 
 
