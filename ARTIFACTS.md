@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [Session Map, 3–4 November](https://claude.ai/artifact/FyhyEo2V6cbApqWrZyEMp4) — one page of the 3–4 Nov session that started from "would pstack be helpful?": four pieces of work (pstack ports, clarity audit, monthly context review, its first run) each shown as problem, goal, options and approach with diagrams; what hookify, learn-quiz and application-writer are for; and a proposal to open and close long work with a diagram, written after Yulong said he felt out of the loop without visibility, choice or control | lin.yulong@gmail.com's Organization | live | `artifacts/session-map-2026-11-03/` | no | 2026-11-04 |
 | [Context Review, November 2026](https://claude.ai/artifact/84VWYe5GqeUpLshkAheeRr) — the first monthly context review: of 49 skills and agents with zero uses in 90 days on this server, most stay (user-invoked only, routed to by a rule, Mac-side, or inside a plugin kept whole), leaving 5 trim-or-drop proposals (hookify plugin, two unused generated agents, a duplicated strategic-communication skill, duplicated model-router agents) and 5 questions, the largest being the Effortful Learning output style at about 1,271 tokens every session. Keep/trim/drop per item | lin.yulong@gmail.com's Organization | live | `artifacts/context-review-2026-11-03/` | no | 2026-11-03 |
 | [Skill and Rule Clarity Audit](https://claude.ai/artifact/1DJKqZ61u1Dp88fxvBk1gP) — where a cold-reading agent would take the wrong path in 12 skills, 13 agents and 6 rule files, judged against Lauren Tan's pstack: the problem is contradictory instructions and permission gates placed after the action they gate, not length. Seven pstack patterns worth borrowing, one policy decision (editable source vs immutable published copy), a fix/skip/discuss control per item, and what to leave alone. Found while porting pstack's blast-radius, babysit, correct, ketchup, why and sharpen (PRs 295 and 297); publishing it confirmed md2artifact --capabilities omits downloads | lin.yulong@gmail.com's Organization | live | `artifacts/skill-clarity-audit/` | no | 2026-11-03 |
 | [The No-Mode Baseline](https://claude.ai/artifact/BGS1pzT1t5dZS5A3UFnD36) — discussion page: with no focus mode running, ScreenZen passes fewer sites (31) than any mode (37 to 72), the reverse of Cold Turkey; five options for the no-mode baseline, lean B (union of every mode, 97 sites) | lin.yulong@gmail.com's Organization | live | `artifacts/no-mode-baseline/` | no | 2026-11-01 |
@@ -57,7 +58,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-40 rows: 22 live, 15 done, 2 archived, 1 superseded.
+41 rows: 23 live, 15 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 

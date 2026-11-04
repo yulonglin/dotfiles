@@ -1,0 +1,23 @@
+title: Session Map, 3–4 November
+url: https://claude.ai/artifact/FyhyEo2V6cbApqWrZyEMp4
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-11-04
+last_updated: 2026-11-04
+status: live
+
+public: no
+
+summary: >-
+  one page of the 3–4 Nov session that started from "would pstack be helpful?": four pieces of work
+  (pstack ports, clarity audit, monthly context review, its first run) each shown as problem, goal,
+  options and approach with diagrams; what hookify, learn-quiz and application-writer are for; and a
+  proposal to open and close long work with a diagram, written after Yulong said he felt out of the
+  loop without visibility, choice or control
+
+source: map.md
+built: session-map-2026-11-03.html
+builds_with: |
+  md2artifact map.md -o session-map-2026-11-03.html --states open,yes,no,discuss --title "Session Map, 3–4 November"
+  publish with the capabilities md2artifact --capabilities prints
+evidence: |
+  this session's PRs 295, 297, 298, 300 and 301; hook count and commit counts measured 2026-11-04
