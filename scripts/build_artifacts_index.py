@@ -286,10 +286,16 @@ def find_row_files(root: Path) -> list[Path]:
             f"build from. An empty table is a dropped index, not a valid result."
         )
 
+    # Exact-case names only. On a case-insensitive filesystem (macOS) a literal path
+    # such as `<slug>/meta.yml` also opens `META.YML`, which Linux and CI reject, so
+    # the same tree would build a different index on each machine.
+    def has_row(directory: Path, name: str) -> bool:
+        return directory.is_dir() and any(c.name == name and c.is_file() for c in directory.iterdir())
+
     rows: list[Path] = []
     seen: set[Path] = set()
     for path in [
-        *sorted(artifacts.glob(f"*/{ARTIFACT_ROW}")),
+        *sorted(d / ARTIFACT_ROW for d in artifacts.iterdir() if has_row(d, ARTIFACT_ROW)),
         *sorted(artifacts.glob(f"{INDEX_ROWS}/*.yml")),
     ]:
         if path not in seen:
@@ -305,8 +311,8 @@ def find_row_files(root: Path) -> list[Path]:
         # A directory holding no files at all is a leftover, not an artifact —
         # git cannot record one, so it only ever exists in a working tree.
         and any(child.is_file() for child in d.rglob("*"))
-        and not (d / ARTIFACT_ROW).is_file()
-        and not (artifacts / INDEX_ROWS / f"{d.name}.yml").is_file()
+        and not has_row(d, ARTIFACT_ROW)
+        and not has_row(artifacts / INDEX_ROWS, f"{d.name}.yml")
     ]
     if uncovered:
         raise BuildError(
