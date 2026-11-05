@@ -4,6 +4,7 @@ import datetime as dt
 import importlib.machinery
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -284,20 +285,30 @@ def test_pull_copies_cold_turkey_additions_into_from_groups(tmp_path, monkeypatc
     assert ct.pull_plan(new, blocks) == []  # a second pull finds nothing
 
 
-def fake_cold_turkey(monkeypatch, blocks, refuse=()):
-    """Stand in for Cold Turkey: -start/-stop flip 'enabled', -add appends, unless refused."""
+def fake_cold_turkey(monkeypatch, blocks, refuse=(), unresponsive=()):
+    """Stand in for Cold Turkey: -start/-stop flip 'enabled', -add appends, unless refused.
+
+    A block in `unresponsive` gets "isn't responding" from the CLI, as the real app gave
+    on 4 Nov 2026 while the addition still landed; combine it with `refuse` for an app
+    that really did nothing.
+    """
     calls = []
 
-    def ct_call(*args):
+    def ct_call(*args, check=True):
         calls.append(args)
         op, name = args[0], args[1]
-        if name in refuse:
-            return  # exits 0 and changes nothing, as the real CLI can
-        if op in ("-start", "-stop"):
-            blocks[name]["enabled"] = "true" if op == "-start" else "false"
-        elif op == "-add":
-            kind = "exceptions" if args[2] == "-exception" else "web"
-            blocks[name][kind].append(args[3])
+        if name not in refuse:
+            if op in ("-start", "-stop"):
+                blocks[name]["enabled"] = "true" if op == "-start" else "false"
+            elif op == "-add":
+                kind = "exceptions" if args[2] == "-exception" else "web"
+                blocks[name][kind].append(args[3])
+        if name not in unresponsive:
+            return ""  # exits 0, even when refused, as the real CLI can
+        error = "Cold Turkey Blocker isn't responding..."
+        if check:
+            sys.exit(f"focus: Cold Turkey CLI failed: {error}")
+        return error
 
     monkeypatch.setattr(ct, "ct", ct_call)
     monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
@@ -352,6 +363,62 @@ def test_sync_fails_when_the_cli_silently_drops_an_addition(cfg, monkeypatch):
     fake_cold_turkey(monkeypatch, blocks, refuse={"mode: writing"})
     with pytest.raises(SystemExit, match="did not appear"):
         ct.cmd_sync(cfg)
+
+
+def test_sync_trusts_the_database_when_the_cli_says_it_is_not_responding(
+    cfg, monkeypatch, capsys
+):
+    research = mode_block(cfg, "research", "false")
+    writing = mode_block(cfg, "writing", "false")
+    research["exceptions"].remove("arxiv.org")
+    writing["exceptions"].remove("arxiv.org")
+    blocks = {"mode: research": research, "mode: writing": writing}
+    fake_cold_turkey(monkeypatch, blocks, unresponsive=set(blocks))
+    ct.cmd_sync(cfg)  # one slow reply must not abort the blocks after it
+    assert "arxiv.org" in research["exceptions"]
+    assert "arxiv.org" in writing["exceptions"]
+    assert "mode: writing: added 1 site(s)" in capsys.readouterr().out
+
+
+def test_sync_reports_the_cli_error_when_an_addition_never_lands(cfg, monkeypatch):
+    block = mode_block(cfg, "writing", "false")
+    block["exceptions"].remove("arxiv.org")
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": block,
+    }
+    fake_cold_turkey(
+        monkeypatch, blocks, refuse={"mode: writing"}, unresponsive={"mode: writing"}
+    )
+    with pytest.raises(SystemExit, match=r"(?s)did not appear.*isn't responding"):
+        ct.cmd_sync(cfg)
+
+
+def test_a_switch_trusts_the_database_when_the_cli_says_it_is_not_responding(
+    cfg, monkeypatch
+):
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks, unresponsive={"mode: writing"})
+    ct.cmd_start(cfg, "writing")
+    assert blocks["mode: writing"]["enabled"] == "true"
+    assert blocks["mode: research"]["enabled"] == "false"
+
+
+def test_a_failed_switch_names_the_cli_error_and_keeps_the_old_mode(cfg, monkeypatch):
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    calls = fake_cold_turkey(
+        monkeypatch, blocks, refuse={"mode: writing"}, unresponsive={"mode: writing"}
+    )
+    with pytest.raises(SystemExit, match="did not start.*isn't responding"):
+        ct.cmd_start(cfg, "writing")
+    assert blocks["mode: research"]["enabled"] == "true"  # fail closed
+    assert not [c for c in calls if c[0] == "-stop"]
 
 
 def test_a_repeated_add_still_syncs_both_apps(tmp_path, monkeypatch):

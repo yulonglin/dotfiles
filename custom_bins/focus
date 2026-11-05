@@ -245,6 +245,7 @@ PENDING = (
     / "pending.json"
 )
 DEFAULT_DELAY_MIN = 10
+CT_SLOW_POLLS = 300  # 30 s at 0.1 s: how long to watch the database after a CLI error
 EXPIRE_S = 3600  # a due request not run within this long must be queued again
 
 
@@ -450,24 +451,33 @@ def read_blocks() -> dict:
     return decode_settings(value)["blocks"]
 
 
-def ct(*args: str) -> None:
+def ct(*args: str, check: bool = True) -> str:
+    """Run the Cold Turkey CLI and return its error text, "" if it reported none.
+
+    With check, an error exits. Pass check=False where the database can confirm the
+    outcome: the CLI says "isn't responding" even for changes that land seconds later
+    (seen 4 Nov 2026), and exits 0 for changes that never land.
+    """
     out = subprocess.run([str(CT_BIN), *args], capture_output=True, text=True)
     text = (out.stdout + out.stderr).strip()
-    if out.returncode or "isn't responding" in text:
-        sys.exit(
-            f"focus: Cold Turkey CLI failed for {' '.join(args)!r}: {text or out.returncode}"
-        )
+    if not out.returncode and "isn't responding" not in text:
+        return ""
+    error = text or str(out.returncode)
+    if check:
+        sys.exit(f"focus: Cold Turkey CLI failed for {' '.join(args)!r}: {error}")
+    return error
 
 
 def switch(name: str, on: bool) -> None:
-    """Start or stop a block, then confirm in the database: the CLI exits 0 even when it fails."""
-    ct("-start" if on else "-stop", name)
+    """Start or stop a block, then confirm in the database, which outranks the CLI's reply."""
+    error = ct("-start" if on else "-stop", name, check=False)
     want = "true" if on else "false"
-    for _ in range(50):
+    for _ in range(CT_SLOW_POLLS if error else 50):
         if read_blocks().get(name, {}).get("enabled") == want:
             return
         time.sleep(0.1)
-    sys.exit(f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}")
+    reason = f": {error}" if error else ""
+    sys.exit(f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}{reason}")
 
 
 def mode_blocks(blocks: dict) -> dict:
@@ -851,9 +861,9 @@ def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
     )
 
 
-def landed(name: str, kind: str, site: str) -> bool:
-    """The CLI exits 0 even when it changes nothing, so check the database, briefly polling."""
-    for _ in range(30):
+def landed(name: str, kind: str, site: str, polls: int = 30) -> bool:
+    """The CLI's reply does not say what happened, so check the database, briefly polling."""
+    for _ in range(polls):
         if site in read_blocks().get(name, {}).get(kind, []):
             return True
         time.sleep(0.1)
@@ -886,11 +896,12 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             ("web", "-web", d["add_web"]),
         ):
             for site in sites:
-                ct("-add", name, flag, site)
-                if landed(name, kind, site):
+                error = ct("-add", name, flag, site, check=False)
+                if landed(name, kind, site, CT_SLOW_POLLS if error else 30):
                     added += 1
                 else:
-                    failed.append(f"{name}: {site} ({kind})")
+                    reason = f": {error}" if error else ""
+                    failed.append(f"{name}: {site} ({kind}){reason}")
         print(f"{name}: added {added} site(s)")
         for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
             if d[k]:
@@ -929,8 +940,8 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
         cmd_screenzen(cfg, dry_run=False, gated=False, quiet=True)
     if failed:
         sys.exit(
-            "focus: Cold Turkey's CLI accepted these but they did not appear in its "
-            "settings, so the mode blocks still differ from the note:\n  "
+            "focus: these did not appear in Cold Turkey's settings, so the mode blocks "
+            "still differ from the note:\n  "
             + "\n  ".join(failed)
         )
 
