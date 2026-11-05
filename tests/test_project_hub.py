@@ -78,8 +78,12 @@ class ProjectHubTest(unittest.TestCase):
         self.git("init", "-q", "-b", "main", cwd=path)
         self.git("config", "user.email", "t@example.com", cwd=path)
         self.git("config", "user.name", "t", cwd=path)
+        # Hermetic: a developer's global gitignore must not decide these assertions.
+        self.git("config", "core.excludesFile", "/dev/null", cwd=path)
         (path / "README.md").write_text("x\n")
-        (path / ".gitignore").write_text("logs/\nout/\n")
+        # `logs` without a slash: `tier` turns the directory into a symlink, which
+        # a directory-only `logs/` pattern would stop matching.
+        (path / ".gitignore").write_text("logs\nout/\n.claude/\n")
         (path / "out").mkdir()
         (path / "out/keep.json").write_text("{}")
         (path / "logs").mkdir()
