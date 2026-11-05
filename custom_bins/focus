@@ -245,7 +245,6 @@ PENDING = (
     / "pending.json"
 )
 DEFAULT_DELAY_MIN = 10
-CT_SLOW_POLLS = 300  # 30 s at 0.1 s: how long to watch the database after a CLI error
 EXPIRE_S = 3600  # a due request not run within this long must be queued again
 
 
@@ -452,27 +451,26 @@ def read_blocks() -> dict:
 
 
 def ct(*args: str, check: bool = True) -> str:
-    """Run the Cold Turkey CLI and return its error text, "" if it reported none.
+    """Run the Cold Turkey CLI and return what it printed.
 
     With check, an error exits. Pass check=False where the database can confirm the
-    outcome: the CLI says "isn't responding" even for changes that land seconds later
-    (seen 4 Nov 2026), and exits 0 for changes that never land.
+    outcome: the CLI says "isn't responding" for changes that land and for changes that
+    do not (both seen 4 Nov 2026), and exits 0 for changes that never land.
     """
     out = subprocess.run([str(CT_BIN), *args], capture_output=True, text=True)
     text = (out.stdout + out.stderr).strip()
-    if not out.returncode and "isn't responding" not in text:
-        return ""
-    error = text or str(out.returncode)
-    if check:
-        sys.exit(f"focus: Cold Turkey CLI failed for {' '.join(args)!r}: {error}")
-    return error
+    if check and (out.returncode or "isn't responding" in text):
+        sys.exit(
+            f"focus: Cold Turkey CLI failed for {' '.join(args)!r}: {text or out.returncode}"
+        )
+    return text or (str(out.returncode) if out.returncode else "")
 
 
 def switch(name: str, on: bool) -> None:
     """Start or stop a block, then confirm in the database, which outranks the CLI's reply."""
     error = ct("-start" if on else "-stop", name, check=False)
     want = "true" if on else "false"
-    for _ in range(CT_SLOW_POLLS if error else 50):
+    for _ in range(50):
         if read_blocks().get(name, {}).get("enabled") == want:
             return
         time.sleep(0.1)
@@ -840,11 +838,14 @@ def cmd_status(cfg: dict) -> None:
             "missing_apps": missing,
         }
         issues = {k: v for k, v in issues.items() if v}
-        verdict = (
-            paint("in sync", "32")
-            if not issues
-            else paint("differs (edit by hand in Cold Turkey)", "33")
-        )
+        verdict = paint("in sync", "32")
+        if issues:
+            fix = (
+                "focus sync adds these"
+                if set(issues) == {"add_web"}
+                else "edit by hand in Cold Turkey"
+            )
+            verdict = paint(f"differs ({fix})", "33")
         print(f"{name}: {verdict}")
         for k, v in issues.items():
             print(f"  {k}: {', '.join(v)}")
@@ -861,13 +862,21 @@ def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
     )
 
 
-def landed(name: str, kind: str, site: str, polls: int = 30) -> bool:
-    """The CLI's reply does not say what happened, so check the database, briefly polling."""
-    for _ in range(polls):
-        if site in read_blocks().get(name, {}).get(kind, []):
-            return True
+def unconfirmed(sent: list[tuple]) -> list[tuple]:
+    """The (block, kind, site, error) additions missing from the database after one short wait.
+
+    The CLI's reply does not say what happened, so the database decides. The additions are
+    sent one at a time, because every block lives in one settings value that each add
+    rewrites, but they share this wait: a sync waits 3 s however many sites fail.
+    """
+    missing = sent
+    for _ in range(30):
+        blocks = read_blocks()
+        missing = [s for s in sent if s[2] not in blocks.get(s[0], {}).get(s[1], [])]
+        if not missing:
+            break
         time.sleep(0.1)
-    return False
+    return missing
 
 
 def cmd_sync(cfg: dict, gated: bool = True) -> None:
@@ -883,51 +892,54 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             "sync:" + ",".join(sorted(loosen)),
             f"allowing new sites ({', '.join(loosen)})",
         )
-    needs_import, failed = [], []
+    needs_import, failed, modes, sent, banned = [], [], [], [], []
     for mode in cfg["modes"]:
         name, d = PREFIX + mode, drift(cfg, blocks, mode)
         if not d["exists"]:
             needs_import.append(f"{name}: block missing")
             continue
+        modes.append(name)
         # Exceptions before '*.*', so a running block never blocks a site it should allow.
-        added = 0
         for kind, flag, sites in (
             ("exceptions", "-exception", d["add_exc"]),
             ("web", "-web", d["add_web"]),
         ):
             for site in sites:
                 error = ct("-add", name, flag, site, check=False)
-                if landed(name, kind, site, CT_SLOW_POLLS if error else 30):
-                    added += 1
-                else:
-                    reason = f": {error}" if error else ""
-                    failed.append(f"{name}: {site} ({kind}){reason}")
-        print(f"{name}: added {added} site(s)")
+                sent.append((name, kind, site, error))
         for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
             if d[k]:
                 needs_import.append(f"{name}: {k} {', '.join(d[k])}")
         if d["missing_apps"]:
             print(f"  apps not found on this Mac: {', '.join(d['missing_apps'])}")
-    # Always-on blocks: adding a banned site only tightens, so try it even though they are
-    # locked. Whether Cold Turkey's CLI accepts an addition to a locked block is untested.
-    for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
+    # Always-on blocks and timers: adding a banned site only tightens, so try it even though
+    # they may be locked. Whether the CLI accepts an addition to a locked block is untested.
+    bans = dict((cfg.get("blocklists") or {}).get("cold_turkey", {}))
+    bans.update({TIMER_PREFIX + t: s for t, s in (cfg.get("timers") or {}).items()})
+    for name, spec in bans.items():
         block = blocks.get(name)
         if block is None:
             continue
-        for site in group_items(cfg, bl.get("block") or [], "sites"):
-            if site in block["web"]:
-                continue
-            out = subprocess.run(
-                [str(CT_BIN), "-add", name, "-web", site],
-                capture_output=True,
-                text=True,
+        for site in group_items(cfg, spec.get("block") or [], "sites"):
+            if site not in block["web"]:
+                error = ct("-add", name, "-web", site, check=False)
+                banned.append((name, "web", site, error))
+    missing = unconfirmed(sent + banned)
+    for name in modes:
+        added = sum(s[0] == name and s not in missing for s in sent)
+        print(f"{name}: added {added} site(s)")
+    for s in sent:
+        if s in missing:
+            name, kind, site, error = s
+            reason = f": {error}" if error else ""
+            failed.append(f"{name}: {site} ({kind}){reason}")
+    for s in banned:
+        name, _, site, error = s
+        print(f"{name}: {'could not add' if s in missing else 'added'} {site}")
+        if s in missing:
+            needs_import.append(
+                f"{name}: add_web {site} (CLI said: {error or 'no error'})"
             )
-            ok = landed(name, "web", site)
-            print(f"{name}: {'added' if ok else 'could not add'} {site}")
-            if not ok:
-                needs_import.append(
-                    f"{name}: add_web {site} (CLI said: {out.stdout.strip() or out.returncode})"
-                )
     if needs_import:
         print(
             "\nThe CLI cannot make these changes. Make them by hand in Cold Turkey "
@@ -941,8 +953,7 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
     if failed:
         sys.exit(
             "focus: these did not appear in Cold Turkey's settings, so the mode blocks "
-            "still differ from the note:\n  "
-            + "\n  ".join(failed)
+            "still differ from the note:\n  " + "\n  ".join(failed)
         )
 
 

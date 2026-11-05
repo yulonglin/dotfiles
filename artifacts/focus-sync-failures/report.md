@@ -34,22 +34,25 @@ flowchart TD
 
 ## The new code always checks the database
 
-`ct()` now [returns the error](https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L454) when a caller asks for that. [`cmd_sync`](https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L899) then checks the database in every case, and it watches for 30 seconds after an error instead of 3. A site that never lands goes on a list, the sync continues, and the list prints at the end with the CLI's error.
+`ct()` now returns what the CLI printed when a caller asks for that. [`cmd_sync`](https://github.com/yulonglin/dotfiles/blob/main/custom_bins/focus) sends every addition, one at a time, then checks the database once for all of them, for up to 3 seconds. A site that has not landed by then is listed at the end with the CLI's reply. The sync does not stop for it.
 
 ```mermaid
 flowchart TD
-  A[Add one site through the CLI] --> B{CLI reported an error?}
-  B -- Yes --> C[Watch the database for 30 s]
-  B -- No --> D[Watch the database for 3 s]
-  C --> E{Site in the database?}
-  D --> E
+  A[Send every site through the CLI, one at a time] --> D[Watch the database once, up to 3 s]
+  D --> E{Each site in the database?}
   E -- Yes --> F[Count it as added]
-  E -- No --> G[List it with the CLI error]
-  F --> H[Next site, then ScreenZen]
+  E -- No --> G[List it with the CLI reply]
+  F --> H[ScreenZen]
   G --> H
 ```
 
 [`switch()`](https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L471), which starts and stops modes, had the same defect and got the same fix. If a new mode does not start, `focus` still exits and leaves the old mode running. The agent delay in `gate()` did not change.
+
+## Sites go one at a time, and only the wait is shared
+
+Parallel adds are not safe. Cold Turkey keeps every block in [one settings value](https://github.com/yulonglin/dotfiles/blob/main/custom_bins/focus), and each add rewrites that value, so two adds at once could overwrite each other and lose a site. I have not tested that; it follows from the storage, and the app is already failing to answer at this load. Exceptions must also go in before `*.*`.
+
+The wait was the part worth sharing. It used to be per site. It is now one wait of up to 3 seconds for the whole sync.
 
 ## The real runs match this account
 
@@ -75,9 +78,9 @@ flowchart TD
 
 ## Limits of this fix
 
-- The test fake applies changes at once, so it does not prove the 30-second wait is the right length.
+- A sync should take a few seconds (Yulong, 4 Nov 2026), so the first version's 30-second wait after an error was removed. A site that lands after 3 seconds is listed as missing, and the next sync finds it already there.
 - `focus deep` start still exits on this error, because [nothing checks the database](https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L1529) after it.
-- If Cold Turkey really hangs, a sync waits 30 seconds per site.
-- `timer: deep` still needs `grok.com`, added by hand in Cold Turkey. `focus status` reports this.
+- If Cold Turkey really hangs, a sync takes as long as the CLI needs to give up on each site, plus the one 3-second wait. I have not timed the CLI's give-up.
+- `timer: deep` does not need a hand edit. I repeated that from `focus status` without checking. The CLI can add a site to any block, and `focus sync` now does this for timers.
 
 Reviewed by GPT-6.1 Sol before merge: no must-fix findings. That review came before the dropped add was seen. Written by Claude Opus 5.5, 4 Nov 2026.

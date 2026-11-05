@@ -365,6 +365,46 @@ def test_sync_fails_when_the_cli_silently_drops_an_addition(cfg, monkeypatch):
         ct.cmd_sync(cfg)
 
 
+def test_sync_adds_a_timers_new_site_and_status_says_sync_can(
+    tmp_path, monkeypatch, capsys
+):
+    p = tmp_path / "note.md"
+    p.write_text(
+        NOTE.replace(
+            "blocklists:\n",
+            "timers:\n  deep: {block: [papers], minutes: 30}\nblocklists:\n",
+        )
+    )
+    cfg = ct.load_config(p)
+    timer = {"enabled": "false", "web": [], "exceptions": ["file://*.*"], "apps": []}
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+        "timer: deep": timer,
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+
+    ct.cmd_status(cfg)
+    assert "timer: deep: differs (focus sync adds these)" in capsys.readouterr().out
+
+    ct.cmd_sync(cfg)
+    assert timer["web"] == ["arxiv.org"]
+    assert "timer: deep: added arxiv.org" in capsys.readouterr().out
+
+
+def test_sync_waits_once_however_many_additions_fail(cfg, monkeypatch):
+    research, writing = mode_block(cfg, "research", "false"), mode_block(cfg, "writing", "false")
+    research["exceptions"].remove("arxiv.org")
+    writing["exceptions"].remove("arxiv.org")
+    blocks = {"mode: research": research, "mode: writing": writing}
+    fake_cold_turkey(monkeypatch, blocks, refuse=set(blocks))
+    naps = []
+    monkeypatch.setattr(ct.time, "sleep", naps.append)
+    with pytest.raises(SystemExit, match=r"(?s)research.*writing"):
+        ct.cmd_sync(cfg)
+    assert sum(naps) == pytest.approx(3)  # one shared wait, not 3 s for each site
+
+
 def test_sync_trusts_the_database_when_the_cli_says_it_is_not_responding(
     cfg, monkeypatch, capsys
 ):
