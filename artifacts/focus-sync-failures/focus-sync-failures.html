@@ -67,7 +67,7 @@ details[open]>summary{border-bottom:1px solid var(--rule);border-radius:7px 7px 
 }
 </style>
 <div class="shell has-toc">
-<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#sync-now-finishes-and-one-site-is-still-missing" class="lvl2">Sync now finishes, and one site is still missing</a><a href="#the-cli-s-reply-does-not-say-what-happened" class="lvl2">The CLI&#x27;s reply does not say what happened</a><a href="#the-old-code-stopped-before-it-checked-the-database" class="lvl2">The old code stopped before it checked the database</a><a href="#the-new-code-always-checks-the-database" class="lvl2">The new code always checks the database</a><a href="#the-real-runs-match-this-account" class="lvl2">The real runs match this account</a><a href="#the-cause-of-the-error-is-still-unknown" class="lvl2">The cause of the error is still unknown</a><a href="#one-more-run-decides-the-next-step" class="lvl2">One more run decides the next step</a><a href="#limits-of-this-fix" class="lvl2">Limits of this fix</a></nav>
+<nav class="toc" aria-label="Contents"><h4>Contents</h4><a href="#sync-now-finishes-and-one-site-is-still-missing" class="lvl2">Sync now finishes, and one site is still missing</a><a href="#the-cli-s-reply-does-not-say-what-happened" class="lvl2">The CLI&#x27;s reply does not say what happened</a><a href="#the-old-code-stopped-before-it-checked-the-database" class="lvl2">The old code stopped before it checked the database</a><a href="#the-new-code-always-checks-the-database" class="lvl2">The new code always checks the database</a><a href="#sites-go-one-at-a-time-and-only-the-wait-is-shared" class="lvl2">Sites go one at a time, and only the wait is shared</a><a href="#the-real-runs-match-this-account" class="lvl2">The real runs match this account</a><a href="#the-cause-of-the-error-is-still-unknown" class="lvl2">The cause of the error is still unknown</a><a href="#one-more-run-decides-the-next-step" class="lvl2">One more run decides the next step</a><a href="#limits-of-this-fix" class="lvl2">Limits of this fix</a></nav>
 <div class="doc">
 <h1 id="focus-sync-failures">Focus Sync Failures</h1>
 <div class="page-tools"><a class="unseen-sum" hidden></a><button type="button" class="page-comment" hidden data-label="Comment on this page" aria-label="Comment on this page"></button></div>
@@ -126,23 +126,26 @@ flowchart TD
   C -.-&gt; F[Later sites and ScreenZen skipped]
 </pre>
 </div></div>
-<div class="sec" data-sec="the-new-code-always-checks-the-database" data-hash="a3210881afd0"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="the-new-code-always-checks-the-database--body" aria-labelledby="the-new-code-always-checks-the-database"></button>
+<div class="sec" data-sec="the-new-code-always-checks-the-database" data-hash="4d91cdd8166e"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="the-new-code-always-checks-the-database--body" aria-labelledby="the-new-code-always-checks-the-database"></button>
 <h2 id="the-new-code-always-checks-the-database">The new code always checks the database</h2>
 <div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="the-new-code-always-checks-the-database" data-label="Mark seen"></button></div><div class="sec-body" id="the-new-code-always-checks-the-database--body">
-<p><code>ct()</code> now <a href="https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L454">returns the error</a> when a caller asks for that. <a href="https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L899"><code>cmd_sync</code></a> then checks the database in every case, and it watches for 30 seconds after an error instead of 3. A site that never lands goes on a list, the sync continues, and the list prints at the end with the CLI's error.</p>
+<p><code>ct()</code> now returns what the CLI printed when a caller asks for that. <a href="https://github.com/yulonglin/dotfiles/blob/main/custom_bins/focus"><code>cmd_sync</code></a> sends every addition, one at a time, then checks the database once for all of them, for up to 3 seconds. A site that has not landed by then is listed at the end with the CLI's reply. The sync does not stop for it.</p>
 <pre class="mermaid">
 flowchart TD
-  A[Add one site through the CLI] --&gt; B{CLI reported an error?}
-  B -- Yes --&gt; C[Watch the database for 30 s]
-  B -- No --&gt; D[Watch the database for 3 s]
-  C --&gt; E{Site in the database?}
-  D --&gt; E
+  A[Send every site through the CLI, one at a time] --&gt; D[Watch the database once, up to 3 s]
+  D --&gt; E{Each site in the database?}
   E -- Yes --&gt; F[Count it as added]
-  E -- No --&gt; G[List it with the CLI error]
-  F --&gt; H[Next site, then ScreenZen]
+  E -- No --&gt; G[List it with the CLI reply]
+  F --&gt; H[ScreenZen]
   G --&gt; H
 </pre>
 <p><a href="https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L471"><code>switch()</code></a>, which starts and stops modes, had the same defect and got the same fix. If a new mode does not start, <code>focus</code> still exits and leaves the old mode running. The agent delay in <code>gate()</code> did not change.</p>
+</div></div>
+<div class="sec" data-sec="sites-go-one-at-a-time-and-only-the-wait-is-shared" data-hash="b0f20f44ab97"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="sites-go-one-at-a-time-and-only-the-wait-is-shared--body" aria-labelledby="sites-go-one-at-a-time-and-only-the-wait-is-shared"></button>
+<h2 id="sites-go-one-at-a-time-and-only-the-wait-is-shared">Sites go one at a time, and only the wait is shared</h2>
+<div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="sites-go-one-at-a-time-and-only-the-wait-is-shared" data-label="Mark seen"></button></div><div class="sec-body" id="sites-go-one-at-a-time-and-only-the-wait-is-shared--body">
+<p>Parallel adds are not safe. Cold Turkey keeps every block in <a href="https://github.com/yulonglin/dotfiles/blob/main/custom_bins/focus">one settings value</a>, and each add rewrites that value, so two adds at once could overwrite each other and lose a site. I have not tested that; it follows from the storage, and the app is already failing to answer at this load. Exceptions must also go in before <code>*.*</code>.</p>
+<p>The wait was the part worth sharing. It used to be per site. It is now one wait of up to 3 seconds for the whole sync.</p>
 </div></div>
 <div class="sec" data-sec="the-real-runs-match-this-account" data-hash="4d8523f1c645"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="the-real-runs-match-this-account--body" aria-labelledby="the-real-runs-match-this-account"></button>
 <h2 id="the-real-runs-match-this-account">The real runs match this account</h2>
@@ -208,14 +211,14 @@ flowchart TD
 <li><strong>If it fails again:</strong> the failure is specific to this site or block. Add it by hand in Cold Turkey and I will look further.</li>
 </ul>
 </div></div>
-<div class="sec" data-sec="limits-of-this-fix" data-hash="88598038fedc"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="limits-of-this-fix--body" aria-labelledby="limits-of-this-fix"></button>
+<div class="sec" data-sec="limits-of-this-fix" data-hash="2c6d7ea5e268"><button type="button" class="sec-toggle" aria-expanded="true" aria-controls="limits-of-this-fix--body" aria-labelledby="limits-of-this-fix"></button>
 <h2 id="limits-of-this-fix">Limits of this fix</h2>
 <div class="sec-tools"><span class="chip seen-badge" hidden></span><button type="button" class="seen-btn" aria-pressed="false" aria-describedby="limits-of-this-fix" data-label="Mark seen"></button></div><div class="sec-body" id="limits-of-this-fix--body">
 <ul>
-<li>The test fake applies changes at once, so it does not prove the 30-second wait is the right length.</li>
+<li>A sync should take a few seconds (Yulong, 4 Nov 2026), so the first version's 30-second wait after an error was removed. A site that lands after 3 seconds is listed as missing, and the next sync finds it already there.</li>
 <li><code>focus deep</code> start still exits on this error, because <a href="https://github.com/yulonglin/dotfiles/blob/8addc466b46337e61a63cbef4db003b41ff817c6/custom_bins/focus#L1529">nothing checks the database</a> after it.</li>
-<li>If Cold Turkey really hangs, a sync waits 30 seconds per site.</li>
-<li><code>timer: deep</code> still needs <code>grok.com</code>, added by hand in Cold Turkey. <code>focus status</code> reports this.</li>
+<li>If Cold Turkey really hangs, a sync takes as long as the CLI needs to give up on each site, plus the one 3-second wait. I have not timed the CLI's give-up.</li>
+<li><code>timer: deep</code> does not need a hand edit. I repeated that from <code>focus status</code> without checking. The CLI can add a site to any block, and <code>focus sync</code> now does this for timers.</li>
 </ul>
 <p>Reviewed by GPT-6.1 Sol before merge: no must-fix findings. That review came before the dropped add was seen. Written by Claude Opus 5.5, 4 Nov 2026.</p>
 </div></div>
