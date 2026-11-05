@@ -59,6 +59,8 @@ The question is API-bound, GPU-bound, or memory-heavy — then route:
 | Anything past ~2 GB RSS or ~1 h | the local queue (pueue, via `jexp`), for its caps |
 | Evals | Inspect AI, watching `max_samples`, `max_connections` and `stop_reason` |
 
+**Launch through `runrec`.** `runrec launch --slug S --backend {local,modal,runpod} --api-cap USD -- CMD` writes the run directory, its launch record and the repo's `out/runs.jsonl` line before anything spends; a Modal or RunPod launch also needs `--cost-cap`, `--rate` and `--max-idle`, or it is refused. `runrec board` answers "what is running, how long, at what cost". Usage: `docs/runrec.md`.
+
 ## Say which kind of run it was
 
 Sweeping variants is fine and often the point, but **the winner is a hypothesis, not a result** — it needs fresh episodes before it is quoted. Say explicitly whether a run was exploratory or confirmatory.
