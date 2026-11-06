@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""app-usage — which Mac apps and Homebrew formulae have gone unused. Read-only.
+
+Joins Spotlight last-used dates, ActivityWatch, the macOS app-usage database, running
+processes and Safari extension state, then lists apps never opened or idle past --days.
+Formulae are judged by binary access time, which brew install and upgrade reset.
+
+Run it from a terminal, not the Claude Code sandbox: Spotlight and ps are blocked there.
+Spotlight misses headless use, so check before discarding: agents run LibreOffice as
+`soffice --headless`, which never shows as a launch.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import plistlib
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+HOME = Path.home()
+APP_DIRS = [Path("/Applications"), Path("/Applications/Utilities"), HOME / "Applications"]
+AW_DB = HOME / "Library/Application Support/activitywatch/aw-server-rust/sqlite.db"
+KNOWLEDGE_DB = HOME / "Library/Application Support/Knowledge/knowledgeC.db"
+SAFARI = HOME / "Library/Containers/com.apple.Safari/Data/Library/Safari"
+LAUNCH_AGENTS = HOME / "Library/LaunchAgents"
+MAC_EPOCH = 978307200  # seconds between the Unix epoch and 2001-01-01
+AW_STALE_DAYS = 2
+
+
+def paint(text: str, sgr: str) -> str:
+    """ANSI colour for a terminal; plain text when piped or when NO_COLOR is set."""
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    return f"\033[{sgr}m{text}\033[0m"
+
+
+def run(*cmd: str) -> str:
+    """Stdout of a command, or an empty string if it cannot run."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=120).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+@dataclass
+class App:
+    name: str
+    path: str
+    bundle_id: str = ""
+    aliases: list[str] = field(default_factory=list)
+    source: str = "direct"
+    background: bool = False
+    size_mb: int = 0
+    launches: int = 0
+    last_used: dt.date | None = None
+    hours: float = 0.0
+    running: bool = False
+    extension_on: bool = False
+    status: str = ""
+
+
+@dataclass
+class Formula:
+    name: str
+    last_access: dt.date | None
+    size_mb: int
+
+
+def classify(last: dt.date | None, running: bool, extension_on: bool, today: dt.date, days: int) -> str:
+    """Sort an app into ok, extension, never or idle. Running always wins."""
+    if running:
+        return "ok"
+    if last and (today - last).days <= days:
+        return "ok"
+    if extension_on:
+        return "extension"
+    return "idle" if last else "never"
+
+
+def cask_key(text: str) -> str:
+    """Normalise a cask token or app name so `zoom` meets `zoom.us`."""
+    text = text.lower().replace(" ", "-")
+    return text.removesuffix("-app").removesuffix(".us")
+
+
+def read_plist(path: Path) -> dict:
+    try:
+        return plistlib.loads(path.read_bytes())
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        return {}
+
+
+def is_app_store(path: Path) -> bool:
+    return (path / "Contents/_MASReceipt/receipt").exists() or (path / "Wrapper/iTunesMetadata.plist").exists()
+
+
+def find_apps() -> list[App]:
+    apps = []
+    for root in APP_DIRS:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.app")):
+            if path.is_symlink():
+                continue
+            plist = read_plist(path / "Contents/Info.plist")
+            if not plist:  # an iPhone app wraps its bundle one level down
+                wrapped = sorted(path.glob("Wrapper/*.app/Info.plist"))
+                plist = read_plist(wrapped[0]) if wrapped else {}
+            names = {path.stem, plist.get("CFBundleName"), plist.get("CFBundleDisplayName")}
+            apps.append(
+                App(
+                    name=path.stem,
+                    path=str(path),
+                    bundle_id=plist.get("CFBundleIdentifier", ""),
+                    aliases=sorted(n for n in names if n),
+                    source="App Store" if is_app_store(path) else "direct",
+                    background=bool(plist.get("LSUIElement") or plist.get("LSBackgroundOnly")),
+                )
+            )
+    return apps
+
+
+def add_spotlight(app: App) -> bool:
+    """Fill launch data from Spotlight; returns False when mdls answered nothing."""
+    raw = run("mdls", "-name", "kMDItemLastUsedDate", "-name", "kMDItemUseCount", app.path)
+    if "kMDItem" not in raw:
+        return False
+    used = re.search(r"kMDItemLastUsedDate\s*=\s*(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d \+\d{4})", raw)
+    count = re.search(r"kMDItemUseCount\s*=\s*(\d+)", raw)
+    if used:
+        stamp = dt.datetime.strptime(used.group(1), "%Y-%m-%d %H:%M:%S %z")
+        app.last_used = stamp.astimezone().date()
+    if count:
+        app.launches = int(count.group(1))
+    du = run("du", "-sk", app.path).split()
+    app.size_mb = round(int(du[0]) / 1024) if du else 0
+    return True
+
+
+def later(a: dt.date | None, b: dt.date | None) -> dt.date | None:
+    return max((d for d in (a, b) if d), default=None)
+
+
+def open_readonly(path: Path) -> sqlite3.Connection:
+    """Read a live database including its WAL, which immutable mode would ignore."""
+    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+
+
+def activitywatch() -> tuple[dict[str, tuple[float, dt.date]], dt.date | None]:
+    """Hours and last date per app, plus the date of the newest event overall."""
+    try:
+        rows = open_readonly(AW_DB).execute(
+            "select json_extract(e.data,'$.app'), sum(e.endtime-e.starttime)/1e9, max(e.endtime)"
+            " from events e join buckets b on e.bucketrow=b.id"
+            " where b.name like 'aw-watcher-window%' group by 1"
+        ).fetchall()
+    except sqlite3.Error:
+        return {}, None
+    usage = {}
+    newest = None
+    for name, seconds, end in rows:
+        if not name:
+            continue
+        day = dt.datetime.fromtimestamp(end / 1e9).date()
+        usage[name.strip("\u200e")] = (seconds / 3600, day)
+        newest = later(newest, day)
+    return usage, newest
+
+
+def knowledge() -> dict[str, tuple[float, dt.date]]:
+    """Hours and last date per bundle id. macOS keeps only about four weeks here."""
+    try:
+        rows = open_readonly(KNOWLEDGE_DB).execute(
+            "select ZVALUESTRING, sum(ZENDDATE-ZSTARTDATE), max(ZSTARTDATE)"
+            " from ZOBJECT where ZSTREAMNAME='/app/usage' group by 1"
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    return {b: (s / 3600, dt.datetime.fromtimestamp(t + MAC_EPOCH).date()) for b, s, t in rows if b}
+
+
+def enabled_extensions() -> list[str]:
+    """Bundle ids of Safari extensions switched on; empty without Full Disk Access."""
+    ids = []
+    for name in ("WebExtensions", "AppExtensions"):
+        for key, value in read_plist(SAFARI / name / "Extensions.plist").items():
+            if isinstance(value, dict) and value.get("Enabled"):
+                ids.append(key.split(" ")[0])
+    return ids
+
+
+def owns_extension(bundle_id: str, ext: str) -> bool:
+    """Match an extension to its host app on the first three id components."""
+    return bool(bundle_id) and ext.split(".")[:3] == bundle_id.split(".")[:3]
+
+
+def cask_tokens() -> dict[str, str]:
+    """Map a normalised app name to its cask, for .app and .pkg casks alike."""
+    raw = run("brew", "info", "--cask", "--installed", "--json=v2")
+    try:
+        casks = json.loads(raw)["casks"]
+    except (ValueError, KeyError):
+        return {}
+    tokens = {}
+    for cask in casks:
+        tokens[cask_key(cask["token"])] = cask["token"]
+        for artifact in cask.get("artifacts", []):
+            for target in artifact.get("app", []) if isinstance(artifact, dict) else []:
+                if isinstance(target, str):
+                    tokens[cask_key(Path(target).stem)] = cask["token"]
+    return tokens
+
+
+def gather_apps(today: dt.date, days: int) -> tuple[list[App], dt.date | None, bool]:
+    apps = find_apps()
+    with ThreadPoolExecutor(8) as pool:
+        spotlight_ok = any(list(pool.map(add_spotlight, apps)))
+    aw, aw_newest = activitywatch()
+    kc = knowledge()
+    extensions = enabled_extensions()
+    tokens = cask_tokens()
+    processes = run("ps", "-axo", "command=")
+    for app in apps:
+        for name in app.aliases:
+            if name in aw:
+                app.hours += aw[name][0]
+                app.last_used = later(app.last_used, aw[name][1])
+        if app.bundle_id in kc:
+            app.hours += kc[app.bundle_id][0]
+            app.last_used = later(app.last_used, kc[app.bundle_id][1])
+        app.running = f"{app.path}/" in processes
+        app.extension_on = any(owns_extension(app.bundle_id, e) for e in extensions)
+        if app.source != "App Store" and cask_key(app.name) in tokens:
+            app.source = "cask"
+        app.status = classify(app.last_used, app.running, app.extension_on, today, days)
+        if app.size_mb == 0:  # shortcut stubs and URL handlers have nothing to discard
+            app.status = "ok"
+    return apps, aw_newest, spotlight_ok
+
+
+def stale_launch_agents() -> list[str]:
+    """Launch agents that point at an app no longer on disk."""
+    stale = []
+    for plist_path in sorted(LAUNCH_AGENTS.glob("*.plist")):
+        plist = read_plist(plist_path)
+        args = plist.get("ProgramArguments") or [plist.get("Program", "")]
+        for arg in args:
+            match = re.match(r"(/Applications/[^/]+\.app)", str(arg))
+            if match and not Path(match.group(1)).exists():
+                stale.append(plist_path.name)
+                break
+    return stale
+
+
+def stale_formulae(today: dt.date, days: int) -> list[Formula]:
+    """Requested formulae whose binaries nothing has read in --days."""
+    names = run("brew", "leaves", "--installed-on-request").split()
+    prefix = Path(run("brew", "--prefix").strip() or "/opt/homebrew")
+    stale = []
+    for name in names:
+        short = name.rsplit("/", 1)[-1]
+        opt = prefix / "opt" / short
+        stamps = [p.stat().st_atime for sub in ("bin", "sbin") for p in (opt / sub).glob("*") if p.exists()]
+        if not stamps:  # a library or keg-only formula has nothing to run
+            continue
+        last = dt.date.fromtimestamp(max(stamps))
+        if (today - last).days > days:
+            du = run("du", "-sk", str(opt.resolve())).split()
+            stale.append(Formula(name, last, round(int(du[0]) / 1024) if du else 0))
+    return sorted(stale, key=lambda f: f.last_access or dt.date.min)
+
+
+def size_text(mb: int) -> str:
+    return f"{mb / 1024:.1f} GB" if mb >= 1000 else f"{mb} MB"
+
+
+def app_row(app: App) -> str:
+    last = app.last_used.isoformat() if app.last_used else "never"
+    detail = f"{app.source}, {size_text(app.size_mb)}, {app.launches} launches, {app.hours:.1f} h"
+    return f"  {paint(app.name, '1'):<40} {last:<11} {paint(detail, '2')}"
+
+
+def print_report(apps: list[App], formulae: list[Formula], agents: list[str], args: argparse.Namespace, aw_newest: dt.date | None, spotlight_ok: bool, today: dt.date) -> None:
+    if not spotlight_ok:
+        print(paint("warning: Spotlight answered nothing, so launch dates are missing. Run this in a terminal, outside the sandbox.", "33"))
+    if aw_newest and (today - aw_newest).days > AW_STALE_DAYS:
+        print(paint(f"warning: ActivityWatch last recorded on {aw_newest}. Quit and reopen it.", "33"))
+    for title, status, colour in (("Never opened", "never", "31"), (f"Idle past {args.days} days", "idle", "33"), ("Idle, but a Safari extension is on", "extension", "2")):
+        rows = sorted((a for a in apps if a.status == status), key=lambda a: a.last_used or dt.date.min)
+        if rows:
+            print(paint(f"\n{title} ({len(rows)})", colour))
+            print("\n".join(app_row(a) for a in rows))
+    if formulae:
+        print(paint(f"\nFormulae not run in {args.days} days ({len(formulae)})", "33"))
+        for f in formulae:
+            print(f"  {paint(f.name, '1'):<40} {f.last_access}  {paint(size_text(f.size_mb), '2')}")
+    if agents:
+        print(paint(f"\nLaunch agents pointing at removed apps ({len(agents)})", "31"))
+        print("\n".join(f"  {name}" for name in agents))
+    ok = sum(a.status == "ok" for a in apps)
+    print(paint(f"\n{ok} of {len(apps)} apps are in use or running.", "32"))
+    print(paint("Headless use leaves no launch, and shell plugins such as fzf leave no command, so check before discarding.", "2"))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--days", type=int, default=30, help="idle threshold in days (default: 30)")
+    parser.add_argument("--json", action="store_true", help="print the full table as JSON")
+    args = parser.parse_args()
+    if not shutil.which("brew"):
+        print("app-usage: brew not found; this command is for macOS with Homebrew", file=sys.stderr)
+        return 1
+    today = dt.date.today()
+    apps, aw_newest, spotlight_ok = gather_apps(today, args.days)
+    formulae = stale_formulae(today, args.days)
+    agents = stale_launch_agents()
+    if args.json:
+        print(json.dumps({"apps": [asdict(a) for a in apps], "formulae": [asdict(f) for f in formulae], "stale_launch_agents": agents, "activitywatch_newest": aw_newest}, default=str, indent=1))
+    else:
+        print_report(apps, formulae, agents, args, aw_newest, spotlight_ok, today)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
