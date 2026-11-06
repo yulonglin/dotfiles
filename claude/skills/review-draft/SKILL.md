@@ -1,6 +1,6 @@
 ---
 name: review-draft
-description: Run the critic panel over a draft and merge what comes back — clarity, narrative, facts, red-team, in parallel, each writing a feedback file. Use on "review my draft", "critique this post", "give me feedback on this write-up", "run the critics", "tear this apart", or before publishing a blog post, LessWrong post, explainer, report or announcement. Also use when only one lens is wanted (just clarity, just fact-checking), since this skill dispatches the individual critics too.
+description: Run the critic panel over a draft and merge what comes back — clarity, narrative, facts, red-team, in parallel, each saved to a feedback file. Use on "review my draft", "critique this post", "give me feedback on this write-up", "run the critics", "tear this apart", or before publishing a blog post, LessWrong post, explainer, report or announcement. Also use when only one lens is wanted (just clarity, just fact-checking), since this skill dispatches the individual critics too.
 ---
 
 # Review Draft
@@ -24,10 +24,11 @@ Parse from provided arguments:
 
 1. **Parse arguments** from above
 2. **Validate file exists** — error if not found
-3. **Ask for target audience** using AskUserQuestion (required for all critics; never inferred)
+3. **Ask for target audience** using AskUserQuestion, once, before dispatch (required for all critics; never inferred). The critics are read-only and cannot ask, so the audience goes in every brief
 4. **Create feedback directory** — ensure `feedback/` exists in the draft's directory
 5. **Dispatch the selected critics in parallel** using the Task tool
-6. **Merge and report** — one ranked list, not four summaries
+6. **Save each critic's return** to its output file below. The critics are read-only, so they return findings and you write the files. A return that starts `AMBIGUOUS:` names missing context: supply it and re-dispatch that critic
+7. **Merge and report** — one ranked list, not four summaries
 
 ## Agent Dispatch
 
@@ -49,12 +50,12 @@ Sensitivity: {sensitivity}
 [clarity and narrative critics only] The standard is ~/.claude/checklists/writing.md, plus
 ~/.claude/checklists/presentation.md if the draft is a page, deck or report. Read it before
 you start and judge against it.
-Write feedback to feedback/{name}_{type}.md
+Return your findings in your output format. Do not write files.
 ```
 
 ## Merge And Report
 
-Read the feedback files rather than relaying each agent's return message, then collapse them into one list. Critics overlap by design — a buried lede shows up as clarity and as narrative — so **merge duplicates into a single entry naming both critics** instead of reporting it twice, and rank by what it costs the reader, not by which critic spoke loudest. Disagreements between critics are kept and attributed, never averaged.
+Merge from the feedback files you saved rather than relaying each return message one by one: collapse them into one list. Critics overlap by design — a buried lede shows up as clarity and as narrative — so **merge duplicates into a single entry naming both critics** instead of reporting it twice, and rank by what it costs the reader, not by which critic spoke loudest. Disagreements between critics are kept and attributed, never averaged.
 
 ```
 ## Review Complete

@@ -76,11 +76,11 @@ References: [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai/blob/mai
 - **JSONL outputs**: Save experiment results as JSONL for pandas analysis, incrementally adding columns across pipeline stages
 - **Chained workflows**: Structure multi-stage experiments (generate → classify → analyze) with separate scripts
 - **WandB integration**: Track experiments with comprehensive metadata logging
-- **CLI arguments**: Use argparse or click, never hardcode parameters
+- **CLI arguments**: Use cyclopts, never hardcode parameters
 
 ## Code Structure
 - **Modular packages**: Separate `apis/`, `data_models/`, `utils/` modules
-- **Environment management**: Use `uv` for dependencies, `.env` for API keys, `setup_environment()` utility
+- **Environment management**: Use `uv` for dependencies; API keys come from the `secrets` command (`secrets envrc` for the repo, `secrets run KEY -- cmd` for one run), never a `.env` file or a hardcoded value
 - **Type hints everywhere**: Full typing including async returns, generics, and union types
 - **Git submodules**: Share common utilities via `safety-tooling` submodule pattern
 
@@ -90,7 +90,7 @@ References: [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai/blob/mai
 2. **Understand Requirements**: Clarify the experiment, data format, and expected outputs before coding
 3. **Design Data Models**: Define Pydantic models for inputs/outputs with validation
 4. **Implement Core Logic**: Write clean, type-hinted code with proper async patterns
-5. **Add CLI Interface**: Use argparse for all parameters (output_dir, random_seed, cache_dir, etc.)
+5. **Add CLI Interface**: Use cyclopts for all parameters (output_dir, random_seed, cache_dir, etc.)
 6. **Implement Logging**: Log to file and console, include random seeds and hyperparameters
 7. **Add Checkpointing**: Save intermediate results, enable resume from checkpoint
 8. **Output JSONL**: Write results incrementally as JSONL for streaming analysis
@@ -100,7 +100,7 @@ References: [Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai/blob/mai
 
 **⚠️ CRITICAL: Run this validation BEFORE implementing any experiment code.**
 
-Before executing any experiment, validate the research spec passes these checks. If validation fails, **STOP EXECUTION** and ask user to update the spec.
+Before executing any experiment, validate the research spec passes these checks. You often run as a background worker with nobody to answer a question, so a failed check never waits for a reply: follow *What to Do If Validation Fails* below.
 
 ### BLOCKING (Must Pass)
 Check the spec has ALL of these:
@@ -145,18 +145,20 @@ RESULT: 9/9 blocking checks passed, 2 warnings
 
 ### What to Do If Validation Fails
 
-**If ANY blocking check fails:**
-1. Print the validation report showing what's missing
-2. **STOP - Do not proceed with implementation**
-3. Tell user: "❌ Validation failed. Please update the research spec to include [missing items]."
-4. Provide the path to the spec file
-5. Wait for user to update spec before continuing
+Sort each failed check by whether it is a scientific decision or a reversible implementation detail:
 
-**If only warnings present:**
-1. Print the validation report
-2. Ask user: "⚠️ Validation has warnings. Proceed anyway? [Y/n]"
-3. If yes: Continue with implementation
-4. If no: Stop and wait for spec update
+**Missing scientific decision** (hypothesis or falsification, metrics, datasets, baseline, hyperparameters that change what is measured):
+1. Do not choose it yourself
+2. Return to the caller with the validation report, the spec path, and a line starting `AMBIGUOUS:` that names each missing decision with its options and your recommendation
+3. You can still build the parts of the code that do not depend on the missing decision
+
+**Reversible implementation detail** (output path, graphs, caching, concurrency, error handling, random seeds):
+1. Choose a sensible default yourself
+2. Record each assumption in the validation report and in the run's output directory, so the caller can see and change it
+
+**Warnings only**: proceed, and record each warning and how you handled it in the validation report.
+
+**Pilot before full scale**, per `~/.claude/rules/experiments.md`: run stage one first (n=1–2, correctness of every stage), then stage two (n≥4, memory and length) only after stage one passes, and launch full scale only after both pass. **The spend gate is separate:** estimate from measured rates, and at $100 or more return the estimate to the caller instead of launching (pre-paid cluster allocations are exempt).
 
 ### When to Skip Validation
 
@@ -171,7 +173,7 @@ From CLAUDE.md research best practices:
 
 **Correctness & Validity**
 - Never use mock data in experiment code (only in unit tests)
-- If data is missing, EXPLICITLY state as blocker and ASK
+- If data is missing, EXPLICITLY state it as a blocker and return it to the caller flagged `AMBIGUOUS:`
 - Avoid broad try/except blocks (they mask fatal errors and bugs)
 - Validate experiment correctness semantically, not just syntactically
 - Question surprising results - could indicate bugs, not discoveries
@@ -185,7 +187,7 @@ From CLAUDE.md research best practices:
 
 **Experiment Organization**
 - JSONL output format for all experiment results
-- CLI arguments for ALL parameters (use argparse/click)
+- CLI arguments for ALL parameters (use cyclopts)
 - Clear folder structure: `DD-MM-YYYY_HH-MM-SS_experiment_name/` (use $(utc_timestamp))
 - Incremental output (don't wait until end to save)
 - Checkpoint support for long-running experiments
@@ -206,14 +208,13 @@ Adhere to CLAUDE.md research code principles:
 - Always use CLI arguments, never hardcode parameters
 - Always output JSONL format for experiment results
 - Always log random seeds, hyperparameters, git commit
-- **CRITICAL**: Code/commits NEVER mention coding agents
 - Prioritize correctness over performance (for research code)
-- Ask when data is missing, don't fabricate or use fallbacks
+- When data is missing, return it to the caller as a blocker; don't fabricate or use fallbacks
 
 When You Encounter Ambiguity:
-- Ask clarifying questions about requirements, constraints, or expected behavior
+- Resolve reversible implementation details yourself and state each assumption in your output
+- Return open questions about requirements or scientific choices to the caller, flagged `AMBIGUOUS:`
 - Suggest multiple approaches with trade-offs when there are valid alternatives
-- State your assumptions clearly if you must proceed without full clarity
 
 Output Format:
 - Provide complete, runnable code with all necessary imports

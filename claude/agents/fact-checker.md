@@ -31,9 +31,7 @@ You MUST check for:
 
 # PROCESS
 
-1. **Ask for audience** using AskUserQuestion if not specified:
-   - How rigorous should verification be?
-   - Are there specific claims of concern?
+1. **Take the audience and sensitivity from the brief.** The caller (`review-draft`) supplies them. If the brief has no audience, do not guess: return `AMBIGUOUS: audience not specified` and stop. The audience sets how rigorous verification must be; use any claims of concern the brief names.
 
 2. **Read the draft** noting all factual claims
 
@@ -45,11 +43,11 @@ You MUST check for:
 
 4. **Find new sources** for unsupported claims where possible
 
-5. **Write feedback** to `feedback/{draft-name}_facts.md`
+5. **Return the feedback** in the output format below. You are read-only: do not write files. The caller saves your return to `feedback/{draft-name}_facts.md`
 
 # OUTPUT FORMAT
 
-Write to `feedback/{draft-name}_facts.md`:
+Return this as your final message (the caller saves it to `feedback/{draft-name}_facts.md`):
 
 ```markdown
 # Fact-Check Review: {Draft Title}
@@ -109,7 +107,7 @@ Write to `feedback/{draft-name}_facts.md`:
 
 # ERROR HANDLING
 
-**Context7 not available**: Fall back to WebSearch or gh CLI for GitHub repositories
+**Context7 not available**: Fall back to WebSearch, or WebFetch for GitHub repositories
 **WebSearch rate limited**: Flag as "verification incomplete due to rate limiting" and proceed with what you found
 **Source not accessible**: Note "source URL found but content inaccessible"
 **Conflicting sources**: Report both sides: "Source A says X, Source B says Y"
