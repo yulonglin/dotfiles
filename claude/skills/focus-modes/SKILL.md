@@ -5,7 +5,7 @@ description: Switch, inspect or change Yulong's Cold Turkey and ScreenZen blocki
 
 # Focus modes
 
-Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: each mode is a block `mode: <name>` that blocks every site except its allowlist and blocks the apps of its app groups. **ScreenZen** gives friction and follows the mode: focus owns one allow group per mode ("✅ focus: research" and so on, plus "✅ focus: shared" for no mode), each holding the shared list plus that mode's sites. "✅ focus: shared" holds every mode's sites, so no mode is the widest state in both apps and every mode only tightens it. Exactly one is on, so everything else gets a pause screen; each switch or `focus off` turns the right one on, closing and reopening ScreenZen. Its 🚫 groups block apps and sites always.
+Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: each mode is a block `mode: <name>` that blocks every site except its allowlist and blocks the apps of its app groups. **ScreenZen** gives friction and follows the mode: focus owns one allow group per mode ("✅ focus: research" and so on, plus "✅ focus: shared" for no mode), each holding the shared list plus that mode's sites. "✅ focus: shared" holds every mode's sites, so no mode is the widest state in both apps and every mode only tightens it. Exactly one is on, so everything else gets a pause screen; each switch or `focus off` turns the right one on, closing and reopening ScreenZen. Its 🚫 groups block apps and sites always, except during an only session, when they stand aside for that session's own 🚫 group.
 
 ## Where things live
 
