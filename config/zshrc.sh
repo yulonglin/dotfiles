@@ -73,6 +73,11 @@ fi
 export VISUAL="$EDITOR"
 unset _fa_conf EDITOR_CLI EDITOR_CLI_SSH
 
+# Local zone for the Claude time-awareness hooks (claude/hooks/inject_timestamp.sh,
+# elapsed_stamp.sh). Servers run on UTC but the reader is in California; a Mac
+# already has the right zone in /etc/localtime, which also follows travel.
+[[ $OSTYPE == darwin* ]] || export CLAUDE_LOCAL_TZ="${CLAUDE_LOCAL_TZ:-America/Los_Angeles}"
+
 # Claude Code tmpdir - avoid root-owned /tmp/claude issues
 if [[ -n "$TMPDIR" && -w "$TMPDIR" ]]; then
     # Explicit TMPDIR takes priority (cloud environments, user preference)
