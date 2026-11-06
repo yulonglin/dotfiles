@@ -102,6 +102,7 @@ COMPONENTS:
     --playwright      Deploy Playwright + Chromium for browser tests (~650MB, opt-in)
     --git-hooks       Deploy global git hooks
     --pkg-configs     Deploy package manager security configs (7-day quarantine)
+    --sshd-key-only   Make this machine's ssh server refuse passwords (keys only; needs sudo)
     --secrets         Sync secrets with GitHub gist
     --secrets-env     Verify BWS secrets are configured
     --dep-audit       Install weekly dependency audit (supply chain defense)
@@ -222,13 +223,23 @@ _router_dropin_needs_sudo() {
     ! "$DOT_DIR/custom_bins/model-router-wire" apply --check >/dev/null 2>&1
 }
 
+# True only when sshd hardening is selected AND this machine's sshd still offers
+# passwords: an already key-only machine (or one with no ssh server) never pays a
+# sudo prompt for it.
+_sshd_key_only_needs_sudo() {
+    [[ "${DEPLOY_SSHD_KEY_ONLY:-false}" == "true" && $EUID -ne 0 ]] || return 1
+    local rc=0
+    "$DOT_DIR/custom_bins/ssh-key-only" check >/dev/null 2>&1 || rc=$?
+    [[ $rc -eq 1 ]]
+}
+
 # Cache sudo once up front if a privileged component is selected (VPN daemon,
 # Bear CLI symlink into /usr/local/bin, Linux pueue systemd setup, or the
 # model-router drop-in), so the password is requested once here rather than
 # blocking mid-deploy.
 if [[ "${DEPLOY_VPN:-false}" == "true" || "${DEPLOY_BEARCLI:-false}" == "true" \
     || ( "$(uname -s)" == "Linux" && "${DEPLOY_PUEUE:-false}" == "true" ) ]] \
-    || _router_dropin_needs_sudo; then
+    || _router_dropin_needs_sudo || _sshd_key_only_needs_sudo; then
     front_load_sudo
 fi
 
@@ -1571,6 +1582,34 @@ if [[ "${DEPLOY_TEXT_REPLACEMENTS:-false}" == "true" ]] && is_macos; then
     else
         log_warning "uv not found — skipping text replacements sync"
     fi
+fi
+
+# ─── SSH server: keys only ───────────────────────────────────────────────────
+# A password-accepting sshd is one `passwd` away from being guessable: hn took
+# 12k password guesses a day from the internet, and the Mac offered passwords to
+# anyone on the same Wi-Fi (2026-11-03). `ssh-key-only check` asks the server
+# what it offers, so a drop-in overridden by a distro file still reads as a
+# failure. Install refuses when the login user has no authorized key, so this
+# cannot lock a machine out. docs/ssh-key-only.md.
+if [[ "${DEPLOY_SSHD_KEY_ONLY:-false}" == "true" ]]; then
+    log_section "SSH SERVER: KEYS ONLY"
+    _ssh_ko="$DOT_DIR/custom_bins/ssh-key-only"
+    _ssh_ko_rc=0
+    "$_ssh_ko" check >/dev/null 2>&1 || _ssh_ko_rc=$?
+    case $_ssh_ko_rc in
+        0) log_success "ssh server already refuses passwords" ;;
+        3) log_info "No ssh server answering on this machine — nothing to harden" ;;
+        1)
+            if [[ $EUID -eq 0 ]]; then
+                "$_ssh_ko" install || log_warning "ssh-key-only install failed — see its output above"
+            elif sudo -n true 2>/dev/null; then
+                sudo -n "$_ssh_ko" install || log_warning "ssh-key-only install failed — see its output above"
+            else
+                log_warning "ssh server accepts passwords and no sudo is cached; run: sudo $_ssh_ko install"
+            fi
+            ;;
+        *) log_warning "Could not tell which logins the ssh server offers; run: $_ssh_ko check" ;;
+    esac
 fi
 
 # ─── VPN Split Tunneling (macOS only) ────────────────────────────────────────
