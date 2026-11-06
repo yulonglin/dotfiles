@@ -1221,7 +1221,49 @@ def test_a_failed_screenzen_write_leaves_the_mode_on_and_no_session(
     with pytest.raises(OSError):
         ct.cmd_only(only_cfg, ["bear", "5"])
     assert blocks["mode: research"]["enabled"] == "true"
+    assert ct.read_only()["until"] == 0  # the record stays, so the write is retried
+    monkeypatch.setattr(ct, "cmd_screenzen", lambda cfg, dry_run, **k: None)
+    assert ct.end_only(only_cfg)
     assert ct.read_only() is None
+
+
+def test_a_failed_mode_stop_puts_screenzen_back(only_cfg, session_env, monkeypatch):
+    blocks, writes, *_ = session_env
+    fake_cold_turkey(monkeypatch, blocks, refuse=("mode: research",))
+    with pytest.raises(SystemExit):
+        ct.cmd_only(only_cfg, ["bear", "5"])
+    assert writes == [[ct.ONLY], ["research"]]
+    assert ct.read_only() is None
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_a_failed_screenzen_return_keeps_the_record_to_retry(
+    only_cfg, session_env, monkeypatch
+):
+    _, _, notes, _ = session_env
+
+    def broken(cfg, dry_run, **k):
+        raise OSError("no write")
+
+    ct.write_only({"groups": ["bear"], "until": 1.0, "back": []})
+    monkeypatch.setattr(ct, "cmd_screenzen", broken)
+    assert not ct.end_only(only_cfg)
+    assert ct.read_only() is not None and not notes
+    monkeypatch.setattr(ct, "cmd_screenzen", lambda cfg, dry_run, **k: None)
+    assert ct.end_only(only_cfg)
+    assert ct.read_only() is None and notes
+
+
+def test_ending_early_with_a_failed_write_is_retried_on_the_next_tick(
+    only_cfg, session_env, monkeypatch
+):
+    def broken(cfg, dry_run, **k):
+        raise OSError("no write")
+
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    monkeypatch.setattr(ct, "cmd_screenzen", broken)
+    assert not ct.end_only(only_cfg, force=True)
+    assert ct.read_only()["until"] == 0  # no longer waits for the original end
 
 
 def test_a_locked_mode_cannot_be_replaced(only_cfg, session_env):
@@ -1242,6 +1284,39 @@ def test_an_agent_replacing_a_mode_waits_and_writes_nothing(
     assert e.value.code == 3
     assert ct.read_only() is None and writes == []
     assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_an_agent_starting_from_no_mode_waits_too(only_cfg, session_env, monkeypatch):
+    blocks, writes, *_ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_only(only_cfg, ["chat", "5"])
+    assert e.value.code == 3
+    assert ct.read_only() is None and writes == []
+
+
+def test_an_agent_leaving_a_session_for_a_mode_waits(
+    only_cfg, session_env, monkeypatch
+):
+    blocks, writes, *_ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_start(only_cfg, "research")
+    assert e.value.code == 3
+    assert ct.read_only() is not None and writes == []
+    assert blocks["mode: research"]["enabled"] == "false"
+
+
+def test_an_agent_retiming_a_session_waits(only_cfg, session_env, monkeypatch):
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_only(only_cfg, ["600"])
+    assert e.value.code == 3
+    assert ct.read_only()["until"] == 2e9
 
 
 def test_approving_one_session_does_not_approve_another(
@@ -1317,9 +1392,11 @@ def test_starting_a_mode_ends_a_session(only_cfg, session_env, monkeypatch):
     blocks, *_ = session_env
     blocks["mode: research"]["enabled"] = "false"
     ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
-    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    _, writes, notes, _ = session_env
     ct.cmd_start(only_cfg, "research")
     assert ct.read_only() is None
+    assert writes == [["research"]] and not notes
+    assert blocks["mode: research"]["enabled"] == "true"
 
 
 def test_a_break_and_off_point_at_only_end_during_a_session(

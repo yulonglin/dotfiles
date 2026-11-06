@@ -699,14 +699,16 @@ def cmd_start(cfg: dict, mode: str) -> None:
             sys.exit(
                 f"focus: {name!r} is locked, so it cannot be stopped; not starting {target!r}."
             )
-    if running:
+    session = read_only()
+    if running or session:
         # Starting from no mode only tightens; switching may allow sites the current mode blocks.
         # The key names the current state too, so an approval for one switch does not
-        # carry over to a different one.
+        # carry over to a different one. Leaving a session can open apps it paused.
+        here = running or [ONLY]
         gate(
             cfg,
-            f"switch:{','.join(sorted(running))}->{mode}",
-            f"switching from {', '.join(running)} to {target!r}",
+            f"switch:{','.join(sorted(here))}->{mode}",
+            f"switching from {', '.join(here)} to {target!r}",
         )
     # Start the target before stopping the others: for a moment both run, which only blocks
     # more, and if the start fails the old mode is still on. Failing closed, not open.
@@ -714,11 +716,15 @@ def cmd_start(cfg: dict, mode: str) -> None:
     if switched:
         switch(target, on=True)
     # A mode started by hand ends any break, but only once it is confirmed running, so a
-    # failed start leaves the break to be restored. Any mode ends an only session too.
+    # failed start leaves the break to be restored.
     BREAK_FILE.unlink(missing_ok=True)
-    ONLY_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
+    if session:  # any mode ends a session, which the gate above approved
+        write_only({**session, "until": 0, "back": []})
+        end_only(cfg, announce=False)
+        print(f"started {target!r}")
+        return
     # ScreenZen follows the mode. A real switch already passed the agent gate; re-running
     # the mode that already runs approved nothing, so it waives nothing either.
     sz_follow(cfg, [mode], switched=switched)
@@ -1811,11 +1817,11 @@ def notify(text: str) -> None:
     )
 
 
-def end_only(cfg: dict, force: bool = False) -> bool:
+def end_only(cfg: dict, force: bool = False, announce: bool = True) -> bool:
     """End a session that is over (or any, with force): start the modes it replaced, then
-    point ScreenZen at them. The record goes last, so a failed start is retried. The
-    waiter, the start of every focus command and the once-a-minute job all call this, as
-    for a break."""
+    point ScreenZen at them. The record goes last and only then, so a failed start or
+    ScreenZen write is retried. The waiter, the start of every focus command and the
+    once-a-minute job all call this, as for a break."""
     s = read_only()
     if s is None or (not force and time.time() < s["until"]):
         return False
@@ -1830,12 +1836,15 @@ def end_only(cfg: dict, force: bool = False) -> bool:
             cmd_screenzen(
                 cfg, dry_run=False, gated=False, modes=running_modes(cfg), quiet=True
             )
-        except (subprocess.CalledProcessError, OSError, ValueError) as e:
-            print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+        except (subprocess.CalledProcessError, OSError, ValueError, SystemExit) as e:
+            write_only({**s, "until": 0})
+            print(f"ScreenZen not restored: {e}. The next focus run tries again.")
+            return False
     ONLY_FILE.unlink(missing_ok=True)
-    text = f"Back to {', '.join(back)}" if back else "Back to no mode"
-    notify(f"Only session over. {text}.")
-    print(f"only session over; {text[0].lower()}{text[1:]}")
+    if announce:
+        text = f"Back to {', '.join(back)}" if back else "Back to no mode"
+        notify(f"Only session over. {text}.")
+        print(f"only session over; {text[0].lower()}{text[1:]}")
     return True
 
 
@@ -1878,6 +1887,8 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
         new = [g for g in picks if g not in now_groups]
         if new:
             gate(cfg, "only:+" + ",".join(sorted(new)), f"allowing {', '.join(new)}")
+        if minutes:
+            gate(cfg, f"only-time:{minutes}", f"running the session {minutes} more min")
         session["groups"] += new
         if minutes:
             session["until"] = time.time() + minutes * 60
@@ -1895,14 +1906,14 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
             sys.exit(f"focus: {PREFIX + m!r} is locked, so a session cannot replace it")
     on_break = read_break()
     back = running or (on_break["modes"] if on_break else [])
-    if running:
-        # Stopping a mode's hard allowlist loosens, whatever was picked. The key names the
-        # picks, so an approval for one session does not carry over to another.
-        gate(
-            cfg,
-            f"only:{','.join(sorted(running))}->{','.join(sorted(picks))}",
-            f"replacing {', '.join(running)} with an only session",
-        )
+    # A session stops a mode's hard allowlist, and its picks can open what a 🚫 group
+    # holds, so an agent always waits. The key names the picks, so an approval for one
+    # session does not carry over to another.
+    gate(
+        cfg,
+        f"only:{','.join(sorted(running))}->{','.join(sorted(picks))}",
+        f"starting an only session of {', '.join(picks)}",
+    )
     until = time.time() + minutes * 60
     write_only({"groups": picks, "until": until, "back": back})
     # ScreenZen first, then Cold Turkey: if the write fails, the mode is still on.
@@ -1912,7 +1923,9 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
         for m in running:
             switch(PREFIX + m, on=False)
     except (OSError, ValueError, subprocess.CalledProcessError, SystemExit):
-        ONLY_FILE.unlink(missing_ok=True)
+        # Put both apps back. A failed restoration keeps the record, so it is retried.
+        write_only({"groups": [], "until": 0, "back": running})
+        end_only(cfg, announce=False)
         raise
     BREAK_FILE.unlink(missing_ok=True)
     end = dt.datetime.fromtimestamp(until)
