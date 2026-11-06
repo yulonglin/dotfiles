@@ -14,6 +14,7 @@
     focus add travel westjet.com  # add to a group in the note, then sync both apps
     focus pull [--dry-run]    # copy sites and apps added inside Cold Turkey into the note
     focus deep [MINUTES]      # a timer: block its groups on top of any mode, locked
+    focus only [GROUP…] [MINUTES]  # pick what to allow; everything else gets a pause screen
     focus alfred [QUERY]      # Alfred script-filter JSON (config/alfred/workflows/focus)
     focus install-agent       # launchd job that ends an overdue break every minute
     focus uninstall-agent     # remove that job (deploy.sh --no-focus)
@@ -48,6 +49,20 @@ two running allowlist blocks would allow only the sites that are in both.
 `blocklists.cold_turkey` describes the always-on blocks; `status` reports their
 drift but nothing writes them, because their delay locks stop the CLI. A site a
 mode allows but an always-on block bans stays banned, and `status` flags it.
+
+'focus only' is a session like Cold Turkey Micromanager that can be bypassed. With no
+groups it opens a search over the groups and every installed app in no group; a word
+that is not a group name finds the one group holding that app or site ('chatgpt' finds
+ai-chat), else the one installed app it names ('zotero'). ScreenZen does all the
+work: its '✅ focus: only' group holds the note's `only.keep` groups plus the picks, and
+a '🚫 focus: only' group holds every installed app except those, so anything else gets
+a pause screen that can be passed. A session uses no Cold Turkey block: Cold Turkey can
+only be passed with a command, and the point is to reach something forgotten without
+leaving the work. So it stops the running mode, and only the always-on blocks stay
+hard. It lives in a state file, not in `modes`. When the time is up focus sends a
+notification and starts the mode it replaced. While a session runs, 'focus only' adds
+groups and 'focus only 20' sets the end to 20 minutes from now; 'focus only end' or any
+mode ends it. The section `only:` in the note switches all this on.
 
 An agent (CLAUDECODE=1) loosens only after a delay (`agent_loosen_delay_minutes`,
 default 10): stopping a mode, switching modes, a sync that allows new sites, or
@@ -101,12 +116,15 @@ APP_DIRS = [
 ]
 PREFIX = "mode: "
 TIMER_PREFIX = "timer: "
+ONLY = "only"  # a session: a ScreenZen state, not a Cold Turkey block or a note mode
+APP_PICK = "app:"  # a picked installed app that is in no group
 BLOCK_ALL = "*.*"
 SZ_DOMAIN = (
     Path.home()
     / "Library/Group Containers/group.ScreenZen.macos/Library/Preferences/group.ScreenZen.macos"
 )
 SZ_MODE_PREFIX = "✅ focus: "  # ScreenZen allow groups this tool owns, one per mode
+SZ_ONLY_BLOCK = "🚫 focus: only"  # every app a session did not pick
 SZ_BUNDLE = "com.scottharvey.screenzenapp.ios"
 
 
@@ -314,6 +332,7 @@ def load_config(path: Path) -> dict:
         "off_hours",
         "break_max_minutes",
         "no_mode_allow",
+        "only",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
@@ -353,6 +372,13 @@ def load_config(path: Path) -> dict:
         if name in (cfg.get("modes") or {}):
             problems.append(f"timer {name!r} has the same name as a mode")
         refs += [(f"timer {name}", t.get("block") or [])]
+    if "only" in cfg:
+        cfg["only"] = cfg["only"] or {}
+        if set(cfg["only"]) - {"keep", "minutes"}:
+            problems.append("'only' may only have 'keep' and 'minutes'")
+        if ONLY in (cfg.get("modes") or {}) or ONLY in (cfg.get("timers") or {}):
+            problems.append(f"{ONLY!r} is taken by the 'only' section")
+        refs += [("only keep", cfg["only"].get("keep") or [])]
     for where, names in refs:
         for n in names:
             if n not in groups:
@@ -488,6 +514,8 @@ def is_locked(block: dict) -> bool:
 
 BREAK_FILE = PENDING.parent / "break.json"
 DEFAULT_BREAK_MAX = 30
+ONLY_FILE = PENDING.parent / "only.json"
+DEFAULT_ONLY_MIN = 45
 
 
 def read_break() -> dict | None:
@@ -543,12 +571,28 @@ def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
     return False
 
 
+def spawn_self(*args: str) -> None:
+    """Start a detached copy of focus, which outlives this command."""
+    subprocess.Popen(
+        [sys.executable, sys.argv[0], "--config", str(CONFIG_PATH), *args],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def cmd_break(cfg: dict, args: list[str]) -> None:
     """Stop the running modes for N minutes; they start again when the break ends."""
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
     minutes = args[0] if args else "15"
     if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
         sys.exit(f"focus: a break is 1 to {cap} minutes, got {minutes!r}")
+    if read_only():
+        sys.exit(
+            "focus: an only session is running, so there is no mode to take a break "
+            "from; 'focus only' adds a group, 'focus only end' ends it"
+        )
     if (b := read_break()) and time.time() < b["until"]:
         end = dt.datetime.fromtimestamp(b["until"])
         sys.exit(
@@ -567,13 +611,7 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     # Start the waiter before anything is switched off: if it cannot start, no mode stops.
     # Any later focus command also ends an expired break, so the waiter is not the only way.
     try:
-        subprocess.Popen(
-            [sys.executable, sys.argv[0], "--config", str(CONFIG_PATH), "resume"],
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        spawn_self("resume")
     except OSError as e:
         BREAK_FILE.unlink(missing_ok=True)
         sys.exit(f"focus: could not start the break timer ({e}); no mode was stopped")
@@ -676,8 +714,9 @@ def cmd_start(cfg: dict, mode: str) -> None:
     if switched:
         switch(target, on=True)
     # A mode started by hand ends any break, but only once it is confirmed running, so a
-    # failed start leaves the break to be restored.
+    # failed start leaves the break to be restored. Any mode ends an only session too.
     BREAK_FILE.unlink(missing_ok=True)
+    ONLY_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
     # ScreenZen follows the mode. A real switch already passed the agent gate; re-running
@@ -732,6 +771,9 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
 
 
 def cmd_off(cfg: dict) -> None:
+    if read_only():
+        print("an only session is running; 'focus only end' ends it")
+        return
     running = {
         n: b
         for n, b in mode_blocks(read_blocks()).items()
@@ -851,6 +893,9 @@ def cmd_status(cfg: dict) -> None:
             print(f"  {k}: {', '.join(v)}")
     for line in conflicts(cfg):
         print(f"conflict: {line}")
+    if s := read_only():
+        end = dt.datetime.fromtimestamp(s["until"])
+        print(f"only: {', '.join(s['groups'])} until {end:%H:%M:%S}")
 
 
 def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
@@ -1039,7 +1084,10 @@ def sz_shared_sites(cfg: dict) -> set[str]:
 
 def sz_group_off(bl: dict, modes: list[str]) -> bool:
     """Whether a ScreenZen 🚫 group stands aside: one of its off_in modes runs, or no
-    mode runs and its off_in names 'none'."""
+    mode runs and its off_in names 'none'. All of them stand aside for a session, whose
+    own 🚫 group covers every app that was not picked."""
+    if ONLY in modes:
+        return True
     off_in = bl.get("off_in") or []
     return any(m in off_in for m in modes) or (not modes and "none" in off_in)
 
@@ -1059,8 +1107,11 @@ def sz_allow_sites(cfg: dict, modes: list[str] | None = None) -> list[str]:
     }
     seen: dict[str, None] = {}
     shared = group_items(cfg, cfg.get("always_allow") or [], "sites")
-    names = modes or list(cfg["modes"])
-    sources = [shared] + [desired_exceptions(cfg, m) for m in names]
+    if modes == [ONLY]:
+        sources = [group_items(cfg, only_allowed(cfg), "sites")]
+    else:
+        names = modes or list(cfg["modes"])
+        sources = [shared] + [desired_exceptions(cfg, m) for m in names]
     if not modes:  # no mode (a break, or off hours), or every mode
         sources.append(group_items(cfg, cfg.get("no_mode_allow") or [], "sites"))
     for sites in sources:
@@ -1127,6 +1178,75 @@ def running_modes(cfg: dict) -> list[str]:
     ]
 
 
+def installed_apps() -> list[str]:
+    """Names of the apps a person opens: the bundles in APP_DIRS, less menu-bar agents and
+    background helpers, which never come to the front."""
+    names: dict[str, None] = {}
+    for d in APP_DIRS:
+        for bundle in sorted(d.glob("*.app")):
+            try:
+                with (bundle / "Contents/Info.plist").open("rb") as f:
+                    info = plistlib.load(f)
+            except (OSError, ValueError, plistlib.InvalidFileException):
+                continue
+            hidden = (info.get(k) for k in ("LSUIElement", "LSBackgroundOnly"))
+            if not any(str(v).lower() in ("1", "true", "yes") for v in hidden):
+                names[bundle.stem] = None
+    return list(names)
+
+
+def sz_only_block(cfg: dict, groups: list[dict], modes: list[str]) -> list[str]:
+    """Keep the 🚫 group of a session: on with every other app during one, off after.
+
+    A copy of an all-day 🚫 group, so it has that group's pause and unlock settings and
+    can be passed. It is not counted as loosening: 'focus only' passes the gate itself,
+    and turning it off is the end of a session."""
+    on = ONLY in modes
+    group = next((g for g in groups if g["groupName"] == SZ_ONLY_BLOCK), None)
+    if group is None:
+        if not on:
+            return []
+        template = next(
+            (
+                g
+                for g in groups
+                if g["groupName"].startswith("🚫") and g.get("alwaysActive")
+            ),
+            None,
+        )
+        if template is None:
+            sys.exit(
+                "focus: ScreenZen has no all-day 🚫 group to copy; create one first"
+            )
+        group = copy.deepcopy(template)
+        group.update(
+            groupName=SZ_ONLY_BLOCK,
+            id=str(uuid.uuid4()).upper(),
+            customSites=[],
+            apps=[],
+            isDisabled=True,
+        )
+        groups.append(group)
+    was_off = group["isDisabled"]
+    group["isDisabled"] = not on
+    if not on:
+        return [f"{SZ_ONLY_BLOCK}: off"] if not was_off else []
+    allowed = set(group_items(cfg, only_allowed(cfg), "apps"))
+    allowed |= {
+        g.removeprefix(APP_PICK)
+        for g in (read_only() or {"groups": []})["groups"]
+        if g.startswith(APP_PICK)
+    }
+    old = {a["appName"]: a for a in group["apps"]}
+    entries = [
+        sz_app(name, old.get(name, APP_TEMPLATE))
+        for name in installed_apps()
+        if name not in allowed
+    ]
+    group["apps"] = [e for e in entries if e]
+    return [f"{SZ_ONLY_BLOCK}: on, {len(group['apps'])} apps get a pause screen"]
+
+
 def sz_mode_group(mode: str | None) -> str:
     """Name of the ScreenZen allow group focus owns for a mode (None: no mode runs)."""
     return f"{SZ_MODE_PREFIX}{mode or 'shared'}"
@@ -1159,7 +1279,7 @@ def cmd_screenzen(
     screen shows the mode. Missing groups are created by copying an existing ✅ group.
     Every other ✅ group is switched off."""
     if modes is None:
-        modes = running_modes(cfg)
+        modes = [ONLY] if "only" in cfg and read_only() else running_modes(cfg)
     raw = sz_export()
     groups = sz_groups(raw)
     before = copy.deepcopy(groups)
@@ -1179,7 +1299,7 @@ def cmd_screenzen(
 
     # One allow group per mode, plus the no-mode group; keep each list current.
     want_on = {sz_mode_group(m) for m in modes} or {sz_mode_group(None)}
-    for mode in [None, *cfg["modes"]]:
+    for mode in [None, *cfg["modes"], *([ONLY] if "only" in cfg else [])]:
         name = sz_mode_group(mode)
         group = by_name.get(name)
         if group is None:
@@ -1198,6 +1318,9 @@ def cmd_screenzen(
     for g in groups:
         if g["groupName"].startswith("✅"):
             g["isDisabled"] = g["groupName"] not in want_on
+
+    if "only" in cfg:
+        report_lines.extend(sz_only_block(cfg, groups, modes))
 
     for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items():
         group = by_name.get(name)
@@ -1547,6 +1670,260 @@ def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
     sys.exit(f"focus: Cold Turkey did not start {block!r}")
 
 
+def read_only() -> dict | None:
+    """The session, {'groups', 'until', 'back'}, or None. A file that does not parse is an
+    ended session with nothing to restore, as for a break."""
+    try:
+        s = json.loads(ONLY_FILE.read_text())
+    except FileNotFoundError:
+        return None
+    except ValueError:
+        s = {}
+    if not isinstance(s, dict):
+        s = {}
+    until = s.get("until")
+    return {
+        "groups": [g for g in s.get("groups") or [] if isinstance(g, str)],
+        "until": until if isinstance(until, (int, float)) else 0,
+        "back": [m for m in s.get("back") or [] if isinstance(m, str)],
+    }
+
+
+def write_only(session: dict) -> None:
+    ONLY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ONLY_FILE.write_text(json.dumps(session))
+
+
+def only_allowed(cfg: dict) -> list[str]:
+    """The groups a session lets through without a pause screen: keep, then the picks."""
+    keep = cfg["only"].get("keep") or []
+    session = read_only() or {"groups": []}
+    return keep + [g for g in session["groups"] if g in cfg["groups"]]
+
+
+def only_pool(cfg: dict) -> list[str]:
+    """The groups that can be picked: all but those an always-on block bans, which a
+    session could not open anyway."""
+    banned = {
+        g
+        for bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).values()
+        for g in bl.get("block") or []
+    }
+    return [g for g in cfg["groups"] if g not in banned]
+
+
+def group_contents(cfg: dict, group: str) -> list[str]:
+    spec = cfg["groups"][group]
+    return [str(i) for i in [*(spec.get("apps") or []), *(spec.get("sites") or [])]]
+
+
+def ungrouped_apps(cfg: dict) -> list[str]:
+    """Installed apps no group names, so a session can still pick them one by one."""
+    grouped = {a for g in cfg["groups"] for a in group_items(cfg, [g], "apps")}
+    return [a for a in installed_apps() if a not in grouped]
+
+
+def resolve_pick(cfg: dict, word: str) -> str:
+    """A group name, a word found in exactly one group's apps and sites, or else one
+    ungrouped installed app."""
+    pool = only_pool(cfg)
+    if word in pool:
+        return word
+    hits = [
+        g
+        for g in pool
+        if any(word.lower() in i.lower() for i in group_contents(cfg, g))
+    ]
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
+        apps = [a for a in ungrouped_apps(cfg) if word.lower() in a.lower()]
+        exact = [a for a in apps if a.lower() == word.lower()]
+        if len(exact or apps) == 1:
+            return APP_PICK + (exact or apps)[0]
+        hits = apps
+    found = f"it is in {', '.join(hits)}" if hits else "no group or app has it"
+    sys.exit(f"focus: {word!r}: {found}")
+
+
+def pick_groups(cfg: dict, exclude: list[str]) -> list[str]:
+    """Search the groups with fzf; [] when cancelled."""
+    if not sys.stdin.isatty() or not shutil.which("fzf"):
+        sys.exit(
+            "focus: the picker needs a terminal and fzf; name the groups instead, "
+            "e.g. focus only bear ai-chat 45"
+        )
+    keep = cfg["only"].get("keep") or []
+    rows = [
+        f"{g}\t{', '.join(group_contents(cfg, g))}"
+        for g in only_pool(cfg)
+        if g not in keep and g not in exclude and group_contents(cfg, g)
+    ]
+    rows += [
+        f"{APP_PICK}{a}\tinstalled app"
+        for a in ungrouped_apps(cfg)
+        if APP_PICK + a not in exclude
+    ]
+    r = subprocess.run(
+        [
+            "fzf",
+            "--multi",
+            "--exact",  # fuzzy matching finds any word in a group with many sites
+            "--delimiter=\t",
+            "--tabstop=18",
+            "--bind=space:toggle+clear-query",
+            "--prompt=allow> ",
+            "--header=Type to search. SPACE to toggle, ENTER to confirm.",
+            "--preview=echo {2} | tr ',' '\\n'",
+            "--preview-window=right:40%:wrap",
+        ],
+        input="\n".join(rows),
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if r.returncode:  # 1: nothing matched, 130: cancelled
+        return []
+    return [line.split("\t")[0] for line in r.stdout.splitlines()]
+
+
+def ask_minutes(default: int) -> int:
+    answer = input(f"Minutes [{default}]: ").strip()
+    if not answer:
+        return default
+    if not answer.isdigit() or int(answer) < 1:
+        sys.exit(f"focus: minutes must be a whole number, got {answer!r}")
+    return int(answer)
+
+
+def notify(text: str) -> None:
+    subprocess.run(
+        [
+            "osascript",
+            "-e",
+            "on run argv",
+            "-e",
+            'display notification (item 1 of argv) with title "focus"',
+            "-e",
+            "end run",
+            text,
+        ],
+        capture_output=True,
+    )
+
+
+def end_only(cfg: dict, force: bool = False) -> bool:
+    """End a session that is over (or any, with force): start the modes it replaced, then
+    point ScreenZen at them. The record goes last, so a failed start is retried. The
+    waiter, the start of every focus command and the once-a-minute job all call this, as
+    for a break."""
+    s = read_only()
+    if s is None or (not force and time.time() < s["until"]):
+        return False
+    back = [m for m in s["back"] if m in cfg["modes"]]
+    running = set(running_modes(cfg))
+    for m in back:
+        if m not in running:
+            switch(PREFIX + m, on=True)
+    if Path(f"{SZ_DOMAIN}.plist").exists():
+        # Not gated: this returns to the state from before the session.
+        try:
+            cmd_screenzen(
+                cfg, dry_run=False, gated=False, modes=running_modes(cfg), quiet=True
+            )
+        except (subprocess.CalledProcessError, OSError, ValueError) as e:
+            print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+    ONLY_FILE.unlink(missing_ok=True)
+    text = f"Back to {', '.join(back)}" if back else "Back to no mode"
+    notify(f"Only session over. {text}.")
+    print(f"only session over; {text[0].lower()}{text[1:]}")
+    return True
+
+
+def cmd_only_wait(cfg: dict) -> None:
+    """Wait for the session's end, which can move, then end it (run detached)."""
+    while (s := read_only()) and time.time() < s["until"]:
+        time.sleep(min(20, max(1, s["until"] - time.time())))
+    end_only(cfg)
+
+
+def cmd_only(cfg: dict, args: list[str]) -> None:
+    """Start a session of picked groups, or add to and retime the one that runs."""
+    if "only" not in cfg:
+        sys.exit(f"focus: {CONFIG_PATH} has no 'only:' section")
+    session = read_only()
+    if args == ["end"]:
+        if not session:
+            print("no only session is running")
+            return
+        gate(cfg, "only-end", "ending the only session")
+        end_only(cfg, force=True)
+        return
+    words = list(args)
+    minutes = int(words.pop()) if words and words[-1].isdigit() else None
+    if minutes == 0:
+        sys.exit("focus: minutes must be at least 1")
+    picks = list(dict.fromkeys(resolve_pick(cfg, w) for w in words))
+    now_groups = session["groups"] if session else []
+    if not picks and (minutes is None or not session):
+        picks = pick_groups(cfg, now_groups)
+        if not picks:
+            print("nothing picked; nothing changed")
+            return
+        if minutes is None and not session:
+            default = int(cfg["only"].get("minutes", DEFAULT_ONLY_MIN))
+            minutes = ask_minutes(default)
+    if not Path(f"{SZ_DOMAIN}.plist").exists():
+        sys.exit("focus: a session runs on ScreenZen, which is not installed here")
+    if session:
+        new = [g for g in picks if g not in now_groups]
+        if new:
+            gate(cfg, "only:+" + ",".join(sorted(new)), f"allowing {', '.join(new)}")
+        session["groups"] += new
+        if minutes:
+            session["until"] = time.time() + minutes * 60
+        write_only(session)
+        if new:
+            cmd_screenzen(cfg, dry_run=False, gated=False, modes=[ONLY], quiet=True)
+        end = dt.datetime.fromtimestamp(session["until"])
+        print(f"only: {', '.join(session['groups'])} until {end:%H:%M}")
+        return
+    minutes = minutes or int(cfg["only"].get("minutes", DEFAULT_ONLY_MIN))
+    blocks = read_blocks()
+    running = running_modes(cfg)
+    for m in running:
+        if is_locked(blocks[PREFIX + m]):
+            sys.exit(f"focus: {PREFIX + m!r} is locked, so a session cannot replace it")
+    on_break = read_break()
+    back = running or (on_break["modes"] if on_break else [])
+    if running:
+        # Stopping a mode's hard allowlist loosens, whatever was picked. The key names the
+        # picks, so an approval for one session does not carry over to another.
+        gate(
+            cfg,
+            f"only:{','.join(sorted(running))}->{','.join(sorted(picks))}",
+            f"replacing {', '.join(running)} with an only session",
+        )
+    until = time.time() + minutes * 60
+    write_only({"groups": picks, "until": until, "back": back})
+    # ScreenZen first, then Cold Turkey: if the write fails, the mode is still on.
+    try:
+        spawn_self("only-wait")
+        cmd_screenzen(cfg, dry_run=False, gated=False, modes=[ONLY], quiet=True)
+        for m in running:
+            switch(PREFIX + m, on=False)
+    except (OSError, ValueError, subprocess.CalledProcessError, SystemExit):
+        ONLY_FILE.unlink(missing_ok=True)
+        raise
+    BREAK_FILE.unlink(missing_ok=True)
+    end = dt.datetime.fromtimestamp(until)
+    after = ", ".join(back) or "no mode"
+    print(f"only: {', '.join(picks)} until {end:%H:%M}, then back to {after}")
+    if not AGENT_PLIST.exists():
+        print(
+            "tip: 'focus install-agent' makes sure a session ends even after a restart"
+        )
+
+
 def cmd_alfred(cfg: dict, query: str) -> None:
     """Alfred script-filter JSON: modes, 'off' and timers, filtered by what was typed.
 
@@ -1699,6 +2076,20 @@ def cmd_overview(cfg: dict) -> None:
             t,
             paint(f"blocks {blocked} · {spec.get('minutes', 50)} min by default", "2"),
         )
+    if "only" in cfg:
+        print()
+        head("Only", "focus only [groups] [minutes]")
+        if s := read_only():
+            end = dt.datetime.fromtimestamp(s["until"])
+            after = ", ".join(s["back"]) or "no mode"
+            print(
+                f"  {paint('●', '1;32')} {paint(', '.join(s['groups']), '1;32')}  "
+                + paint(f"until {end:%H:%M}, then {after} · focus only end", "2")
+            )
+        else:
+            print(
+                "    " + paint("pick what to allow; the rest gets a pause screen", "2")
+            )
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
     print()
     head("Break", "focus break [minutes]")
@@ -1751,11 +2142,13 @@ def main() -> None:
     p.add_argument(
         "command",
         nargs="?",
-        help="a mode or timer name, or break | off | status | sync | screenzen | add | pull | export"
-        " | install-agent | uninstall-agent",
+        help="a mode or timer name, or only | break | off | status | sync | screenzen | add | pull"
+        " | export | install-agent | uninstall-agent",
     )
     p.add_argument(
-        "args", nargs="*", help="export: output file; add: GROUP SITE [SITE…]"
+        "args",
+        nargs="*",
+        help="export: output file; add: GROUP SITE [SITE…]; only: [GROUP…] [MINUTES] | end",
     )
     p.add_argument(
         "--dry-run", action="store_true", help="screenzen, pull: show changes only"
@@ -1772,11 +2165,12 @@ def main() -> None:
     if not cfg.get("modes"):
         sys.exit(f"focus: no modes in {a.config}")
     # Any focus command ends a break that is over, so a lost waiter cannot leave it open.
-    if a.command not in ("resume", "alfred", "tick", "install-agent"):
+    if a.command not in ("resume", "only-wait", "alfred", "tick", "install-agent"):
         try:
             end_break(cfg)
+            end_only(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
-            print(f"focus: could not end an expired break: {e}")
+            print(f"focus: could not end an expired break or session: {e}")
     match a.command:
         case None:
             cmd_overview(cfg)
@@ -1786,8 +2180,13 @@ def main() -> None:
             cmd_break(cfg, a.args)
         case "resume":  # internal: the detached waiter that 'break' starts
             cmd_resume(cfg)
-        case "tick":  # internal: the launchd job; ends an overdue break, else silent
+        case "tick":  # internal: the launchd job; ends what is overdue, else silent
             end_break(cfg)
+            end_only(cfg)
+        case "only":
+            cmd_only(cfg, a.args)
+        case "only-wait":  # internal: the detached waiter that 'only' starts
+            cmd_only_wait(cfg)
         case "install-agent":
             cmd_install_agent()
         case "status":

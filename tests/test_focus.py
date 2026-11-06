@@ -32,6 +32,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
     monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
+    monkeypatch.setattr(ct, "ONLY_FILE", tmp_path / "only.json")
+    monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "SZ_DOMAIN", tmp_path / "no-screenzen" / "prefs")
     monkeypatch.setattr(
         ct, "sz_export", lambda: pytest.fail("test reached real ScreenZen prefs")
@@ -393,7 +395,10 @@ def test_sync_adds_a_timers_new_site_and_status_says_sync_can(
 
 
 def test_sync_waits_once_however_many_additions_fail(cfg, monkeypatch):
-    research, writing = mode_block(cfg, "research", "false"), mode_block(cfg, "writing", "false")
+    research, writing = (
+        mode_block(cfg, "research", "false"),
+        mode_block(cfg, "writing", "false"),
+    )
     research["exceptions"].remove("arxiv.org")
     writing["exceptions"].remove("arxiv.org")
     blocks = {"mode: research": research, "mode: writing": writing}
@@ -1038,3 +1043,396 @@ def test_screenzen_window_is_closed_then_the_front_handed_back(monkeypatch):
     ct.hand_back_focus(REX)
     assert closed == [1]
     assert opened == [["open", "-b", REX]]
+
+
+# --- focus only ---------------------------------------------------------------------
+
+ONLY_NOTE = """# Test note
+
+```yaml
+groups:
+  base: {sites: ["file://*.*", localhost]}
+  tools: {apps: [Ghostty]}
+  papers: {sites: [arxiv.org]}
+  llms: {sites: [chatgpt.com], apps: [ChatGPT]}
+  bear: {apps: [Bear]}
+  chat: {apps: [Telegram]}
+  feeds: {sites: [x.com], apps: [Grind]}
+always_allow: [base, llms]
+modes:
+  research: {allow: [papers], block: [chat]}
+only:
+  keep: [base, tools]
+  minutes: 30
+blocklists:
+  screenzen:
+    "🚫 msgs": {block: [chat], off_in: [none]}
+  cold_turkey:
+    avoid: {block: [feeds], allow: [base]}
+```
+"""
+
+
+@pytest.fixture
+def only_cfg(tmp_path):
+    p = tmp_path / "only.md"
+    p.write_text(ONLY_NOTE)
+    ct.APP_DIRS, saved = [], ct.APP_DIRS  # this Mac's apps stay out of the tests
+    yield ct.load_config(p)
+    ct.APP_DIRS = saved
+
+
+@pytest.fixture
+def session_env(only_cfg, monkeypatch, tmp_path):
+    """Cold Turkey with research running, ScreenZen present but its write recorded."""
+    plist = tmp_path / "sz" / "prefs.plist"
+    plist.parent.mkdir()
+    plist.write_text("")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", plist.with_suffix(""))
+    blocks = {"mode: research": mode_block(only_cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    writes, notes, spawned = [], [], []
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda cfg, dry_run, **k: writes.append(k.get("modes"))
+    )
+    monkeypatch.setattr(ct, "notify", notes.append)
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
+    return blocks, writes, notes, spawned
+
+
+def test_the_only_section_adds_no_mode(only_cfg):
+    # Everything that walks the modes (sync, export, status) must not expect a block.
+    assert list(only_cfg["modes"]) == ["research"]
+
+
+def test_a_mode_named_only_clashes_with_the_section(tmp_path):
+    p = tmp_path / "n.md"
+    p.write_text(ONLY_NOTE.replace("research:", "only:", 1))
+    with pytest.raises(SystemExit, match="taken"):
+        ct.load_config(p)
+
+
+def test_groups_an_always_on_block_bans_cannot_be_picked(only_cfg):
+    assert "feeds" not in ct.only_pool(only_cfg)
+    assert {"papers", "llms", "bear", "chat"} <= set(ct.only_pool(only_cfg))
+
+
+def test_a_pick_is_a_group_name_or_a_word_in_one_group(only_cfg):
+    assert ct.resolve_pick(only_cfg, "bear") == "bear"
+    assert ct.resolve_pick(only_cfg, "chatgpt") == "llms"
+    assert ct.resolve_pick(only_cfg, "ARXIV") == "papers"
+
+
+def test_an_unknown_or_ambiguous_pick_is_refused(only_cfg):
+    with pytest.raises(SystemExit, match="no group or app"):
+        ct.resolve_pick(only_cfg, "x.com")
+    with pytest.raises(SystemExit, match="it is in"):
+        ct.resolve_pick(only_cfg, "a")
+
+
+def test_a_session_allows_keep_and_picks_and_drops_always_allow(only_cfg):
+    ct.write_only({"groups": ["papers"], "until": 2e9, "back": []})
+    sites = ct.sz_allow_sites(only_cfg, [ct.ONLY])
+    assert "arxiv.org" in sites and "localhost" in sites
+    assert "chatgpt.com" not in sites  # always_allow, but not picked
+
+
+def test_every_configured_block_group_stands_aside_for_a_session(only_cfg):
+    bl = only_cfg["blocklists"]["screenzen"]["🚫 msgs"]
+    assert ct.sz_group_off(bl, [ct.ONLY])
+    assert not ct.sz_group_off(bl, ["research"])
+
+
+def fake_app(root, name, **info):
+    contents = root / f"{name}.app" / "Contents"
+    contents.mkdir(parents=True)
+    with (contents / "Info.plist").open("wb") as f:
+        ct.plistlib.dump({"CFBundleIdentifier": f"id.{name}", **info}, f)
+
+
+def test_installed_apps_skips_menu_bar_agents_and_broken_bundles(tmp_path, monkeypatch):
+    fake_app(tmp_path, "Bear")
+    fake_app(tmp_path, "Alfred", LSUIElement=True)
+    fake_app(tmp_path, "Stats", LSUIElement="1")
+    fake_app(tmp_path, "Helper", LSBackgroundOnly=True)
+    (tmp_path / "Broken.app").mkdir()
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path, tmp_path / "absent"])
+    assert ct.installed_apps() == ["Bear"]
+
+
+def only_block_groups():
+    return [
+        {
+            "groupName": "🚫 msgs",
+            "alwaysActive": True,
+            "isDisabled": False,
+            "id": "A",
+            "customSites": [],
+            "apps": [],
+            "pauseTimeIndex": 1,
+        }
+    ]
+
+
+def test_the_session_block_group_pauses_every_app_not_allowed(
+    only_cfg, tmp_path, monkeypatch
+):
+    for name in ("Bear", "Ghostty", "Telegram"):
+        fake_app(tmp_path, name)
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    groups = only_block_groups()
+    ct.sz_only_block(only_cfg, groups, [ct.ONLY])
+    made = groups[-1]
+    assert made["groupName"] == ct.SZ_ONLY_BLOCK and not made["isDisabled"]
+    assert made["pauseTimeIndex"] == 1  # the template's pause, so it can be passed
+    assert [a["appName"] for a in made["apps"]] == ["Telegram"]
+    assert made["apps"][0]["appBundle"] == "id.Telegram"
+
+
+def test_the_session_block_group_is_off_after_and_not_made_before(only_cfg):
+    groups = only_block_groups()
+    assert ct.sz_only_block(only_cfg, groups, ["research"]) == []
+    assert len(groups) == 1  # no session yet: nothing created
+    groups.append({"groupName": ct.SZ_ONLY_BLOCK, "isDisabled": False, "apps": []})
+    ct.sz_only_block(only_cfg, groups, [])
+    assert groups[-1]["isDisabled"]
+
+
+def test_starting_a_session_stops_the_mode_after_screenzen(only_cfg, session_env):
+    blocks, writes, _, spawned = session_env
+    ct.cmd_only(only_cfg, ["bear", "chatgpt", "20"])
+    s = ct.read_only()
+    assert s["groups"] == ["bear", "llms"] and s["back"] == ["research"]
+    assert writes == [[ct.ONLY]]
+    assert blocks["mode: research"]["enabled"] == "false"
+    assert spawned == [("only-wait",)]
+
+
+def test_a_failed_screenzen_write_leaves_the_mode_on_and_no_session(
+    only_cfg, session_env, monkeypatch
+):
+    blocks, *_ = session_env
+
+    def broken(cfg, dry_run, **k):
+        raise OSError("no write")
+
+    monkeypatch.setattr(ct, "cmd_screenzen", broken)
+    with pytest.raises(OSError):
+        ct.cmd_only(only_cfg, ["bear", "5"])
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert ct.read_only() is None
+
+
+def test_a_locked_mode_cannot_be_replaced(only_cfg, session_env):
+    blocks, writes, *_ = session_env
+    blocks["mode: research"]["lock"] = "delay,5,m"
+    with pytest.raises(SystemExit, match="locked"):
+        ct.cmd_only(only_cfg, ["bear", "5"])
+    assert ct.read_only() is None and writes == []
+
+
+def test_an_agent_replacing_a_mode_waits_and_writes_nothing(
+    only_cfg, session_env, monkeypatch
+):
+    blocks, writes, *_ = session_env
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_only(only_cfg, ["bear", "5"])
+    assert e.value.code == 3
+    assert ct.read_only() is None and writes == []
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_approving_one_session_does_not_approve_another(
+    only_cfg, session_env, monkeypatch
+):
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit):
+        ct.cmd_only(only_cfg, ["bear", "5"])
+    queued = ct.json.loads(ct.PENDING.read_text())
+    ct.PENDING.write_text(ct.json.dumps({k: 0 for k in queued}))
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_only(only_cfg, ["papers", "5"])
+    assert e.value.code == 3
+
+
+def test_adding_to_a_session_rewrites_screenzen_and_keeps_the_end(
+    only_cfg, session_env
+):
+    _, writes, *_ = session_env
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": ["research"]})
+    ct.cmd_only(only_cfg, ["papers"])
+    s = ct.read_only()
+    assert s["groups"] == ["bear", "papers"] and s["until"] == 2e9
+    assert writes == [[ct.ONLY]]
+
+
+def test_minutes_alone_retime_a_session_without_a_screenzen_write(
+    only_cfg, session_env
+):
+    _, writes, *_ = session_env
+    ct.write_only({"groups": ["bear"], "until": 1.0, "back": []})
+    ct.cmd_only(only_cfg, ["20"])
+    assert ct.read_only()["until"] > 1.0 and writes == []
+
+
+def test_a_session_ends_on_time_back_in_the_old_mode(only_cfg, session_env):
+    blocks, writes, notes, _ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.write_only({"groups": ["bear"], "until": 1.0, "back": ["research"]})
+    assert ct.end_only(only_cfg)
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert writes == [["research"]]
+    assert ct.read_only() is None and "research" in notes[0]
+
+
+def test_a_session_not_yet_over_is_left_alone(only_cfg, session_env):
+    _, writes, notes, _ = session_env
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    assert not ct.end_only(only_cfg)
+    assert ct.read_only() and not writes and not notes
+
+
+def test_only_end_ends_it_early(only_cfg, session_env):
+    blocks, *_ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": ["research"]})
+    ct.cmd_only(only_cfg, ["end"])
+    assert ct.read_only() is None
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_a_failed_return_keeps_the_record_to_retry(only_cfg, session_env, monkeypatch):
+    blocks, *_ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    fake_cold_turkey(monkeypatch, blocks, refuse=("mode: research",))
+    ct.write_only({"groups": ["bear"], "until": 1.0, "back": ["research"]})
+    with pytest.raises(SystemExit):
+        ct.end_only(only_cfg)
+    assert ct.read_only() is not None
+
+
+def test_starting_a_mode_ends_a_session(only_cfg, session_env, monkeypatch):
+    blocks, *_ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    ct.cmd_start(only_cfg, "research")
+    assert ct.read_only() is None
+
+
+def test_a_break_and_off_point_at_only_end_during_a_session(
+    only_cfg, session_env, capsys
+):
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    with pytest.raises(SystemExit, match="only end"):
+        ct.cmd_break(only_cfg, ["10"])
+    ct.cmd_off(only_cfg)
+    assert "focus only end" in capsys.readouterr().out
+    assert ct.read_only() is not None
+
+
+def test_a_session_started_during_a_break_returns_to_the_broken_mode(
+    only_cfg, session_env
+):
+    blocks, *_ = session_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.BREAK_FILE.write_text(ct.json.dumps({"modes": ["research"], "until": 2e9}))
+    ct.cmd_only(only_cfg, ["bear", "5"])
+    assert ct.read_only()["back"] == ["research"]
+    assert not ct.BREAK_FILE.exists()
+
+
+def test_a_session_with_no_screenzen_is_refused(only_cfg, monkeypatch):
+    fake_cold_turkey(monkeypatch, {})
+    with pytest.raises(SystemExit, match="ScreenZen"):
+        ct.cmd_only(only_cfg, ["bear", "5"])
+
+
+def test_only_needs_the_section_in_the_note(cfg):
+    with pytest.raises(SystemExit, match="only:"):
+        ct.cmd_only(cfg, ["bear"])
+
+
+def test_the_picker_refuses_without_a_terminal(only_cfg, monkeypatch):
+    monkeypatch.setattr(ct.sys, "stdin", type("T", (), {"isatty": lambda s: False})())
+    with pytest.raises(SystemExit, match="name the groups"):
+        ct.pick_groups(only_cfg, [])
+
+
+def test_the_picker_offers_contents_and_hides_keep_and_current_picks(
+    only_cfg, monkeypatch
+):
+    monkeypatch.setattr(ct.sys, "stdin", type("T", (), {"isatty": lambda s: True})())
+    monkeypatch.setattr(ct.shutil, "which", lambda n: "/bin/fzf")
+    seen = {}
+
+    def fake_fzf(cmd, input, **k):
+        seen["rows"] = input.split("\n")
+        return ct.subprocess.CompletedProcess(
+            cmd, 0, stdout=input.split("\n")[0] + "\n"
+        )
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_fzf)
+    picked = ct.pick_groups(only_cfg, ["bear"])
+    names = [r.split("\t")[0] for r in seen["rows"]]
+    assert "base" not in names and "tools" not in names and "bear" not in names
+    assert "llms\tChatGPT, chatgpt.com" in seen["rows"]
+    assert picked == [names[0]]
+
+
+def test_cancelling_the_picker_changes_nothing(only_cfg, session_env, monkeypatch):
+    blocks, writes, *_ = session_env
+    monkeypatch.setattr(ct, "pick_groups", lambda cfg, exclude: [])
+    ct.cmd_only(only_cfg, [])
+    assert ct.read_only() is None and not writes
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_a_corrupt_session_file_ends_cleanly(only_cfg, session_env):
+    ct.ONLY_FILE.write_text("{not json")
+    assert ct.read_only() == {"groups": [], "until": 0, "back": []}
+    assert ct.end_only(only_cfg)
+    assert ct.read_only() is None
+
+
+def test_a_word_in_no_group_finds_one_installed_app(only_cfg, tmp_path, monkeypatch):
+    for name in ("Zotero", "Notes", "Antinote", "Bear", "Telegram"):
+        fake_app(tmp_path, name)
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    assert ct.resolve_pick(only_cfg, "zotero") == "app:Zotero"
+    assert ct.resolve_pick(only_cfg, "notes") == "app:Notes"  # exact beats a partial
+    assert ct.resolve_pick(only_cfg, "bear") == "bear"  # a group wins over the app
+    with pytest.raises(SystemExit, match="it is in"):
+        ct.resolve_pick(only_cfg, "note")
+
+
+def test_a_picked_app_is_left_out_of_the_session_block_group(
+    only_cfg, tmp_path, monkeypatch
+):
+    for name in ("Zotero", "Notes"):
+        fake_app(tmp_path, name)
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    ct.write_only({"groups": ["app:Zotero"], "until": 2e9, "back": []})
+    groups = only_block_groups()
+    ct.sz_only_block(only_cfg, groups, [ct.ONLY])
+    assert [a["appName"] for a in groups[-1]["apps"]] == ["Notes"]
+
+
+def test_the_picker_lists_ungrouped_apps_only(only_cfg, tmp_path, monkeypatch):
+    for name in ("Zotero", "Notes", "Telegram", "Grind"):
+        fake_app(tmp_path, name)
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    monkeypatch.setattr(ct.sys, "stdin", type("T", (), {"isatty": lambda s: True})())
+    monkeypatch.setattr(ct.shutil, "which", lambda n: "/bin/fzf")
+    seen = {}
+
+    def fake_fzf(cmd, input, **k):
+        seen["rows"] = input.split("\n")
+        return ct.subprocess.CompletedProcess(cmd, 1, stdout="")
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_fzf)
+    assert ct.pick_groups(only_cfg, ["app:Notes"]) == []
+    apps = [r.split("\t")[0] for r in seen["rows"] if r.startswith("app:")]
+    assert apps == ["app:Zotero"]  # Telegram and Grind have groups; Notes is picked
