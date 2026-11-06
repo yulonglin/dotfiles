@@ -24,7 +24,7 @@
 
 **After**: "I'm sorry for the late change - something unexpected came up. You're probably frustrated since you took time off, which I totally get. Is there anything I can do to make this easier on your end?"
 
-**Principle**: Apologize for the inconvenience, label their likely emotion, offer to help. Don't just bail.
+**Principle**: Apologize for the inconvenience, name the concrete impact (label the emotion only when it is visible or you know them), offer to help. Don't just bail.
 
 ### Pattern 4: Saying No While Preserving Relationship
 
@@ -185,7 +185,7 @@ Watch for these patterns that weaken messages:
 - Being all business when the situation is clearly emotional
 - Not acknowledging when you've changed plans or disappointed them
 
-**Fix**: Name the emotion. "You're probably frustrated..." / "I imagine this is annoying..." / "You're obviously concerned about..."
+**Fix**: Name the concrete impact: "This leaves you re-listing in winter." If you know them or the feeling is visible, name the emotion: "You're obviously annoyed by this."
 
 ### Empty Pleasantries
 - "Hope this email finds you well"
