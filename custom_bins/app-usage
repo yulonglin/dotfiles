@@ -150,6 +150,18 @@ def later(a: dt.date | None, b: dt.date | None) -> dt.date | None:
     return max((d for d in (a, b) if d), default=None)
 
 
+def merge_usage(records: list[tuple[float, dt.date]], last: dt.date | None) -> tuple[float, dt.date | None]:
+    """Combine sources into hours and a last date.
+
+    The sources cover overlapping periods of the same use, so summing would double-count.
+    Hours are the largest single source, which is a floor on the true total.
+    """
+    hours = max((h for h, _ in records), default=0.0)
+    for _, day in records:
+        last = later(last, day)
+    return hours, last
+
+
 def open_readonly(path: Path) -> sqlite3.Connection:
     """Read a live database including its WAL, which immutable mode would ignore."""
     return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -230,13 +242,10 @@ def gather_apps(today: dt.date, days: int) -> tuple[list[App], dt.date | None, b
     tokens = cask_tokens()
     processes = run("ps", "-axo", "command=")
     for app in apps:
-        for name in app.aliases:
-            if name in aw:
-                app.hours += aw[name][0]
-                app.last_used = later(app.last_used, aw[name][1])
+        records = [aw[name] for name in app.aliases if name in aw]
         if app.bundle_id in kc:
-            app.hours += kc[app.bundle_id][0]
-            app.last_used = later(app.last_used, kc[app.bundle_id][1])
+            records.append(kc[app.bundle_id])
+        app.hours, app.last_used = merge_usage(records, app.last_used)
         app.running = f"{app.path}/" in processes
         app.extension_on = any(owns_extension(app.bundle_id, e) for e in extensions)
         if app.source != "App Store" and cask_key(app.name) in tokens:

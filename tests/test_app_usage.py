@@ -51,3 +51,12 @@ def test_extension_matches_host_app_only():
     assert app_usage.owns_extension("com.twofas.org.browser", "com.twofas.org.browser.extension")
     assert not app_usage.owns_extension("com.apple.iMovieApp", "com.bitwarden.desktop.safari")
     assert not app_usage.owns_extension("", "com.bitwarden.desktop.safari")
+
+
+def test_overlapping_sources_are_not_summed():
+    records = [(81.3, dt.date(2026, 10, 21)), (6.8, dt.date(2026, 11, 4))]
+    assert app_usage.merge_usage(records, None) == (81.3, dt.date(2026, 11, 4))
+
+
+def test_no_usage_records_keep_the_spotlight_date():
+    assert app_usage.merge_usage([], dt.date(2026, 9, 1)) == (0.0, dt.date(2026, 9, 1))
