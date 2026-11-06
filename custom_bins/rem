@@ -1,0 +1,39 @@
+#!/usr/bin/env zsh
+# rem — Apple Reminders from the shell (EventKit), macOS only.
+#
+# Compiles tools/rem/rem.swift into ${XDG_CACHE_HOME:-~/.cache}/rem/ on first
+# use or whenever the source is newer than the binary, then execs it.
+# Usage: rem --help. Skill: claude/skills/apple-reminders.
+emulate -L zsh
+setopt err_return no_unset pipe_fail
+
+if [[ $OSTYPE != darwin* ]]; then
+  print -u2 "rem: macOS only (EventKit)"
+  exit 1
+fi
+
+script_dir=${0:A:h}
+src=${script_dir:h}/tools/rem/rem.swift
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/rem
+bin=$cache/rem
+
+if [[ ! -f $src ]]; then
+  print -u2 "rem: source not found: $src"
+  exit 1
+fi
+
+if [[ ! -x $bin || $src -nt $bin ]]; then
+  if ! command -v swiftc >/dev/null; then
+    print -u2 "rem: swiftc not found; install the Xcode Command Line Tools (xcode-select --install)"
+    exit 1
+  fi
+  mkdir -p $cache/module-cache
+  if ! swiftc -O -module-cache-path $cache/module-cache $src -o $bin.tmp; then
+    print -u2 "rem: build failed"
+    rm -f $bin.tmp
+    exit 1
+  fi
+  mv -f $bin.tmp $bin
+fi
+
+exec $bin "$@"
