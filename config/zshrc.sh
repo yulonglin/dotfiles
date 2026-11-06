@@ -164,8 +164,11 @@ fi
 [ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-if [ -d "$HOME/.cargo" ]; then
+if [ -f "$HOME/.cargo/env" ]; then
   . "$HOME/.cargo/env"
+elif [ -d "$HOME/.cargo/bin" ]; then
+  # Homebrew's rustup writes no ~/.cargo/env, but `cargo install` still lands here
+  add_to_path "$HOME/.cargo/bin"
 fi
 
 # Linuxbrew precedence, re-asserted last. The shellenv near the top of this file
