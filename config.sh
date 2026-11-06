@@ -248,8 +248,6 @@ PACKAGES_EXTRAS_LINUX=(
 # (and sanctions its tap). Promote to an array above or `brew uninstall` it once
 # the trial is over; date each entry so the audit's reader can tell how long it has run.
 PACKAGES_TRIAL_MACOS=(
-    "hunk"                  # review-first terminal diff viewer for agent-authored changes (trial from 2026-09-03)
-    "codersauce/tap/red"    # modal Rust editor — third-party tap, Yulong's exception 2026-09-03
     "libimobiledevice"      # iPhone over USB: ~/scratch/watchpat/capture.zsh logs Bluetooth HCI (from 2026-10-14); uninstall when that project ends
     # "micro"               # candidate terminal editor, not installed yet
 )
