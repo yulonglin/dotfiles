@@ -5,7 +5,7 @@ description: Switch, inspect or change Yulong's Cold Turkey and ScreenZen blocki
 
 # Focus modes
 
-Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: each mode is a block `mode: <name>` that blocks every site except its allowlist and blocks the apps of its app groups. **ScreenZen** gives friction and follows the mode: focus owns one allow group per mode ("✅ focus: research" and so on, plus "✅ focus: shared" for no mode), each holding the shared list plus that mode's sites. "✅ focus: shared" holds every mode's sites, so no mode is the widest state in both apps and every mode only tightens it. Exactly one is on, so everything else gets a pause screen; each switch or `focus off` turns the right one on, closing and reopening ScreenZen. Its 🚫 groups block apps and sites always.
+Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: each mode is a block `mode: <name>` that blocks every site except its allowlist and blocks the apps of its app groups. **ScreenZen** gives friction and follows the mode: focus owns one allow group per mode ("✅ focus: research" and so on, plus "✅ focus: shared" for no mode), each holding the shared list plus that mode's sites. "✅ focus: shared" holds every mode's sites, so no mode is the widest state in both apps and every mode only tightens it. Exactly one is on, so everything else gets a pause screen; each switch or `focus off` turns the right one on, closing and reopening ScreenZen. Its 🚫 groups block apps and sites always, except during an only session, when they stand aside for that session's own 🚫 group.
 
 ## Where things live
 
@@ -23,11 +23,21 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to t
 | "take a break", "pause for 15 minutes" | `focus break 15`: stops the mode, which starts again by itself after the break (at most `break_max_minutes`). `focus install-agent` adds a once-a-minute launchd job so a break ends even after a restart |
 | "turn blocking off" | `focus off`, which works only in the note's `off_hours`; at any other time offer a break or another mode instead. Never route around this |
 | "deep focus for 90 minutes", "block AI chat for a bit" | `focus deep 90`: the `timer: deep` block, locked until it ends, on top of any mode. Starting it only tightens, so it runs at once; nobody can end it early |
+| "only Bear and ChatGPT for 45 minutes", "let me pick what's allowed", "something like Micromanager" | `focus only` opens the search (a terminal and fzf, so Yulong runs it himself); `focus only bear chatgpt 45` names the picks, as a group, a word in one group, or an installed app. See "Only sessions" below |
 | "what's running", "is it in sync" | `focus status` |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
 | "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
 | after editing the note by hand | `focus status`, then `focus sync` (applies the note to Cold Turkey and to ScreenZen for the running mode) |
 | new mode blocks needed | `focus export`, then Yulong imports `~/Downloads/focus-blocks.ctbbl` (Blocks → menu → Import blocks from another installation…) |
+
+## Only sessions are friction, not a block
+
+`focus only` is like Cold Turkey Micromanager, but it can be passed, because Micromanager felt too strict for a forgotten tool (Yulong, 2026-11-05). It uses ScreenZen alone: "✅ focus: only" holds the note's `only.keep` groups plus the picks, and "🚫 focus: only" holds every installed app except those, less menu-bar agents, copied from an all-day 🚫 group so it has that group's pause. A session stops the running mode and uses no Cold Turkey block, so only the always-on blocks stay hard. Unpicked `always_allow` groups get a pause too; that is what makes picking AI chat mean something.
+
+- **While it runs:** `focus only` adds to it, `focus only 20` sets the end to 20 minutes from now, `focus only end` ends it. Any `focus <mode>` also ends it.
+- **At the end:** a notification, then the mode it replaced starts again. `focus break` and `focus off` refuse during a session and name `focus only end`.
+- **The cost, accepted by Yulong:** a session has no time cap, so it is a pause-only state that `off_hours` and `break_max_minutes` do not limit.
+- **Keep list:** add to the `only-tools` group an app that must never pause, such as the terminal that runs `focus`.
 
 ## Loosening waits; do not work around it
 

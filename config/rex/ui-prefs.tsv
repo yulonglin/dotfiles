@@ -8,14 +8,14 @@ darkThemeID	string	static-noir
 inactivePaneFadeMode	string	both
 interfaceStyle	string	useTheme
 lightThemeID	string	merino-light
-notificationPosition	string	top-right
+notificationPosition	string	top-center
 paneDensity	string	compact
 showsPaneHeaders	bool	false
 sidebarCollapsed	bool	false
 sidebarPosition	string	left
 tabIconTintMode	string	off
 tabStyle	string	horizontal
-tabsFillAvailableSpace	bool	true
+tabsFillAvailableSpace	bool	false
 terminalCopyOnSelect	bool	true
 terminalCursorStyle	string	bar
 terminalFontPointSize	float	13
