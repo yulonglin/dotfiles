@@ -401,7 +401,10 @@ def test_source_target_manifest_alias_preserves_custom_handler_idempotently(tmp_
     data["hooks"].setdefault("Stop", []).append(custom)
     manifest.write_text(json.dumps(data, indent=2) + "\n")
     agents = source / "AGENTS.md"
-    agents.write_text(agents.read_text().rstrip() + "\n\n" + (source / "tool-compatibility.md").read_text())
+    # codex/AGENTS.md has carried the block itself since fc2bf544; append only if absent,
+    # or the fixture holds two marker pairs and install() rightly refuses it.
+    if "<!-- BEGIN CODEX TOOL COMPATIBILITY -->" not in agents.read_text():
+        agents.write_text(agents.read_text().rstrip() + "\n\n" + (source / "tool-compatibility.md").read_text())
     target = tmp_path / ".codex"
     target.symlink_to(source, target_is_directory=True)
     before = snapshot(source)
