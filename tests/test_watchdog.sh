@@ -155,6 +155,36 @@ run_case dead idle 1099 0 99999999 1000 1100
 assert_count "retains process-death warning" 1 "$TMP/dead/notifications"
 assert_contains "process-death warning names the PID" "Claude process (PID 99999999) died" "$TMP/dead/notifications"
 
+echo '=== start hook ==='
+# A copy of the hook beside a stub watchdog, so no real watcher process starts.
+START_DIR="$TMP/start-hook"
+mkdir -p "$START_DIR"
+cp "$ROOT/claude/hooks/watchdog_start.sh" "$START_DIR/"
+cat > "$START_DIR/watchdog.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "$START_LOG"
+STUB
+chmod +x "$START_DIR/watchdog.sh"
+
+run_start() {
+  local log=$1 job_dir=$2
+  : > "$log"
+  printf '{"session_id":"s1","transcript_path":"%s/t.jsonl","cwd":"/projects/example"}' "$TMP" |
+    TMPDIR="$TMP" START_LOG="$log" CLAUDE_JOB_DIR="$job_dir" \
+    bash "$START_DIR/watchdog_start.sh"
+  # The hook detaches the watcher, so give the stub a moment to write.
+  local tries=0
+  while [[ ! -s "$log" && "$tries" -lt 20 ]]; do
+    /bin/sleep 0.05
+    tries=$((tries + 1))
+  done
+}
+
+run_start "$TMP/start-interactive" ''
+assert_count "starts the watcher for an interactive session" 1 "$TMP/start-interactive"
+run_start "$TMP/start-job" "$TMP/job"
+assert_empty "does not start the watcher for a background job" "$TMP/start-job"
+
 echo
 printf 'passed: %s  failed: %s\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]
