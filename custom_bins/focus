@@ -86,6 +86,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime as dt
+import fcntl
 import json
 import os
 import plistlib
@@ -109,6 +110,13 @@ CT_BIN = Path(
     "/Applications/Cold Turkey Blocker.app/Contents/MacOS/Cold Turkey Blocker"
 )
 CT_DB = Path("/Library/Application Support/Cold Turkey/data-app.db")
+CT_BUNDLE = "com.getcoldturkey.blocker"
+CT_DEFAULTS = CT_BUNDLE  # the preferences domain that holds 'commandArgs'
+CT_WAKE_JXA = """
+ObjC.import("AppKit");
+$.NSRunningApplication.runningApplicationWithProcessIdentifier(%d)
+    .activateWithOptions($.NSApplicationActivateAllWindows);
+"""
 APP_DIRS = [
     Path("/Applications"),
     Path("/System/Applications"),
@@ -213,7 +221,7 @@ def hand_back_focus(front: str | None) -> None:
     for its window fired before the window existed (2026-11-02). FOCUS_TRACE=1 appends
     each step to SZ_TRACE. With the screen locked, loginwindow is in front and there is
     no app to hand back to."""
-    if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
+    if front in (None, SZ_BUNDLE, CT_BUNDLE, "com.apple.loginwindow"):
         return
     t0 = time.monotonic()
     log = [f" 0.00s front was {front}"]
@@ -476,32 +484,109 @@ def read_blocks() -> dict:
     return decode_settings(value)["blocks"]
 
 
-def ct(*args: str, check: bool = True) -> str:
-    """Run the Cold Turkey CLI and return what it printed.
+def ct_send(*args: str) -> None:
+    """Give Cold Turkey a command without waiting for the CLI to exit.
 
-    With check, an error exits. Pass check=False where the database can confirm the
-    outcome: the CLI says "isn't responding" for changes that land and for changes that
-    do not (both seen 4 Nov 2026), and exits 0 for changes that never land.
+    The CLI is the app itself in a second process. It writes its arguments to the
+    'commandArgs' preference within 0.1 s, then idles for about 5 s and prints "isn't
+    responding". That held for every call timed on 6 Nov 2026, including -help and a
+    start that landed 2.2 s in, so the wait is dead time and the reply decides nothing.
+    Leaving the CLI running is safe: it does not touch 'commandArgs' on exit.
     """
-    out = subprocess.run([str(CT_BIN), *args], capture_output=True, text=True)
-    text = (out.stdout + out.stderr).strip()
-    if check and (out.returncode or "isn't responding" in text):
-        sys.exit(
-            f"focus: Cold Turkey CLI failed for {' '.join(args)!r}: {text or out.returncode}"
+    subprocess.Popen(
+        [str(CT_BIN), *args],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def wake_agent(args: tuple[str, ...]) -> None:
+    """Make Cold Turkey's agent read a command the CLI has just left for it.
+
+    'commandArgs' is one slot, not a queue: the agent reads and deletes it when it
+    becomes the active app, and nothing else makes it look. A real start landed 0.21 s
+    after this activation (6 Nov 2026), and the same call never landed without one.
+    Activation goes by pid because the CLI shares the agent's bundle id while it idles,
+    and needs no Automation permission. Wait for the slot first, or the agent reads
+    nothing. A failure here is not reported: the database says whether the change landed.
+    """
+    for _ in range(25):
+        slot = subprocess.run(
+            ["defaults", "read", CT_DEFAULTS, "commandArgs"],
+            capture_output=True,
+            text=True,
+        ).stdout
+        if all(a in slot for a in args):
+            break
+        time.sleep(0.02)
+    pid = subprocess.run(
+        ["pgrep", "-f", f"{CT_BIN.name} -agent"], capture_output=True, text=True
+    ).stdout.split()
+    if pid:
+        subprocess.run(
+            ["osascript", "-l", "JavaScript", "-e", CT_WAKE_JXA % int(pid[0])],
+            capture_output=True,
         )
-    return text or (str(out.returncode) if out.returncode else "")
+
+
+def wait_for(done, polls: int) -> bool:
+    """Watch the database at 0.05 s; a read takes about 0.01 s."""
+    for _ in range(polls):
+        if done():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def give_front_back(front: str | None) -> None:
+    """Return the front to the app that had it, and wait until it has it. 'open' returns
+    first, and a switch applies two commands in a row: the second must read the real
+    front, and the agent must have lost it, or it has no activation to read on."""
+    if front in (None, CT_BUNDLE, "com.apple.loginwindow"):
+        return
+    if frontmost_bundle() == front:
+        return
+    subprocess.run(["open", "-b", front], capture_output=True)
+    for _ in range(10):
+        if frontmost_bundle() == front:
+            return
+        time.sleep(0.05)
+
+
+def ct_apply(args: tuple[str, ...], done, more_polls: int = 80) -> bool:
+    """Send a command, wake the agent, and return as soon as done() sees it land.
+
+    The agent holds the front only while it works: it has no window to show, so this is
+    a moment. Hand the front back after about 1 s even if nothing landed, so keystrokes
+    never go astray, then keep watching for more_polls. With the screen locked,
+    loginwindow is in front and there is no app to hand back to."""
+    front = frontmost_bundle()
+    ct_send(*args)
+    wake_agent(args)
+    landed = wait_for(done, 20)
+    give_front_back(front)
+    return landed or wait_for(done, more_polls)
+
+
+CT_DROPPED = (
+    "the agent did not read the command. It stays queued and can run when Cold Turkey "
+    "next comes to the front, so bring Cold Turkey forward and run this again"
+)
+
+
+def block_is(name: str, enabled: bool):
+    want = "true" if enabled else "false"
+    return lambda: read_blocks().get(name, {}).get("enabled") == want
 
 
 def switch(name: str, on: bool) -> None:
-    """Start or stop a block, then confirm in the database, which outranks the CLI's reply."""
-    error = ct("-start" if on else "-stop", name, check=False)
-    want = "true" if on else "false"
-    for _ in range(50):
-        if read_blocks().get(name, {}).get("enabled") == want:
-            return
-        time.sleep(0.1)
-    reason = f": {error}" if error else ""
-    sys.exit(f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}{reason}")
+    """Start or stop a block, and return as soon as the database shows it."""
+    if not ct_apply(("-start" if on else "-stop", name), block_is(name, on)):
+        sys.exit(
+            f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}: {CT_DROPPED}"
+        )
 
 
 def mode_blocks(blocks: dict) -> dict:
@@ -513,6 +598,7 @@ def is_locked(block: dict) -> bool:
 
 
 BREAK_FILE = PENDING.parent / "break.json"
+SZ_LOCK = PENDING.parent / "screenzen.lock"  # one ScreenZen write at a time
 DEFAULT_BREAK_MAX = 30
 ONLY_FILE = PENDING.parent / "only.json"
 DEFAULT_ONLY_MIN = 45
@@ -736,6 +822,15 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
     so a ScreenZen failure is reported without undoing that."""
     if not Path(f"{SZ_DOMAIN}.plist").exists():
         return  # ScreenZen is not installed here
+    # A person is never gated, so nothing needs the answer before focus returns, and the
+    # relaunch takes over a second. An agent stays in the foreground: it has to see the
+    # gate's result.
+    if not by_agent():
+        spawn_self("sz-apply")
+        print(
+            f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
+        )
+        return
     try:
         loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
         # When the mode really changed, allowing its own sites is what the switch already
@@ -774,6 +869,20 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
         cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+
+
+def cmd_sz_apply(cfg: dict) -> None:
+    """Internal: the detached ScreenZen write that a mode change starts. It reads what is
+    running once it holds the lock, so quick switches cannot apply out of order, and a
+    later waiter finds nothing to write. A failure has no terminal to go to. The gate
+    stays on: it does nothing for a person, and an agent cannot call this to skip it."""
+    SZ_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with SZ_LOCK.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            cmd_screenzen(cfg, dry_run=False, quiet=True)
+        except (subprocess.CalledProcessError, OSError, ValueError, SystemExit) as e:
+            notify(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
 
 
 def cmd_off(cfg: dict) -> None:
@@ -913,21 +1022,22 @@ def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
     )
 
 
-def unconfirmed(sent: list[tuple]) -> list[tuple]:
-    """The (block, kind, site, error) additions missing from the database after one short wait.
+def add_site(name: str, flag: str, kind: str, site: str) -> tuple:
+    """Add one site and wait about 1 s for it. Each add has to land before the next is
+    sent: the command slot holds one, so a second add replaces an unread first, which is
+    how sites went missing before 6 Nov 2026. Return the (block, kind, site) sent."""
+    ct_apply(
+        ("-add", name, flag, site),
+        lambda: site in read_blocks().get(name, {}).get(kind, []),
+        more_polls=0,
+    )
+    return name, kind, site
 
-    The CLI's reply does not say what happened, so the database decides. The additions are
-    sent one at a time, because every block lives in one settings value that each add
-    rewrites, but they share this wait: a sync waits 3 s however many sites fail.
-    """
-    missing = sent
-    for _ in range(30):
-        blocks = read_blocks()
-        missing = [s for s in sent if s[2] not in blocks.get(s[0], {}).get(s[1], [])]
-        if not missing:
-            break
-        time.sleep(0.1)
-    return missing
+
+def unconfirmed(sent: list[tuple]) -> list[tuple]:
+    """The (block, kind, site) additions the database does not show."""
+    blocks = read_blocks()
+    return [s for s in sent if s[2] not in blocks.get(s[0], {}).get(s[1], [])]
 
 
 def cmd_sync(cfg: dict, gated: bool = True) -> None:
@@ -956,8 +1066,7 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             ("web", "-web", d["add_web"]),
         ):
             for site in sites:
-                error = ct("-add", name, flag, site, check=False)
-                sent.append((name, kind, site, error))
+                sent.append(add_site(name, flag, kind, site))
         for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
             if d[k]:
                 needs_import.append(f"{name}: {k} {', '.join(d[k])}")
@@ -973,24 +1082,20 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             continue
         for site in group_items(cfg, spec.get("block") or [], "sites"):
             if site not in block["web"]:
-                error = ct("-add", name, "-web", site, check=False)
-                banned.append((name, "web", site, error))
+                banned.append(add_site(name, "-web", "web", site))
     missing = unconfirmed(sent + banned)
     for name in modes:
         added = sum(s[0] == name and s not in missing for s in sent)
         print(f"{name}: added {added} site(s)")
     for s in sent:
         if s in missing:
-            name, kind, site, error = s
-            reason = f": {error}" if error else ""
-            failed.append(f"{name}: {site} ({kind}){reason}")
+            name, kind, site = s
+            failed.append(f"{name}: {site} ({kind})")
     for s in banned:
-        name, _, site, error = s
+        name, _, site = s
         print(f"{name}: {'could not add' if s in missing else 'added'} {site}")
         if s in missing:
-            needs_import.append(
-                f"{name}: add_web {site} (CLI said: {error or 'no error'})"
-            )
+            needs_import.append(f"{name}: add_web {site}")
     if needs_import:
         print(
             "\nThe CLI cannot make these changes. Make them by hand in Cold Turkey "
@@ -1666,14 +1771,17 @@ def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
     if blocks[block].get("enabled") == "true" and is_locked(blocks[block]):
         sys.exit(f"focus: {block!r} is already running and locked")
     # Tightening only, so no agent delay; the lock means nobody can end it early.
-    ct("-start", block, "-lock", minutes)
-    for _ in range(50):
-        if read_blocks().get(block, {}).get("enabled") == "true":
-            end = dt.datetime.now() + dt.timedelta(minutes=int(minutes))
-            print(f"started {block!r}, locked until about {end:%H:%M:%S}")
-            return
-        time.sleep(0.1)
-    sys.exit(f"focus: Cold Turkey did not start {block!r}")
+
+    def locked() -> (
+        bool
+    ):  # Cold Turkey stores the lock's end time; 'none' means no lock
+        b = read_blocks().get(block, {})
+        return b.get("enabled") == "true" and is_locked(b)
+
+    if not ct_apply(("-start", block, "-lock", minutes), locked):
+        sys.exit(f"focus: Cold Turkey did not start {block!r}: {CT_DROPPED}")
+    end = dt.datetime.now() + dt.timedelta(minutes=int(minutes))
+    print(f"started {block!r}, locked until about {end:%H:%M:%S}")
 
 
 def read_only() -> dict | None:
@@ -2178,7 +2286,14 @@ def main() -> None:
     if not cfg.get("modes"):
         sys.exit(f"focus: no modes in {a.config}")
     # Any focus command ends a break that is over, so a lost waiter cannot leave it open.
-    if a.command not in ("resume", "only-wait", "alfred", "tick", "install-agent"):
+    if a.command not in (
+        "resume",
+        "only-wait",
+        "sz-apply",
+        "alfred",
+        "tick",
+        "install-agent",
+    ):
         try:
             end_break(cfg)
             end_only(cfg)
@@ -2200,6 +2315,8 @@ def main() -> None:
             cmd_only(cfg, a.args)
         case "only-wait":  # internal: the detached waiter that 'only' starts
             cmd_only_wait(cfg)
+        case "sz-apply":  # internal: the detached ScreenZen write after a mode change
+            cmd_sz_apply(cfg)
         case "install-agent":
             cmd_install_agent()
         case "status":
