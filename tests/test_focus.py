@@ -4,7 +4,6 @@ import datetime as dt
 import importlib.machinery
 import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -21,6 +20,7 @@ def load():
 
 
 ct = load()
+REAL_WAKE = ct.wake_agent  # the autouse fixture stubs ct.wake_agent
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +34,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
     monkeypatch.setattr(ct, "ONLY_FILE", tmp_path / "only.json")
     monkeypatch.setattr(ct, "notify", lambda text: None)
+    monkeypatch.setattr(ct, "wake_agent", lambda args: None)
+    monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
     monkeypatch.setattr(ct, "SZ_DOMAIN", tmp_path / "no-screenzen" / "prefs")
     monkeypatch.setattr(
         ct, "sz_export", lambda: pytest.fail("test reached real ScreenZen prefs")
@@ -287,32 +289,23 @@ def test_pull_copies_cold_turkey_additions_into_from_groups(tmp_path, monkeypatc
     assert ct.pull_plan(new, blocks) == []  # a second pull finds nothing
 
 
-def fake_cold_turkey(monkeypatch, blocks, refuse=(), unresponsive=()):
-    """Stand in for Cold Turkey: -start/-stop flip 'enabled', -add appends, unless refused.
-
-    A block in `unresponsive` gets "isn't responding" from the CLI, as the real app gave
-    on 4 Nov 2026 while the addition still landed; combine it with `refuse` for an app
-    that really did nothing.
-    """
+def fake_cold_turkey(monkeypatch, blocks, refuse=()):
+    """Stand in for Cold Turkey: -start/-stop flip 'enabled', -add appends, unless refused."""
     calls = []
 
-    def ct_call(*args, check=True):
+    def ct_call(*args):
         calls.append(args)
         op, name = args[0], args[1]
         if name not in refuse:
             if op in ("-start", "-stop"):
                 blocks[name]["enabled"] = "true" if op == "-start" else "false"
+                if "-lock" in args:
+                    blocks[name]["lock"] = "2026,11,6,21,56"  # the end time, as stored
             elif op == "-add":
                 kind = "exceptions" if args[2] == "-exception" else "web"
                 blocks[name][kind].append(args[3])
-        if name not in unresponsive:
-            return ""  # exits 0, even when refused, as the real CLI can
-        error = "Cold Turkey Blocker isn't responding..."
-        if check:
-            sys.exit(f"focus: Cold Turkey CLI failed: {error}")
-        return error
 
-    monkeypatch.setattr(ct, "ct", ct_call)
+    monkeypatch.setattr(ct, "ct_send", ct_call)
     monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
     monkeypatch.setattr(ct.time, "sleep", lambda s: None)
     monkeypatch.delenv("CLAUDECODE", raising=False)
@@ -394,7 +387,7 @@ def test_sync_adds_a_timers_new_site_and_status_says_sync_can(
     assert "timer: deep: added arxiv.org" in capsys.readouterr().out
 
 
-def test_sync_waits_once_however_many_additions_fail(cfg, monkeypatch):
+def test_sync_reports_every_addition_that_fails(cfg, monkeypatch):
     research, writing = (
         mode_block(cfg, "research", "false"),
         mode_block(cfg, "writing", "false"),
@@ -403,67 +396,303 @@ def test_sync_waits_once_however_many_additions_fail(cfg, monkeypatch):
     writing["exceptions"].remove("arxiv.org")
     blocks = {"mode: research": research, "mode: writing": writing}
     fake_cold_turkey(monkeypatch, blocks, refuse=set(blocks))
-    naps = []
-    monkeypatch.setattr(ct.time, "sleep", naps.append)
     with pytest.raises(SystemExit, match=r"(?s)research.*writing"):
         ct.cmd_sync(cfg)
-    assert sum(naps) == pytest.approx(3)  # one shared wait, not 3 s for each site
 
 
-def test_sync_trusts_the_database_when_the_cli_says_it_is_not_responding(
-    cfg, monkeypatch, capsys
-):
+def test_sync_lands_each_add_before_sending_the_next(cfg, monkeypatch, capsys):
+    # The real slot holds one command and only a wake reads it, so a second add sent
+    # without one replaces the first. That is how a site went missing on 4 Nov 2026.
     research = mode_block(cfg, "research", "false")
     writing = mode_block(cfg, "writing", "false")
     research["exceptions"].remove("arxiv.org")
     writing["exceptions"].remove("arxiv.org")
     blocks = {"mode: research": research, "mode: writing": writing}
-    fake_cold_turkey(monkeypatch, blocks, unresponsive=set(blocks))
-    ct.cmd_sync(cfg)  # one slow reply must not abort the blocks after it
+    slot = []
+
+    def send(*args):
+        slot[:] = [args]
+
+    def wake(args):
+        for _, name, _, site in slot:
+            blocks[name]["exceptions"].append(site)
+        slot.clear()
+
+    monkeypatch.setattr(ct, "ct_send", send)
+    monkeypatch.setattr(ct, "wake_agent", wake)
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    ct.cmd_sync(cfg)
     assert "arxiv.org" in research["exceptions"]
     assert "arxiv.org" in writing["exceptions"]
     assert "mode: writing: added 1 site(s)" in capsys.readouterr().out
 
 
-def test_sync_reports_the_cli_error_when_an_addition_never_lands(cfg, monkeypatch):
-    block = mode_block(cfg, "writing", "false")
-    block["exceptions"].remove("arxiv.org")
-    blocks = {
-        "mode: research": mode_block(cfg, "research", "false"),
-        "mode: writing": block,
-    }
-    fake_cold_turkey(
-        monkeypatch, blocks, refuse={"mode: writing"}, unresponsive={"mode: writing"}
+def test_a_change_stays_unlanded_until_the_agent_is_woken(cfg, monkeypatch):
+    blocks = {"mode: writing": mode_block(cfg, "writing", "false")}
+    monkeypatch.setattr(ct, "ct_send", lambda *a: None)
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    with pytest.raises(SystemExit, match="did not start"):  # nothing read the slot
+        ct.switch("mode: writing", on=True)
+
+    def wake(args):
+        blocks["mode: writing"]["enabled"] = "true"
+
+    monkeypatch.setattr(ct, "wake_agent", wake)
+    ct.switch("mode: writing", on=True)
+
+
+def fake_front(monkeypatch, app, lag=2):
+    """The app is in front until a wake; 'open -b' takes effect after `lag` checks."""
+    state = {"front": app, "pending": 0}
+    opened = []
+
+    def frontmost():
+        if state["pending"]:
+            state["pending"] -= 1
+            if not state["pending"]:
+                state["front"] = app
+        return state["front"]
+
+    def run(cmd, **k):
+        opened.append(cmd)
+        state["pending"] = lag
+
+    def wake(args):
+        state["front"] = ct.CT_BUNDLE
+
+    monkeypatch.setattr(ct, "frontmost_bundle", frontmost)
+    monkeypatch.setattr(ct.subprocess, "run", run)
+    monkeypatch.setattr(ct, "wake_agent", wake)
+    monkeypatch.setattr(ct, "ct_send", lambda *a: None)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    return state, opened
+
+
+def test_the_front_goes_back_to_the_app_that_had_it(monkeypatch):
+    state, opened = fake_front(monkeypatch, "com.superlogical.rex")
+    assert ct.ct_apply(("-start", "x"), lambda: True)
+    assert opened == [["open", "-b", "com.superlogical.rex"]]
+    assert state["front"] == "com.superlogical.rex"  # back before ct_apply returns
+
+
+def test_the_front_goes_back_even_when_nothing_lands(monkeypatch):
+    state, opened = fake_front(monkeypatch, "com.superlogical.rex")
+    assert not ct.ct_apply(("-start", "x"), lambda: False)
+    assert state["front"] == "com.superlogical.rex"
+
+
+def test_two_commands_in_a_row_both_give_the_front_back(monkeypatch):
+    # A mode switch is a start then a stop. 'open' returns before the front moves, so
+    # without the wait the second call reads Cold Turkey as the app to go back to.
+    state, opened = fake_front(monkeypatch, "com.superlogical.rex")
+    ct.ct_apply(("-start", "a"), lambda: True)
+    ct.ct_apply(("-stop", "b"), lambda: True)
+    assert opened == [["open", "-b", "com.superlogical.rex"]] * 2
+    assert state["front"] == "com.superlogical.rex"
+
+
+@pytest.mark.parametrize("front", [None, "com.apple.loginwindow", ct.CT_BUNDLE])
+def test_nothing_is_raised_when_there_is_no_app_to_go_back_to(monkeypatch, front):
+    monkeypatch.setattr(ct, "frontmost_bundle", lambda: front)
+    monkeypatch.setattr(ct, "ct_send", lambda *a: None)
+    monkeypatch.setattr(
+        ct.subprocess, "run", lambda cmd, **k: pytest.fail("raised an app")
     )
-    with pytest.raises(SystemExit, match=r"(?s)did not appear.*isn't responding"):
-        ct.cmd_sync(cfg)
+    assert ct.ct_apply(("-start", "x"), lambda: True)
 
 
-def test_a_switch_trusts_the_database_when_the_cli_says_it_is_not_responding(
+def test_the_wake_goes_to_the_agent_after_the_command_is_in_the_slot(monkeypatch):
+    # Woken too early, the agent reads an empty slot; and the idling CLI shares its
+    # bundle id, so the wake goes by the pid of the '-agent' process.
+    slots = iter(["", '("/app", "-start", "mode: writing")'])
+    ran = []
+
+    def fake_run(cmd, **k):
+        ran.append(cmd)
+        out = ""
+        if cmd[0] == "defaults":
+            out = next(slots)
+        elif cmd[0] == "pgrep":
+            out = "84514\n"
+        return type("R", (), {"stdout": out, "returncode": 0})()
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_run)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    REAL_WAKE(("-start", "mode: writing"))
+    assert [c[0] for c in ran] == ["defaults", "defaults", "pgrep", "osascript"]
+    assert "Cold Turkey Blocker -agent" in ran[2][-1]
+    assert "(84514)" in ran[3][-1]
+
+
+def test_a_failed_switch_says_the_command_may_still_run_and_keeps_the_old_mode(
     cfg, monkeypatch
 ):
     blocks = {
         "mode: research": mode_block(cfg, "research", "true"),
         "mode: writing": mode_block(cfg, "writing", "false"),
     }
-    fake_cold_turkey(monkeypatch, blocks, unresponsive={"mode: writing"})
-    ct.cmd_start(cfg, "writing")
-    assert blocks["mode: writing"]["enabled"] == "true"
-    assert blocks["mode: research"]["enabled"] == "false"
-
-
-def test_a_failed_switch_names_the_cli_error_and_keeps_the_old_mode(cfg, monkeypatch):
-    blocks = {
-        "mode: research": mode_block(cfg, "research", "true"),
-        "mode: writing": mode_block(cfg, "writing", "false"),
-    }
-    calls = fake_cold_turkey(
-        monkeypatch, blocks, refuse={"mode: writing"}, unresponsive={"mode: writing"}
-    )
-    with pytest.raises(SystemExit, match="did not start.*isn't responding"):
+    calls = fake_cold_turkey(monkeypatch, blocks, refuse={"mode: writing"})
+    with pytest.raises(SystemExit, match="did not start.*can run when Cold Turkey"):
         ct.cmd_start(cfg, "writing")
     assert blocks["mode: research"]["enabled"] == "true"  # fail closed
     assert not [c for c in calls if c[0] == "-stop"]
+
+
+def test_a_switch_returns_when_the_database_changes_not_when_the_cli_exits(
+    cfg, monkeypatch
+):
+    blocks = {"mode: writing": mode_block(cfg, "writing", "false")}
+    launched = []
+
+    class SlowCli:  # the real CLI idles for 5 s; waiting on it would fail this test
+        def __init__(self, cmd, **kwargs):
+            launched.append((cmd, kwargs))
+            blocks["mode: writing"]["enabled"] = "true"
+
+        def wait(self, *a, **k):
+            pytest.fail("focus waited for the CLI to exit")
+
+    monkeypatch.setattr(ct.subprocess, "Popen", SlowCli)
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    ct.switch("mode: writing", on=True)
+    ((cmd, kwargs),) = launched
+    assert cmd[1:] == ["-start", "mode: writing"]
+    assert kwargs["start_new_session"]  # it outlives focus, which has moved on
+
+
+def test_a_lock_timer_reports_what_the_database_shows(cfg, monkeypatch, capsys):
+    # It used to exit on the CLI's "isn't responding", so 'focus deep' reported a
+    # failure even for a block that had started.
+    cfg["timers"] = {"deep": {}}
+    block = {**mode_block(cfg, "writing", "false")}
+    blocks = {ct.TIMER_PREFIX + "deep": block}
+    calls = fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_timer(cfg, "deep", ["1"])
+    assert calls == [("-start", ct.TIMER_PREFIX + "deep", "-lock", "1")]
+    assert "locked until" in capsys.readouterr().out
+
+
+def test_a_running_unlocked_timer_is_not_called_locked_when_the_lock_never_lands(
+    cfg, monkeypatch
+):
+    # Already enabled, so 'enabled' alone would pass while nothing holds the lock.
+    cfg["timers"] = {"deep": {}}
+    blocks = {ct.TIMER_PREFIX + "deep": mode_block(cfg, "writing", "true")}
+    fake_cold_turkey(monkeypatch, blocks, refuse=set(blocks))
+    with pytest.raises(SystemExit, match="did not start"):
+        ct.cmd_timer(cfg, "deep", ["1"])
+
+
+def test_a_lock_timer_that_never_lands_says_so(cfg, monkeypatch):
+    cfg["timers"] = {"deep": {}}
+    blocks = {ct.TIMER_PREFIX + "deep": mode_block(cfg, "writing", "false")}
+    fake_cold_turkey(monkeypatch, blocks, refuse=set(blocks))
+    with pytest.raises(SystemExit, match="did not start"):
+        ct.cmd_timer(cfg, "deep", ["1"])
+
+
+def installed_screenzen(tmp_path, monkeypatch):
+    plist = tmp_path / "sz" / "prefs.plist"
+    plist.parent.mkdir()
+    plist.write_text("")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", plist.with_suffix(""))
+
+
+def test_a_person_gets_screenzen_in_the_background(cfg, tmp_path, monkeypatch, capsys):
+    installed_screenzen(tmp_path, monkeypatch)
+    spawned = []
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda *a, **k: pytest.fail("wrote in the foreground")
+    )
+    ct.sz_follow(cfg, ["writing"], switched=True)
+    assert spawned == [("sz-apply",)]
+    assert "sites without a pause screen" in capsys.readouterr().out
+
+
+def test_an_agent_stays_in_the_foreground_so_it_sees_the_gate(
+    cfg, tmp_path, monkeypatch
+):
+    installed_screenzen(tmp_path, monkeypatch)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setattr(
+        ct, "spawn_self", lambda *a: pytest.fail("an agent skipped the gate")
+    )
+    writes = []
+    monkeypatch.setattr(
+        ct,
+        "cmd_screenzen",
+        lambda cfg, dry_run, **k: [] if dry_run else writes.append(k["modes"]),
+    )
+    ct.sz_follow(cfg, ["writing"], switched=True)
+    assert writes == [["writing"]]
+
+
+def test_the_background_write_follows_what_is_running_when_it_gets_the_lock(
+    cfg, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ct, "SZ_LOCK", tmp_path / "state" / "screenzen.lock")
+    kwargs = []
+    monkeypatch.setattr(ct, "cmd_screenzen", lambda cfg, **k: kwargs.append(k))
+    ct.cmd_sz_apply(cfg)
+    assert kwargs == [{"dry_run": False, "quiet": True}]  # no modes, and still gated
+
+
+def test_an_agent_cannot_call_the_background_write_to_skip_the_gate(
+    cfg, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ct, "SZ_LOCK", tmp_path / "state" / "screenzen.lock")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    allow = {
+        "groupName": "✅ always",
+        "id": "1",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs([allow]))
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: ["writing"])
+    monkeypatch.setattr(ct, "read_only", lambda: None)
+    told = []
+    monkeypatch.setattr(ct, "notify", told.append)
+    ct.cmd_sz_apply(cfg)
+    assert told  # queued by the gate, not written
+    assert not (ct.BACKUP_DIR).exists()
+
+
+def test_the_background_write_is_dispatched_without_ending_breaks(
+    cfg, tmp_path, monkeypatch
+):
+    note = tmp_path / "note.md"
+    note.write_text(NOTE)
+    monkeypatch.setattr(ct.sys, "argv", ["focus", "--config", str(note), "sz-apply"])
+    ran = []
+    monkeypatch.setattr(ct, "cmd_sz_apply", lambda cfg: ran.append("apply"))
+    monkeypatch.setattr(ct, "end_break", lambda cfg: ran.append("end_break"))
+    monkeypatch.setattr(ct, "end_only", lambda cfg: ran.append("end_only"))
+    ct.main()
+    assert ran == ["apply"]
+
+
+@pytest.mark.parametrize(
+    "failure", [SystemExit("read-back differs"), OSError("no such file")]
+)
+def test_a_failed_background_write_notifies_because_no_terminal_is_watching(
+    cfg, tmp_path, monkeypatch, failure
+):
+    monkeypatch.setattr(ct, "SZ_LOCK", tmp_path / "state" / "screenzen.lock")
+
+    def broken(cfg, **k):
+        raise failure
+
+    monkeypatch.setattr(ct, "cmd_screenzen", broken)
+    told = []
+    monkeypatch.setattr(ct, "notify", told.append)
+    ct.cmd_sz_apply(cfg)
+    assert len(told) == 1 and "focus screenzen" in told[0]
 
 
 def test_a_repeated_add_still_syncs_both_apps(tmp_path, monkeypatch):
@@ -514,7 +743,7 @@ def test_an_approved_switch_does_not_cover_a_different_switch(
     monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
     # A regression must never reach the real Cold Turkey CLI from a test.
     monkeypatch.setattr(
-        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+        ct, "ct_send", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
     )
     with pytest.raises(SystemExit):
         ct.cmd_start(cfg, "writing")  # queued: research -> writing
@@ -533,7 +762,7 @@ def test_off_reports_a_locked_mode_without_queueing(cfg, tmp_path, monkeypatch, 
     locked = {**mode_block(cfg, "research", "true"), "lock": "delay,5,m"}
     monkeypatch.setattr(ct, "read_blocks", lambda: {"mode: research": locked})
     monkeypatch.setattr(
-        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+        ct, "ct_send", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
     )
     ct.cmd_off(cfg)  # returns: nothing stoppable, so nothing to wait for
     assert "locked" in capsys.readouterr().out
@@ -735,7 +964,7 @@ def test_off_says_so_when_no_mode_is_running(cfg, monkeypatch, capsys):
         lambda: {"mode: research": mode_block(cfg, "research", "false")},
     )
     monkeypatch.setattr(
-        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+        ct, "ct_send", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
     )
     ct.cmd_off(cfg)
     assert "no mode was running" in capsys.readouterr().out
@@ -757,7 +986,7 @@ def test_off_outside_off_hours_points_to_a_break(cfg, monkeypatch):
         lambda: {"mode: research": mode_block(cfg, "research", "true")},
     )
     monkeypatch.setattr(
-        ct, "ct", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
+        ct, "ct_send", lambda *a: pytest.fail(f"Cold Turkey CLI called: {a}")
     )
     with pytest.raises(SystemExit, match="focus break"):
         ct.cmd_off(cfg)

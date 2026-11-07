@@ -15,7 +15,7 @@ Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: eac
 
 ## Commands
 
-Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to the running app over local IPC, and the ScreenZen write closes and reopens ScreenZen and writes under `~/Library`.
+Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the app's preferences and reads its database, and the ScreenZen write closes and reopens ScreenZen and writes under `~/Library`.
 
 | Ask | Run |
 |---|---|
@@ -43,12 +43,20 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to t
 
 When Claude runs it, `focus` delays anything that loosens blocking: stopping a mode, switching modes, a sync that allows new sites, a ScreenZen write that allows more or blocks less. **Exit code 3 means queued, not failed.** Tell Yulong the change and the time it becomes runnable, and stop. Run the same command once more after that time only if he still wants it. Never edit `~/.local/state/focus/pending.json`, `focus` or `agent_loosen_delay_minutes` to skip the wait, and never loop on the command. If he wants it now, give him the command to run himself. Starting a mode from none and anything that only tightens run at once.
 
+## Cold Turkey's CLI needs a wake-up
+
+- **Mechanism:** the CLI is the app in a second process. It writes its arguments to the `commandArgs` preference within 0.1 s, then idles for about 5 s and prints "isn't responding", even for `-help`. The reply decides nothing; only the database says whether a change landed.
+- **One slot, read on activation:** the agent reads and deletes `commandArgs` when it becomes the active app, and does not look otherwise. A second command replaces an unread first, which is how `focus sync` used to lose sites.
+- **How `focus` handles it:** `ct_apply` sends the command, activates the agent by pid for a moment, watches the database, and hands the front back. A real `focus deep 1` took 0.51 s this way (6 Nov 2026), and the same call failed twice without the activation. No Automation permission is needed.
+- **A failed command is not gone:** it stays in the slot and runs when Cold Turkey next comes to the front. Never probe with a real command by calling the CLI by hand. `defaults read com.getcoldturkey.blocker commandArgs` shows what is waiting: a missing key means nothing is.
+- **Mode changes return before ScreenZen finishes:** for a person, `focus` starts a detached `focus sz-apply`, which reads what is running once it holds the lock and sends a notification if it fails. An agent stays in the foreground so that it sees the delay. `sz-apply` is internal.
+
 ## Changing the lists
 
 - **"Allow X in research":** put X in the group that fits it (or a new group the mode names), never straight into a mode. Say which other modes get it through that group.
 - **"Block X":** add it to an always-blocked group, or remove it from the allow group that lets it through.
 - **"Why is X blocked":** check, in order, whether the running mode allows a group containing X, whether a Cold Turkey always-on block bans X (`focus status` prints `conflict:` lines; an exception never overrides another block), and whether a ScreenZen 🚫 group lists it.
-- **What stays manual in Cold Turkey:** removing a site, changing a mode's apps, and loosening an always-on block (the Cold Turkey blocks under `blocklists.cold_turkey` in the note). `focus sync` tries to add newly banned sites to the always-on blocks and timers through the CLI, which only tightens; whether the CLI accepts additions to a locked block is untested, and sync says when one did not land. `focus status` says "focus sync adds these" for a difference sync can make; for the rest, give Yulong that line as the step to do by hand. Sync sends additions one at a time, because every block lives in one settings value that each add rewrites, then waits once, up to 3 s, for all of them. The CLI's "isn't responding" does not say whether a change landed, so only the database counts.
+- **What stays manual in Cold Turkey:** removing a site, changing a mode's apps, and loosening an always-on block (the Cold Turkey blocks under `blocklists.cold_turkey` in the note). `focus sync` tries to add newly banned sites to the always-on blocks and timers through the CLI, which only tightens; whether the CLI accepts additions to a locked block is untested, and sync says when one did not land. `focus status` says "focus sync adds these" for a difference sync can make; for the rest, give Yulong that line as the step to do by hand. Sync sends additions one at a time and waits about 1 s for each to land before sending the next, because the command slot holds one.
 - **Why not write Cold Turkey's database directly:** it is possible (the settings are lightly obfuscated JSON), but it is exactly the path around the delay locks, and the running app can overwrite or corrupt it. Do not build or suggest it.
 - **ScreenZen's 🚫 groups win inside ScreenZen.** A site a mode allows but a ScreenZen 🚫 group blocks is left out of every "✅ focus:" group, so it keeps its pause screen all day. A 🚫 group with `off_in: [admin]` in the note stands aside while those modes run (messaging apps during admin) and is back on otherwise.
 - **Time windows come from the apps' own schedules, not from a mode.** Some always-on blocks are scheduled off at set hours; the note says which. A running mode still blocks everything it does not allow, so a window needs `focus off`. Schedules are edited in the apps, not the note.
