@@ -926,6 +926,57 @@ def cmd_off(cfg: dict) -> None:
     print(f"stopped {', '.join(running)}")
 
 
+# Each kind of difference between the note and a Cold Turkey block, said plainly: what
+# differs, then what fixes it. Cold Turkey's CLI can only add, so anything Cold Turkey has
+# that the note does not is a hand edit in the app.
+DRIFT_TEXT = {
+    "add_web": (
+        "The note blocks {items}, but Cold Turkey does not.",
+        "Run 'focus sync', which adds {them}.",
+    ),
+    "extra_web": (
+        "Cold Turkey blocks {items}, but the note does not.",
+        "In Cold Turkey, remove {them} from this block's blocked sites.",
+    ),
+    "add_exc": (
+        "The note allows {items}, but Cold Turkey does not.",
+        "Run 'focus sync', which adds {them}.",
+    ),
+    "extra_exc": (
+        "Cold Turkey allows {items}, but the note does not.",
+        "In Cold Turkey, remove {them} from this block's allowed sites (its exceptions).",
+    ),
+    "add_apps": (
+        "The note blocks the app {items}, but Cold Turkey does not.",
+        "In Cold Turkey, add {them} to this block's apps; the CLI cannot add apps.",
+    ),
+    "extra_apps": (
+        "Cold Turkey blocks the app {items}, but the note does not.",
+        "In Cold Turkey, remove {them} from this block's apps.",
+    ),
+    "missing_apps": (
+        "The note names the app {items}, which is not installed on this Mac.",
+        "Nothing to do: it is skipped until it is installed.",
+    ),
+}
+
+
+def describe(kind: str, items: list[str], indent: str = "  ") -> str:
+    """Two lines for one kind of difference: what differs, then the fix."""
+    what, fix = DRIFT_TEXT[kind]
+    if len(items) > 1:
+        what = what.replace("the app {items}", "the apps {items}")
+        what = what.replace("is not installed", "are not installed")
+        fix = fix.replace(
+            "it is skipped until it is", "they are skipped until they are"
+        )
+    them = "it" if len(items) == 1 else "them"
+    return (
+        f"{indent}{what.format(items=', '.join(items))}\n"
+        f"{indent}  Fix: {fix.format(them=them)}"
+    )
+
+
 def drift(cfg: dict, blocks: dict, mode: str) -> dict:
     block = blocks.get(PREFIX + mode)
     want_exc = desired_exceptions(cfg, mode)
@@ -945,6 +996,13 @@ def drift(cfg: dict, blocks: dict, mode: str) -> dict:
     }
 
 
+CT_MISSING_BLOCK = (
+    "Cold Turkey has no block with this name.\n"
+    "  Fix: run 'focus export', then in Cold Turkey use Blocks, then its menu, then "
+    "'Import blocks from another installation…' on ~/Downloads/focus-blocks.ctbbl."
+)
+
+
 def cmd_status(cfg: dict) -> None:
     blocks = read_blocks()
     for name, block in blocks.items():
@@ -957,13 +1015,13 @@ def cmd_status(cfg: dict) -> None:
     for mode in cfg["modes"]:
         d = drift(cfg, blocks, mode)
         if not d["exists"]:
-            print(f"{PREFIX}{mode}: missing; run 'focus export' and import it")
+            print(f"{PREFIX}{mode}: {CT_MISSING_BLOCK}")
             continue
         issues = {k: v for k, v in d.items() if k != "exists" and v}
         verdict = paint("in sync", "32") if not issues else paint("differs", "33")
         print(f"{PREFIX}{mode}: {verdict}")
         for k, v in issues.items():
-            print(f"  {k}: {', '.join(v)}")
+            print(describe(k, v))
     # Always-on blocks are reported, never written: they carry delay locks the CLI cannot get past.
     fixed = []
     for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
@@ -983,7 +1041,7 @@ def cmd_status(cfg: dict) -> None:
     for name, want_web, want_exc, want_apps, missing in fixed:
         block = blocks.get(name)
         if block is None:
-            print(f"{name}: not in Cold Turkey; import a fresh 'focus export'")
+            print(f"{name}: {CT_MISSING_BLOCK}")
             continue
         issues = {
             "add_web": [w for w in want_web if w not in block["web"]],
@@ -995,17 +1053,10 @@ def cmd_status(cfg: dict) -> None:
             "missing_apps": missing,
         }
         issues = {k: v for k, v in issues.items() if v}
-        verdict = paint("in sync", "32")
-        if issues:
-            fix = (
-                "focus sync adds these"
-                if set(issues) == {"add_web"}
-                else "edit by hand in Cold Turkey"
-            )
-            verdict = paint(f"differs ({fix})", "33")
+        verdict = paint("in sync", "32") if not issues else paint("differs", "33")
         print(f"{name}: {verdict}")
         for k, v in issues.items():
-            print(f"  {k}: {', '.join(v)}")
+            print(describe(k, v))
     for line in conflicts(cfg):
         print(f"conflict: {line}")
     if s := read_only():
@@ -1057,7 +1108,7 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
     for mode in cfg["modes"]:
         name, d = PREFIX + mode, drift(cfg, blocks, mode)
         if not d["exists"]:
-            needs_import.append(f"{name}: block missing")
+            needs_import.append(f"{name}: {CT_MISSING_BLOCK}")
             continue
         modes.append(name)
         # Exceptions before '*.*', so a running block never blocks a site it should allow.
@@ -1069,7 +1120,7 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
                 sent.append(add_site(name, flag, kind, site))
         for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
             if d[k]:
-                needs_import.append(f"{name}: {k} {', '.join(d[k])}")
+                needs_import.append(f"{name}:\n{describe(k, d[k], '    ')}")
         if d["missing_apps"]:
             print(f"  apps not found on this Mac: {', '.join(d['missing_apps'])}")
     # Always-on blocks and timers: adding a banned site only tightens, so try it even though
@@ -1090,16 +1141,21 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
     for s in sent:
         if s in missing:
             name, kind, site = s
-            failed.append(f"{name}: {site} ({kind})")
+            listed = "allowed" if kind == "exceptions" else "blocked"
+            failed.append(f"{name}: {site} (to its {listed} sites)")
     for s in banned:
         name, _, site = s
         print(f"{name}: {'could not add' if s in missing else 'added'} {site}")
         if s in missing:
-            needs_import.append(f"{name}: add_web {site}")
+            needs_import.append(
+                f"{name}:\n    Cold Turkey did not take the new blocked site {site}; "
+                "the block may be locked.\n      Fix: in Cold Turkey, add it to this "
+                "block's blocked sites once the lock allows."
+            )
     if needs_import:
         print(
-            "\nThe CLI cannot make these changes. Make them by hand in Cold Turkey "
-            "(a missing mode or timer block comes from importing a fresh 'focus export'):"
+            "\nThese differences between the note and Cold Turkey need a hand edit in "
+            "Cold Turkey, because its command line can only add sites:"
         )
         print("\n".join(f"  {line}" for line in needs_import))
     # One command applies the note everywhere: ScreenZen too, for the running mode.
@@ -1108,8 +1164,9 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
         cmd_screenzen(cfg, dry_run=False, gated=False, quiet=True)
     if failed:
         sys.exit(
-            "focus: these did not appear in Cold Turkey's settings, so the mode blocks "
-            "still differ from the note:\n  " + "\n  ".join(failed)
+            "focus: Cold Turkey did not take these additions, so the mode blocks still "
+            "differ from the note. Run 'focus sync' again; if one still fails, add it by "
+            "hand in Cold Turkey:\n  " + "\n  ".join(failed)
         )
 
 

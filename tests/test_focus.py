@@ -356,7 +356,7 @@ def test_sync_fails_when_the_cli_silently_drops_an_addition(cfg, monkeypatch):
         "mode: writing": block,
     }
     fake_cold_turkey(monkeypatch, blocks, refuse={"mode: writing"})
-    with pytest.raises(SystemExit, match="did not appear"):
+    with pytest.raises(SystemExit, match="did not take these additions"):
         ct.cmd_sync(cfg)
 
 
@@ -380,7 +380,9 @@ def test_sync_adds_a_timers_new_site_and_status_says_sync_can(
     fake_cold_turkey(monkeypatch, blocks)
 
     ct.cmd_status(cfg)
-    assert "timer: deep: differs (focus sync adds these)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "timer: deep: differs" in out
+    assert "Fix: Run 'focus sync', which adds it." in out
 
     ct.cmd_sync(cfg)
     assert timer["web"] == ["arxiv.org"]
@@ -1742,3 +1744,35 @@ def test_the_picker_lists_ungrouped_apps_only(only_cfg, tmp_path, monkeypatch):
     assert ct.pick_groups(only_cfg, ["app:Notes"]) == []
     apps = [r.split("\t")[0] for r in seen["rows"] if r.startswith("app:")]
     assert apps == ["app:Zotero"]  # Telegram and Grind have groups; Notes is picked
+
+
+def test_drift_says_which_side_has_what_and_how_to_fix_it():
+    text = ct.describe("extra_exc", ["quantifiedmind.org"])
+    assert text == (
+        "  Cold Turkey allows quantifiedmind.org, but the note does not.\n"
+        "    Fix: In Cold Turkey, remove it from this block's allowed sites "
+        "(its exceptions)."
+    )
+    assert "remove them" in ct.describe("extra_web", ["a.com", "b.com"])
+    assert "the apps Slack, Signal" in ct.describe("add_apps", ["Slack", "Signal"])
+
+
+def test_every_kind_of_difference_has_plain_text(cfg):
+    blocks = {"mode: writing": mode_block(cfg, "writing", "false")}
+    kinds = set(ct.drift(cfg, blocks, "writing")) - {"exists"}
+    assert kinds <= set(ct.DRIFT_TEXT)
+
+
+def test_sync_explains_a_site_only_cold_turkey_allows(cfg, monkeypatch, capsys):
+    block = mode_block(cfg, "writing", "false")
+    block["exceptions"].append("quantifiedmind.org")
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": block,
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_sync(cfg)
+    out = capsys.readouterr().out
+    assert "extra_exc" not in out
+    assert "Cold Turkey allows quantifiedmind.org, but the note does not." in out
+    assert "remove it from this block's allowed sites" in out
