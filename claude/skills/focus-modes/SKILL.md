@@ -15,7 +15,7 @@ Two blockers read one list. **Cold Turkey** blocks hard, one mode at a time: eac
 
 ## Commands
 
-Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to the running app over local IPC, and the ScreenZen write closes and reopens ScreenZen and writes under `~/Library`.
+Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the app's preferences and reads its database, and the ScreenZen write closes and reopens ScreenZen and writes under `~/Library`.
 
 | Ask | Run |
 |---|---|
@@ -42,6 +42,13 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI talks to t
 ## Loosening waits; do not work around it
 
 When Claude runs it, `focus` delays anything that loosens blocking: stopping a mode, switching modes, a sync that allows new sites, a ScreenZen write that allows more or blocks less. **Exit code 3 means queued, not failed.** Tell Yulong the change and the time it becomes runnable, and stop. Run the same command once more after that time only if he still wants it. Never edit `~/.local/state/focus/pending.json`, `focus` or `agent_loosen_delay_minutes` to skip the wait, and never loop on the command. If he wants it now, give him the command to run himself. Starting a mode from none and anything that only tightens run at once.
+
+## Cold Turkey's CLI hands over one command at a time
+
+- **Mechanism:** the CLI is the app in a second process. It writes its arguments to the `commandArgs` preference within 0.1 s, then idles for about 5 s and prints "isn't responding", even for `-help`. `focus` does not wait for it; the database alone says whether a change landed.
+- **One slot, not a queue:** each CLI call replaces `commandArgs`. On 6 Nov 2026 the agent ran commands only around the moments it became the active app, and none of the 14 logged calls without an activation changed anything. What activates it is not known.
+- **A failed command is not gone:** it stays in the slot and can run when Cold Turkey next comes to the front. Calling the CLI by hand leaves the same live command, so never probe with a real one: `defaults read com.getcoldturkey.blocker commandArgs` shows what is waiting, and a harmless CLI call replaces it.
+- **Mode changes return before ScreenZen finishes:** for a person, `focus` starts a detached `focus sz-apply`, which reads what is running once it holds the lock and sends a notification if it fails. An agent stays in the foreground so that it sees the delay. `sz-apply` is internal.
 
 ## Changing the lists
 
