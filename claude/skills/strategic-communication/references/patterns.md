@@ -8,7 +8,7 @@
 
 **After**: "I previously said yes, but this other place with 2 toilets is just too hard to give up. You're obviously annoyed by this, but I hope you understand."
 
-**Principle**: Label their emotion, acknowledge you changed plans, maintain your decision. Being human beats being businesslike.
+**Principle**: Acknowledge you changed plans, name the impact, maintain your decision. Label the emotion only when you know them or the feeling is visible. Being human beats being businesslike.
 
 ### Pattern 2: Making Asks Clear (Without Being Demanding)
 
@@ -22,7 +22,7 @@
 
 **Before**: [Just ghosting or being vague]
 
-**After**: "I'm sorry for the late change - something unexpected came up. You're probably frustrated since you took time off, which I totally get. Is there anything I can do to make this easier on your end?"
+**After**: "I'm sorry for the late change - something unexpected came up. I know this costs you the time you took off. Is there anything I can do to make this easier on your end?"
 
 **Principle**: Apologize for the inconvenience, name the concrete impact (label the emotion only when it is visible or you know them), offer to help. Don't just bail.
 
@@ -30,9 +30,9 @@
 
 **Before**: "I'm so sorry, I really wish I could help but I have so much on my plate right now and I'm already behind on three other things and I feel terrible about it..."
 
-**After**: "I can't take this on right now - I'm at capacity with current projects. Have you tried asking [other person]?"
+**After**: "I need to protect time for my current projects, so I can't take this on right now. Have you tried asking [other person]?"
 
-**Principle**: Direct no, brief reason, helpful alternative (optional). Don't spiral into guilt.
+**Principle**: Yes to what you are protecting, a direct no, then a genuine alternative. Don't spiral into guilt.
 
 ### Pattern 5: Negotiating Terms Collaboratively
 

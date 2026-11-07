@@ -1,13 +1,13 @@
 ---
 name: strategic-communication
-description: Draft or refine any message where the relationship and the outcome both matter, such as negotiating, declining, delivering hard news, replying to criticism, requesting action from an official or institution, or fixing a draft that reads off-tone. Routes the exchange to the framework that fits instead of applying one negotiation style to everything.
+description: Draft or refine any message where the outcome matters and usually the relationship too, such as rentals, salary, contracts and other negotiation, work requests, declining, changing plans, delivering hard news, giving or replying to feedback, a tense exchange, writing to an official or institution, or a draft that reads off-tone. Routes the exchange to the framework that fits.
 ---
 
 # Strategic Communication Fits The Exchange
 
 ## Use This Skill Broadly
 
-Use this skill when a message must protect both the relationship and a concrete outcome. Treat it as a writing task first: optimise for friendliness, then clarity, then persuasiveness. Do not force a bargaining technique into a request, apology, refusal or reply to criticism.
+Use this skill when a message must protect a concrete outcome, usually with a relationship to keep. Treat it as a writing task first and follow the drafting order in `~/.claude/rules/communication.md`. With a bad-faith or one-shot counterpart, stay courteous but put clarity and the outcome first. Do not force a bargaining technique into a request, apology, refusal or reply to criticism.
 
 ## Route Before Drafting The Message
 
@@ -19,9 +19,10 @@ First decide what kind of exchange this is. Use one primary framework, then add 
 | A bad-faith or hard counterpart, or one-shot bargaining where the relationship matters little | *Never Split the Difference* |
 | Hard news, changed plans, backing out or a dispute about what happened | *Difficult Conversations* |
 | Receiving criticism or replying to it | *Thanks for the Feedback* |
+| Giving feedback | *Thanks for the Feedback* |
 | Saying no | *The Power of a Positive No* |
 | Writing to an official or institution | *Getting to Yes* plus administrative clarity |
-| A draft that merely reads off-tone | Reader-first revision |
+| A plain work request, or a draft that merely reads off-tone | Reader-first revision |
 
 ### Terms Need Interests And Criteria
 
@@ -44,6 +45,7 @@ Use *Never Split the Difference*, selectively:
 - Calibrated how or what questions
 - No-oriented questions
 - An accusation audit
+- Protection of a weak BATNA: do not disclose it
 
 If the counterpart stonewalls, add *Getting Past No*:
 
@@ -62,7 +64,6 @@ Use *Difficult Conversations*:
 - Hold both accounts with the And stance.
 - Separate intent from impact.
 - Map contribution instead of assigning blame.
-- Use an accusation audit to open the message if it helps.
 
 ### Criticism Needs A Diagnosis First
 
@@ -71,6 +72,15 @@ Use *Thanks for the Feedback*:
 - Identify the trigger: truth, relationship or identity.
 - Identify what was meant: appreciation, coaching or evaluation.
 - If the reply changes the subject, signpost the two topics and handle them one at a time.
+
+### Giving Feedback Names Its Kind
+
+Use *Thanks for the Feedback*, with intent versus impact from *Difficult Conversations*:
+
+- Say whether this is appreciation, coaching or evaluation.
+- State the observed behaviour and its concrete impact.
+- Do not infer intent.
+- Make one request for the future.
 
 ### Refusals Follow Yes, No, Yes
 
@@ -85,17 +95,19 @@ Use *The Power of a Positive No*:
 
 Use objective criteria from *Getting to Yes*, plus administrative clarity:
 
-- Lead with the relevant rule, precedent or deadline.
+- Identify the case or reference.
+- Make one clear ask, and name the rule, precedent or deadline behind it.
 - Give the reader the facts needed to approve the request.
 - Own any lapse briefly and plainly.
-- Make one clear ask and state the requested next step.
+- Follow `evidence-packs` for attachments.
 - Do not label a stranger's emotions.
 
-### Off-Tone Drafts Need Revision Only
+### Plain Requests Need Reader-First Drafting
 
 Use reader-first revision:
 
 - Preserve the facts and ask.
+- Make one specific ask with a date.
 - Remove hedging, guilt spirals and implied demands.
 - Match the reader's formality and the relationship.
 - Use a book framework only if the exchange actually needs one.

@@ -77,14 +77,7 @@ Keep a Plan B behind the no. The alternative can be private; its purpose is to m
 
 ## Institutions Need Rules And Facts
 
-An official or institution usually needs a decision-ready record. Combine the objective-criteria discipline from *Getting to Yes* with a direct administrative request.
-
-- Identify the case, account or reference.
-- State the relevant dates and facts.
-- Cite the rule, precedent, deadline or discretion that supports the request.
-- Own any lapse in one plain sentence.
-- State the exact decision or action requested.
-- Include the evidence needed to grant it.
+An official or institution usually needs a decision-ready record. Combine the objective-criteria discipline from *Getting to Yes* with a direct administrative request. The order is in `scenarios.md` "Institutions Need Decision-Ready Facts".
 
 Do not open by guessing how a stranger feels. Do not bury the request under personal context that does not affect the decision.
 
