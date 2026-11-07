@@ -443,25 +443,54 @@ def test_a_change_stays_unlanded_until_the_agent_is_woken(cfg, monkeypatch):
     ct.switch("mode: writing", on=True)
 
 
-def test_the_front_goes_back_to_the_app_that_had_it(monkeypatch):
-    fronts = iter(["com.superlogical.rex", ct.CT_BUNDLE])
-    monkeypatch.setattr(ct, "frontmost_bundle", lambda: next(fronts))
+def fake_front(monkeypatch, app, lag=2):
+    """The app is in front until a wake; 'open -b' takes effect after `lag` checks."""
+    state = {"front": app, "pending": 0}
+    opened = []
+
+    def frontmost():
+        if state["pending"]:
+            state["pending"] -= 1
+            if not state["pending"]:
+                state["front"] = app
+        return state["front"]
+
+    def run(cmd, **k):
+        opened.append(cmd)
+        state["pending"] = lag
+
+    def wake(args):
+        state["front"] = ct.CT_BUNDLE
+
+    monkeypatch.setattr(ct, "frontmost_bundle", frontmost)
+    monkeypatch.setattr(ct.subprocess, "run", run)
+    monkeypatch.setattr(ct, "wake_agent", wake)
     monkeypatch.setattr(ct, "ct_send", lambda *a: None)
-    ran = []
-    monkeypatch.setattr(ct.subprocess, "run", lambda cmd, **k: ran.append(cmd))
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    return state, opened
+
+
+def test_the_front_goes_back_to_the_app_that_had_it(monkeypatch):
+    state, opened = fake_front(monkeypatch, "com.superlogical.rex")
     assert ct.ct_apply(("-start", "x"), lambda: True)
-    assert ran == [["open", "-b", "com.superlogical.rex"]]
+    assert opened == [["open", "-b", "com.superlogical.rex"]]
+    assert state["front"] == "com.superlogical.rex"  # back before ct_apply returns
 
 
 def test_the_front_goes_back_even_when_nothing_lands(monkeypatch):
-    fronts = iter(["com.superlogical.rex", ct.CT_BUNDLE])
-    monkeypatch.setattr(ct, "frontmost_bundle", lambda: next(fronts))
-    monkeypatch.setattr(ct, "ct_send", lambda *a: None)
-    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
-    ran = []
-    monkeypatch.setattr(ct.subprocess, "run", lambda cmd, **k: ran.append(cmd))
+    state, opened = fake_front(monkeypatch, "com.superlogical.rex")
     assert not ct.ct_apply(("-start", "x"), lambda: False)
-    assert ran == [["open", "-b", "com.superlogical.rex"]]
+    assert state["front"] == "com.superlogical.rex"
+
+
+def test_two_commands_in_a_row_both_give_the_front_back(monkeypatch):
+    # A mode switch is a start then a stop. 'open' returns before the front moves, so
+    # without the wait the second call reads Cold Turkey as the app to go back to.
+    state, opened = fake_front(monkeypatch, "com.superlogical.rex")
+    ct.ct_apply(("-start", "a"), lambda: True)
+    ct.ct_apply(("-stop", "b"), lambda: True)
+    assert opened == [["open", "-b", "com.superlogical.rex"]] * 2
+    assert state["front"] == "com.superlogical.rex"
 
 
 @pytest.mark.parametrize("front", [None, "com.apple.loginwindow", ct.CT_BUNDLE])

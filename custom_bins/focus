@@ -221,7 +221,7 @@ def hand_back_focus(front: str | None) -> None:
     for its window fired before the window existed (2026-11-02). FOCUS_TRACE=1 appends
     each step to SZ_TRACE. With the screen locked, loginwindow is in front and there is
     no app to hand back to."""
-    if front in (None, SZ_BUNDLE, "com.apple.loginwindow"):
+    if front in (None, SZ_BUNDLE, CT_BUNDLE, "com.apple.loginwindow"):
         return
     t0 = time.monotonic()
     log = [f" 0.00s front was {front}"]
@@ -540,6 +540,21 @@ def wait_for(done, polls: int) -> bool:
     return False
 
 
+def give_front_back(front: str | None) -> None:
+    """Return the front to the app that had it, and wait until it has it. 'open' returns
+    first, and a switch applies two commands in a row: the second must read the real
+    front, and the agent must have lost it, or it has no activation to read on."""
+    if front in (None, CT_BUNDLE, "com.apple.loginwindow"):
+        return
+    if frontmost_bundle() == front:
+        return
+    subprocess.run(["open", "-b", front], capture_output=True)
+    for _ in range(10):
+        if frontmost_bundle() == front:
+            return
+        time.sleep(0.05)
+
+
 def ct_apply(args: tuple[str, ...], done, more_polls: int = 80) -> bool:
     """Send a command, wake the agent, and return as soon as done() sees it land.
 
@@ -551,9 +566,7 @@ def ct_apply(args: tuple[str, ...], done, more_polls: int = 80) -> bool:
     ct_send(*args)
     wake_agent(args)
     landed = wait_for(done, 20)
-    if front not in (None, CT_BUNDLE, "com.apple.loginwindow"):
-        if frontmost_bundle() != front:
-            subprocess.run(["open", "-b", front], capture_output=True)
+    give_front_back(front)
     return landed or wait_for(done, more_polls)
 
 

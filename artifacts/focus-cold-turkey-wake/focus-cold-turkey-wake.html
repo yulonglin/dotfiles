@@ -176,7 +176,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ok); outline-of
 </div>
 <figure>
   <div class="scroll">
-  <svg viewBox="0 0 800 186" role="img" aria-label="Bar chart to scale. A failed run took about 10.2 seconds, a working run 7 seconds, a real focus deep with the wake-up about 0.5 seconds, and a mode switch is calculated at about 0.9 seconds.">
+  <svg viewBox="0 0 800 186" role="img" aria-label="Bar chart to scale. A failed run took about 10.2 seconds, a working run 7 seconds, a real focus deep with the wake-up about 0.5 seconds, and a mode switch comes to about 1 second, from two measured wake cycles.">
     <g class="grid">
       <line x1="150" y1="14" x2="150" y2="150"/><line x1="358" y1="14" x2="358" y2="150"/>
       <line x1="566" y1="14" x2="566" y2="150"/><line x1="774" y1="14" x2="774" y2="150"/>
@@ -193,11 +193,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ok); outline-of
     <rect class="ok-b" x="150" y="88" width="27" height="22" rx="2"/>
     <text x="187" y="104" class="okt">0.51 s and 0.48 s, measured</text>
     <text x="10" y="137">Now, mode switch</text>
-    <rect class="ok-b" x="150" y="122" width="47" height="22" rx="2" stroke-dasharray="4 3"/>
-    <text x="207" y="138" class="okt">about 0.9 s, calculated</text>
+    <rect class="ok-b" x="150" y="122" width="52" height="22" rx="2" stroke-dasharray="4 3"/>
+    <text x="212" y="138" class="okt">about 1 s, from two measured wake cycles</text>
   </svg>
   </div>
-  <figcaption>A switch has two steps, start then stop, so I calculated it as 0.51 s plus about 0.4 s. I have not measured one, because Claude's own switches wait on the agent delay. Your next real switch is that test.</figcaption>
+  <figcaption>A switch has two steps, start then stop. Two real wake cycles in a row took 0.89 s using commands that changed nothing, and the front returned both times. Startup adds about 0.1 s. I have not timed a full switch, because Claude's own switches wait on the agent delay, so your next one is that test.</figcaption>
 </figure>
 
 <h2>The same slot was losing sites in sync</h2>
