@@ -299,6 +299,8 @@ def fake_cold_turkey(monkeypatch, blocks, refuse=()):
         if name not in refuse:
             if op in ("-start", "-stop"):
                 blocks[name]["enabled"] = "true" if op == "-start" else "false"
+                if "-lock" in args:
+                    blocks[name]["lock"] = "2026,11,6,21,56"  # the end time, as stored
             elif op == "-add":
                 kind = "exceptions" if args[2] == "-exception" else "web"
                 blocks[name][kind].append(args[3])
@@ -541,6 +543,17 @@ def test_a_lock_timer_reports_what_the_database_shows(cfg, monkeypatch, capsys):
     ct.cmd_timer(cfg, "deep", ["1"])
     assert calls == [("-start", ct.TIMER_PREFIX + "deep", "-lock", "1")]
     assert "locked until" in capsys.readouterr().out
+
+
+def test_a_running_unlocked_timer_is_not_called_locked_when_the_lock_never_lands(
+    cfg, monkeypatch
+):
+    # Already enabled, so 'enabled' alone would pass while nothing holds the lock.
+    cfg["timers"] = {"deep": {}}
+    blocks = {ct.TIMER_PREFIX + "deep": mode_block(cfg, "writing", "true")}
+    fake_cold_turkey(monkeypatch, blocks, refuse=set(blocks))
+    with pytest.raises(SystemExit, match="did not start"):
+        ct.cmd_timer(cfg, "deep", ["1"])
 
 
 def test_a_lock_timer_that_never_lands_says_so(cfg, monkeypatch):

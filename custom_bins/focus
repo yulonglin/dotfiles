@@ -1758,7 +1758,14 @@ def cmd_timer(cfg: dict, name: str, args: list[str]) -> None:
     if blocks[block].get("enabled") == "true" and is_locked(blocks[block]):
         sys.exit(f"focus: {block!r} is already running and locked")
     # Tightening only, so no agent delay; the lock means nobody can end it early.
-    if not ct_apply(("-start", block, "-lock", minutes), block_is(block, True)):
+
+    def locked() -> (
+        bool
+    ):  # Cold Turkey stores the lock's end time; 'none' means no lock
+        b = read_blocks().get(block, {})
+        return b.get("enabled") == "true" and is_locked(b)
+
+    if not ct_apply(("-start", block, "-lock", minutes), locked):
         sys.exit(f"focus: Cold Turkey did not start {block!r}: {CT_DROPPED}")
     end = dt.datetime.now() + dt.timedelta(minutes=int(minutes))
     print(f"started {block!r}, locked until about {end:%H:%M:%S}")

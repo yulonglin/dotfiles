@@ -16,6 +16,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 
 | Artifact | Org | Status | Source | Public | Updated |
 |---|---|---|---|---|---|
+| [Cold Turkey Wake-Up](https://claude.ai/artifact/LPsVraJ4Fc3bKWhSmrLESN) — why focus switches failed: Cold Turkey's CLI leaves one command in a preference that the agent reads only when it becomes the active app, how a brief activation cut `focus deep` from a failure to about 0.5 s, a bug report to send, and why not to rebuild the app | lin.yulong@gmail.com's Organization | live | `artifacts/focus-cold-turkey-wake/` | no | 2026-11-06 |
 | [Focus Sync Failures](https://claude.ai/artifact/PFYyPomW6Gy2UGvfw6y2Wv) — why `focus sync` stopped at Cold Turkey's "isn't responding" error whether or not the change had landed, what PR 319 fixed, and the one site the CLI really dropped, with the real runs and what one more run would decide | lin.yulong@gmail.com's Organization | live | `artifacts/focus-sync-failures/` | no | 2026-11-05 |
 | [Mac App Usage Audit](https://claude.ai/artifact/BPVtsVTMThViHVsMLHYH3Y) — usage audit of the Mac's apps and Homebrew formulae, joining Spotlight, ActivityWatch, the macOS app-usage database, process state, shell history and agent commands; corrects the 2026-09-03 audit on LibreOffice, which agents do use headless. Per-app usage is personal, so source and data live in the private repo | unknown | live | `dotfiles-personal: artifacts/app-usage-audit/` | no | 2026-11-05 |
 | [Session Map, 3–4 November](https://claude.ai/artifact/FyhyEo2V6cbApqWrZyEMp4) — one page of the 3–4 Nov session that started from "would pstack be helpful?": four pieces of work (pstack ports, clarity audit, monthly context review, its first run) each shown as problem, goal, options and approach with diagrams; what hookify, learn-quiz and application-writer are for; and a proposal to open and close long work with a diagram, written after Yulong said he felt out of the loop without visibility, choice or control | lin.yulong@gmail.com's Organization | live | `artifacts/session-map-2026-11-03/` | no | 2026-11-04 |
@@ -60,7 +61,7 @@ Maintained per `~/.claude/skills/artifacts-sync/SKILL.md` — rows are written a
 | [Alias Audit](https://claude.ai/code/artifact/739598b0-362d-4aaa-a8c2-c77775be5eb4) — alias files fight over names by source order; the set was cut 161 → ~110 against two months of shell history | see note | done | — | no | 2026-08-18 |
 | [Tool-Backed Agents](https://claude.ai/code/artifact/4c124679-7346-4dc5-9cb4-75889320aaf4) — which agents actually invoke their CLI rather than answering from their own reasoning | see note | done | — | no | 2026-08-18 |
 
-43 rows: 25 live, 15 done, 2 archived, 1 superseded.
+44 rows: 26 live, 15 done, 2 archived, 1 superseded.
 
 [//]: # (END GENERATED ARTIFACTS TABLE)
 
