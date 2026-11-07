@@ -6,7 +6,7 @@
 #   - The pre-commit hook, config/git-hooks/pre-commit, whenever claude/settings.json or .claude/settings.json is staged. The hook passes the staged blob in as the committed copy and leaves the deployed copy at its real path, so one run covers both what the commit would publish and what this machine is running right now.
 #   - By hand: bash tests/test_no_attribution_optout.sh
 #
-# There is no suite runner in this repo. tests/ is a directory of standalone scripts, each wired to whatever triggers it (test_no_stall.sh has a workflow, test_pre_commit_gateway_guard.sh has nothing), so "wire it in" means naming the trigger, which the two entries above now do.
+# Shell tests have no suite runner (pytest files run in python-tests.yml). They are standalone scripts, each wired to whatever triggers it (test_no_stall.sh has a workflow, test_pre_commit_gateway_guard.sh has nothing), so "wire it in" means naming the trigger, which the two entries above now do.
 #
 # Why this exists: the opt-out silently broke auto mode behind the gateway. Claude Code re-adds the billing attribution block for classifier calls only when ANTHROPIC_BASE_URL is unset or api.anthropic.com; behind the model-router the opt-out is honoured and every classifier request comes back a bare 429. Measured 8 Sep 2026: 15 requests, 15 x 429, every Bash call denied. Removed in b2868c8; artifacts/auto-mode-classifier-429/report.md has the mechanism.
 #
