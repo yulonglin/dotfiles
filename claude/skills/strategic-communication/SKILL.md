@@ -13,15 +13,92 @@ Use this skill when a message must protect both the relationship and a concrete 
 
 First decide what kind of exchange this is. Use one primary framework, then add only the supporting moves that fit.
 
-| Exchange | Primary framework | Use these moves |
-|---|---|---|
-| Terms such as price, dates or scope | *Getting to Yes* | Separate the people from the problem. Identify interests behind positions. Invent options for mutual gain. Use objective criteria. Know Yulong's BATNA before drafting. Labels and calibrated questions from *Never Split the Difference* can shape the tone, but they are not the method. |
-| A bad-faith or hard counterpart, or one-shot bargaining where the relationship matters little | *Never Split the Difference* | Use tactical empathy, mirrors, labels, calibrated how or what questions, no-oriented questions and an accusation audit selectively. If the counterpart stonewalls, add *Getting Past No*: go to the balcony, step to their side, reframe, build a golden bridge and use power to educate. |
-| Hard news, changed plans, backing out or a dispute about what happened | *Difficult Conversations* | Separate What Happened, Feelings and Identity. Open from the Third Story: a neutral account of the difference between the two views. Hold both accounts with the And stance. Separate intent from impact. Map contribution instead of assigning blame. An accusation audit can help open the message. |
-| Receiving criticism or replying to it | *Thanks for the Feedback* | Identify the trigger: truth, relationship or identity. Identify what was meant: appreciation, coaching or evaluation. If the reply changes the subject, signpost the two topics and handle them one at a time. |
-| Saying no | *The Power of a Positive No* | Write the first yes: the interest or commitment being protected. State the no plainly. End with a second yes: what Yulong can offer instead. Keep a Plan B behind the no. |
-| Writing to an official or institution | *Getting to Yes* plus administrative clarity | Lead with the relevant rule, precedent or deadline. Give the reader the facts needed to approve the request. Own any lapse briefly and plainly. Make one clear ask and state the requested next step. Do not label a stranger's emotions. |
-| A draft that merely reads off-tone | Reader-first revision | Preserve the facts and ask. Remove hedging, guilt spirals and implied demands. Match the reader's formality and the relationship. Use a book framework only if the exchange actually needs one. |
+| Exchange | Primary framework |
+|---|---|
+| Terms such as price, dates or scope | *Getting to Yes* |
+| A bad-faith or hard counterpart, or one-shot bargaining where the relationship matters little | *Never Split the Difference* |
+| Hard news, changed plans, backing out or a dispute about what happened | *Difficult Conversations* |
+| Receiving criticism or replying to it | *Thanks for the Feedback* |
+| Saying no | *The Power of a Positive No* |
+| Writing to an official or institution | *Getting to Yes* plus administrative clarity |
+| A draft that merely reads off-tone | Reader-first revision |
+
+### Terms Need Interests And Criteria
+
+Use *Getting to Yes*:
+
+- Separate the people from the problem.
+- Identify interests behind positions.
+- Invent options for mutual gain.
+- Use objective criteria.
+- Know Yulong's BATNA before drafting.
+- Let labels and calibrated questions from *Never Split the Difference* shape the tone only; they are not the method.
+
+### Hard Counterparts Need Selective Tactics
+
+Use *Never Split the Difference*, selectively:
+
+- Tactical empathy
+- Mirrors
+- Labels
+- Calibrated how or what questions
+- No-oriented questions
+- An accusation audit
+
+If the counterpart stonewalls, add *Getting Past No*:
+
+- Go to the balcony.
+- Step to their side.
+- Reframe.
+- Build a golden bridge.
+- Use power to educate.
+
+### Hard News Opens From Neutral Ground
+
+Use *Difficult Conversations*:
+
+- Separate What Happened, Feelings and Identity.
+- Open from the Third Story: a neutral account of the difference between the two views.
+- Hold both accounts with the And stance.
+- Separate intent from impact.
+- Map contribution instead of assigning blame.
+- Use an accusation audit to open the message if it helps.
+
+### Criticism Needs A Diagnosis First
+
+Use *Thanks for the Feedback*:
+
+- Identify the trigger: truth, relationship or identity.
+- Identify what was meant: appreciation, coaching or evaluation.
+- If the reply changes the subject, signpost the two topics and handle them one at a time.
+
+### Refusals Follow Yes, No, Yes
+
+Use *The Power of a Positive No*:
+
+- Write the first yes: the interest or commitment being protected.
+- State the no plainly.
+- End with a second yes: what Yulong can offer instead.
+- Keep a Plan B behind the no.
+
+### Officials Need A Decision-Ready Request
+
+Use objective criteria from *Getting to Yes*, plus administrative clarity:
+
+- Lead with the relevant rule, precedent or deadline.
+- Give the reader the facts needed to approve the request.
+- Own any lapse briefly and plainly.
+- Make one clear ask and state the requested next step.
+- Do not label a stranger's emotions.
+
+### Off-Tone Drafts Need Revision Only
+
+Use reader-first revision:
+
+- Preserve the facts and ask.
+- Remove hedging, guilt spirals and implied demands.
+- Match the reader's formality and the relationship.
+- Use a book framework only if the exchange actually needs one.
 
 ## Draft For The Actual Reader
 
