@@ -278,12 +278,13 @@ Thanks for Cold Turkey.</pre>
 <div class="prose">
 <ul>
   <li><strong>Merge</strong> <a href="https://github.com/yulonglin/dotfiles/pull/326">PR 326</a>. Until then your terminal runs the old code. An independent review by GPT-6.1 Sol found one bug, a timer reported as locked when it was not, and that is fixed.</li>
-  <li><strong>Run <code>focus admin</code></strong> afterwards. Writing and admin are both on, because my test replaced your pending stop for writing.</li>
   <li><strong>Watch the first real switch.</strong> You should see a brief change of front app. I saw no window appear in the wake-ups I ran, but I cannot confirm any of them was over a full-screen app.</li>
   <li><strong>Send the bug report</strong> if you agree. I have not sent anything.</li>
 </ul>
 </div>
-<div class="cmd" tabindex="0">gh pr merge 326 \
+<div class="cmd" tabindex="0">gh pr ready 326
+
+gh pr merge 326 \
   --squash \
   --delete-branch</div>
 </main>
