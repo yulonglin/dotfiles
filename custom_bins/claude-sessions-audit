@@ -101,7 +101,7 @@ def pr_state(path: str, branch: str) -> str | None:
                 "--limit",
                 "1",
                 "--json",
-                "number,state",
+                "number,state,headRefOid,baseRefName",
             ],
             cwd=path,
             capture_output=True,
@@ -112,7 +112,7 @@ def pr_state(path: str, branch: str) -> str | None:
         prs = json.loads(p.stdout) if p.returncode == 0 else []
     except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
         return None
-    return f"#{prs[0]['number']} {prs[0]['state']}" if prs else None
+    return prs[0] if prs else None
 
 
 def inspect_worktree(path: str, branch: str | None, prs: bool) -> Worktree:
@@ -137,11 +137,22 @@ def inspect_worktree(path: str, branch: str | None, prs: bool) -> Worktree:
         _, refs = git(path, "branch", "-r", "--contains", "HEAD")
         wt.pushed = bool(refs)
         if prs and wt.landed is False and wt.branch:
-            wt.pr = pr_state(path, wt.branch)
-            # A squash merge that main has edited since no longer merges to a
-            # no-op, so a merged PR is the better evidence that the work landed.
-            if wt.pr and wt.pr.endswith("MERGED"):
-                wt.landed = True
+            pr = pr_state(path, wt.branch)
+            if pr:
+                wt.pr = f"#{pr['number']} {pr['state']}"
+                # A squash merge that main has edited since no longer merges to
+                # a no-op, so a merged PR is the better evidence — but only when
+                # it merged exactly this HEAD into this base. Commits added after
+                # the merge, or a PR into another branch, leave the work unlanded.
+                head = git(path, "rev-parse", "HEAD")[1]
+                if (
+                    pr["state"] == "MERGED"
+                    and pr.get("headRefOid") == head
+                    and pr.get("baseRefName") == wt.base.removeprefix("origin/")
+                ):
+                    wt.landed = True
+                elif pr["state"] == "MERGED":
+                    wt.pr += " (older head or other base)"
     return wt
 
 
@@ -176,6 +187,10 @@ def verdict(j: Job) -> tuple[str, str]:
         if not wt.remote or wt.pushed is False:
             return "stranded", "31"
         return "unmerged", "33"
+    # Fail closed: a live worktree with no affirmative evidence that its work
+    # landed (no base branch found, inspection failed) is never "complete".
+    if wt and wt.exists and wt.landed is not True:
+        return "check", "33"
     if j.follow_up:
         return "check", "33"
     return "complete", "32"
