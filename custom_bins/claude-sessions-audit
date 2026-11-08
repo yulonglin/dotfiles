@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Read-only inventory of Claude Code background sessions, for a cleanup sweep.
+
+For every job under ~/.claude/jobs it prints the state, the final `result:` line,
+whether that line still hands something back to the user, and the state of the
+job's worktree: uncommitted files, whether its branch's content has landed in the
+base branch, and whether the repository has a remote at all.
+
+"done" in agent view only means the session wrote a `result:` line. This command
+exists because a done session can still be unfinished: a follow-up for the user,
+or a worktree whose commits exist on no remote (2026-11-07: three attention-
+analyser sessions were "done" with 3.6k lines merged nowhere).
+
+It changes nothing. The `session-sweep` skill says what to do with each row.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+JOBS_DIR = Path.home() / ".claude" / "jobs"
+
+# Phrases in a result line that hand work back to the user. A match is a prompt
+# to check the live state, not proof that the follow-up is still open.
+FOLLOW_UP = re.compile(
+    r"\b(still|yours|you need|for you|your (merge|review|test)|await|waits? on|"
+    r"by hand|needs? (the|your|a)|pull|unsent|to review and send|not merged|"
+    r"manual|run `)",
+    re.IGNORECASE,
+)
+
+
+def paint(text: str, sgr: str) -> str:
+    """ANSI colour for a terminal; plain text when piped or when NO_COLOR is set."""
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    return f"\033[{sgr}m{text}\033[0m"
+
+
+def git(cwd: str | Path, *args: str) -> tuple[int, str]:
+    p = subprocess.run(
+        ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=False
+    )
+    return p.returncode, p.stdout.strip()
+
+
+@dataclass
+class Worktree:
+    path: str
+    branch: str | None
+    exists: bool
+    dirty: int = 0
+    base: str | None = None
+    ahead: int = 0
+    landed: bool | None = None  # branch content already in base (squash-safe)
+    remote: bool = False
+    pushed: bool | None = None  # branch tip exists on some remote ref
+    pr: str | None = None  # e.g. "#321 MERGED", from `gh` when it answers
+
+
+@dataclass
+class Job:
+    id: str
+    name: str
+    state: str
+    updated: str
+    result: str
+    follow_up: list[str] = field(default_factory=list)
+    worktree: Worktree | None = None
+
+
+def base_branch(repo: str) -> str | None:
+    code, ref = git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if code == 0 and ref:
+        return ref
+    for cand in ("origin/main", "origin/master", "main", "master"):
+        if git(repo, "rev-parse", "-q", "--verify", cand)[0] == 0:
+            return cand
+    return None
+
+
+def pr_state(path: str, branch: str) -> str | None:
+    """The newest PR for this head branch, or None when gh is absent or offline."""
+    try:
+        p = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--head",
+                branch,
+                "--state",
+                "all",
+                "--limit",
+                "1",
+                "--json",
+                "number,state",
+            ],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        prs = json.loads(p.stdout) if p.returncode == 0 else []
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+    return f"#{prs[0]['number']} {prs[0]['state']}" if prs else None
+
+
+def inspect_worktree(path: str, branch: str | None, prs: bool) -> Worktree:
+    wt = Worktree(path=path, branch=branch, exists=Path(path).is_dir())
+    if not wt.exists:
+        return wt
+    # The job records the branch it was created on; the session may have switched.
+    wt.branch = git(path, "branch", "--show-current")[1] or branch
+    _, status = git(path, "status", "--porcelain")
+    wt.dirty = len(status.splitlines()) if status else 0
+    wt.remote = bool(git(path, "remote")[1])
+    wt.base = base_branch(path)
+    if wt.base:
+        _, n = git(path, "rev-list", "--count", f"{wt.base}..HEAD")
+        wt.ahead = int(n or 0)
+        # Merging HEAD into base changes nothing iff its content already landed.
+        # Unlike `git cherry`, this also holds for a multi-commit squash merge.
+        code, tree = git(path, "merge-tree", "--write-tree", wt.base, "HEAD")
+        _, base_tree = git(path, "rev-parse", f"{wt.base}^{{tree}}")
+        wt.landed = code == 0 and tree.splitlines()[0] == base_tree if tree else None
+    if wt.remote:
+        _, refs = git(path, "branch", "-r", "--contains", "HEAD")
+        wt.pushed = bool(refs)
+        if prs and wt.landed is False and wt.branch:
+            wt.pr = pr_state(path, wt.branch)
+            # A squash merge that main has edited since no longer merges to a
+            # no-op, so a merged PR is the better evidence that the work landed.
+            if wt.pr and wt.pr.endswith("MERGED"):
+                wt.landed = True
+    return wt
+
+
+def load(job_dir: Path, prs: bool) -> Job | None:
+    try:
+        d = json.loads((job_dir / "state.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    out = d.get("output")
+    result = (
+        (out.get("result") if isinstance(out, dict) else out) or d.get("detail") or ""
+    )
+    job = Job(
+        id=job_dir.name,
+        name=d.get("name") or "",
+        state=d.get("state") or "?",
+        updated=(d.get("updatedAt") or "")[:16].replace("T", " "),
+        result=result,
+        follow_up=sorted({m.group(0).lower() for m in FOLLOW_UP.finditer(result)}),
+    )
+    if d.get("worktreePath"):
+        job.worktree = inspect_worktree(d["worktreePath"], d.get("worktreeBranch"), prs)
+    return job
+
+
+def verdict(j: Job) -> tuple[str, str]:
+    """A starting classification for the sweep; the skill has the full test."""
+    wt = j.worktree
+    if j.state != "done":
+        return "open", "33"
+    if wt and wt.exists and (wt.dirty or wt.landed is False):
+        if not wt.remote or wt.pushed is False:
+            return "stranded", "31"
+        return "unmerged", "33"
+    if j.follow_up:
+        return "check", "33"
+    return "complete", "32"
+
+
+def render(jobs: list[Job]) -> None:
+    for j in jobs:
+        v, colour = verdict(j)
+        print(
+            f"{paint(v.upper(), colour + ';1'):<10} {paint(j.id, '1')}  {j.name}  "
+            f"{paint(f'[{j.state}, {j.updated}]', '2')}"
+        )
+        if j.result:
+            print(f"    {j.result[:300]}")
+        if j.follow_up:
+            print(paint(f"    follow-up words: {', '.join(j.follow_up)}", "33"))
+        wt = j.worktree
+        if wt:
+            if not wt.exists:
+                print(paint(f"    worktree gone: {wt.path}", "2"))
+            else:
+                bits = [
+                    f"branch {wt.branch}",
+                    f"{wt.dirty} uncommitted" if wt.dirty else "clean",
+                    f"{wt.ahead} ahead of {wt.base}" if wt.base else "no base branch",
+                    "landed in base"
+                    if wt.landed
+                    else "NOT in base"
+                    if wt.landed is False
+                    else "landed ?",
+                    ("pushed" if wt.pushed else "NOT pushed")
+                    if wt.remote
+                    else "NO REMOTE",
+                ]
+                if wt.pr:
+                    bits.append(f"PR {wt.pr}")
+                print(f"    worktree {wt.path}\n      " + " · ".join(bits))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="Read-only inventory of Claude Code background sessions for a cleanup sweep."
+    )
+    ap.add_argument("--jobs-dir", type=Path, default=JOBS_DIR)
+    ap.add_argument("--json", action="store_true", help="print JSON, no colour")
+    ap.add_argument("--state", help="only jobs in this state (done, blocked, working)")
+    ap.add_argument(
+        "--no-prs",
+        action="store_true",
+        help="skip the gh lookup for branches that look unmerged (offline)",
+    )
+    args = ap.parse_args()
+
+    if not args.jobs_dir.is_dir():
+        print(f"no jobs directory at {args.jobs_dir}", file=sys.stderr)
+        return 1
+    jobs = [
+        j
+        for p in sorted(args.jobs_dir.iterdir())
+        if p.is_dir() and (j := load(p, not args.no_prs))
+    ]
+    if args.state:
+        jobs = [j for j in jobs if j.state == args.state]
+    rank = {"open": 0, "stranded": 1, "unmerged": 2, "check": 3, "complete": 4}
+    jobs.sort(key=lambda j: (rank[verdict(j)[0]], j.updated))
+
+    if args.json:
+        print(
+            json.dumps(
+                [{**asdict(j), "verdict": verdict(j)[0]} for j in jobs], indent=1
+            )
+        )
+    else:
+        render(jobs)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
