@@ -67,7 +67,8 @@ Status indicators:
   *ACTIVE*        Process in foreground terminal (likely in use)
   tmux            Process belongs to a tmux session (preserved by default)
   bg_job          Background-job daemon, pty host or session (preserved; the daemon owns its lifecycle)
-  idle>=${IDLE_THRESHOLD_HOURS}h  No output activity for ${IDLE_THRESHOLD_HOURS}h
+  agent_view      Agent view: live terminal, no session file (preserved unless --force)
+  idle            Under 1% CPU and no transcript activity for ${IDLE_THRESHOLD_HOURS}h; in the foreground, 1h old is enough
   recent          Output activity within last ${IDLE_THRESHOLD_HOURS}h
   orphaned        Parent is dead, zombie (Z), or reparented to init (ppid=1) - KILLED by default
   stopped         Process is stopped/traced (stat=T) - KILLED by default
@@ -108,6 +109,19 @@ is_bg_job_process() {
     local args
     args=$(ps -p "$1" -o args= 2>/dev/null) || return 1
     [[ "$args" =~ (^|[[:space:]])(--bg-[a-z-]+|daemon[[:space:]]+run)([[:space:]]|$) ]]
+}
+
+# The agent view (`claude agents`, or a bare `claude` when defaultToAgentsView is
+# set) waits for keys at ~0% CPU and holds no transcript, so the idle rules read it
+# as abandoned: the 17:00 run killed it on 17 days between 2026-10-17 and 2026-11-07.
+# Every interactive or background session registers ~/.claude/sessions/<pid>.json;
+# the view registers none, which is what tells the two apart. Callers check for a
+# live terminal first, so terminal-less helpers (`claude -p`, MCP servers) are not
+# spared by this.
+is_agent_view() {
+    local sessions_dir="$HOME/.claude/sessions"
+    [[ -d "$sessions_dir" ]] || return 1
+    [[ ! -e "$sessions_dir/$1.json" ]]
 }
 
 # Signal a target's direct children (e.g. orphaned MCP servers), sparing any
@@ -239,7 +253,9 @@ last_activity_age() {
             mtime=$(stat -c %Y "$path" 2>/dev/null) || continue
         fi
         [[ -n "$mtime" ]] && (( mtime > newest )) && newest="$mtime"
-    done < <(find "$project_dir" -maxdepth 1 -name "*.jsonl" -newer /dev/null 2>/dev/null)
+    # No -newer /dev/null: macOS bumps /dev/null's mtime on every write, so that
+    # filter matched no transcript and this fallback never fired.
+    done < <(find "$project_dir" -maxdepth 1 -name "*.jsonl" 2>/dev/null)
 
     (( newest > 0 )) && echo $(( now - newest ))
 }
@@ -359,6 +375,13 @@ get_process_status() {
             echo "GHOST"
             return
         fi
+
+        # Live terminal and no session file: the agent view, not an abandoned
+        # session. Orphaned and ghost views were caught above and are still reaped.
+        if is_agent_view "$pid"; then
+            echo "AGENT_VIEW"
+            return
+        fi
     fi
 
     # Get CPU usage for activity checks
@@ -469,7 +492,8 @@ status_label() {
         ACTIVE)        echo "*ACTIVE*" ;;
         TMUX)          echo "tmux" ;;
         BGJOB)         echo "bg_job" ;;
-        IDLE)          echo "idle>=${IDLE_THRESHOLD_HOURS}h" ;;
+        AGENT_VIEW)    echo "agent_view" ;;
+        IDLE)          echo "idle" ;;
         RECENT)        echo "recent" ;;
         ORPHANED)      echo "orphaned" ;;
         STOPPED)       echo "stopped" ;;
@@ -539,7 +563,7 @@ show_status() {
     echo "$LINE"
 
     # Counters as associative-style with simple variables
-    local count=0 active_count=0 tmux_count=0 bgjob_count=0 idle_count=0 recent_count=0
+    local count=0 active_count=0 tmux_count=0 bgjob_count=0 view_count=0 idle_count=0 recent_count=0
     local orphaned_count=0 stopped_count=0 stale_unknown_count=0 unknown_count=0 ghost_count=0
     local unknown_pids=()
 
@@ -560,6 +584,7 @@ show_status() {
             ACTIVE)        ((active_count++)) || true ;;
             TMUX)          ((tmux_count++)) || true ;;
             BGJOB)         ((bgjob_count++)) || true ;;
+            AGENT_VIEW)    ((view_count++)) || true ;;
             IDLE)          ((idle_count++)) || true ;;
             RECENT)        ((recent_count++)) || true ;;
             ORPHANED)      ((orphaned_count++)) || true ;;
@@ -574,7 +599,7 @@ show_status() {
     done < <(get_claude_ps_lines)
 
     echo "$LINE"
-    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, bg_job: $bgjob_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, stale_unknown: $stale_unknown_count, unknown: $unknown_count"
+    echo "Total: $count process(es) | active: $active_count, tmux: $tmux_count, bg_job: $bgjob_count, agent_view: $view_count, idle: $idle_count, recent: $recent_count, orphaned: $orphaned_count, stopped: $stopped_count, stale_unknown: $stale_unknown_count, unknown: $unknown_count"
 
     # Status-specific notes
     [[ $active_count -gt 0 ]] && echo -e "\n⚠️  Warning: $active_count process(es) appear to be in active use.\n   Use --dry-run to preview before killing."
@@ -627,6 +652,10 @@ show_status() {
     show_oom_diagnostics
 }
 
+# Sourced (tests/test_clear_claude_code_agent_view.sh): stop here, with the
+# functions defined and nothing killed.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+
 # Handle --status mode
 if [[ "$STATUS_ONLY" == "true" ]]; then
     show_status
@@ -657,10 +686,10 @@ fi
 PIDS_TO_KILL=()
 SKIPPED_CURRENT=false
 # Counters (simple vars for bash 3.2 compatibility)
-SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_BGJOB=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
+SKIPPED_ACTIVE=0 SKIPPED_TMUX=0 SKIPPED_BGJOB=0 SKIPPED_VIEW=0 SKIPPED_RECENT=0 SKIPPED_UNKNOWN=0
 KILL_REASONS=()
 KILLING_ORPHANED=0 KILLING_STOPPED=0 KILLING_IDLE=0 KILLING_STALE_UNKNOWN=0 KILLING_GHOST=0
-KILLING_ACTIVE=0 KILLING_TMUX=0 KILLING_RECENT=0 KILLING_UNKNOWN=0
+KILLING_ACTIVE=0 KILLING_TMUX=0 KILLING_VIEW=0 KILLING_RECENT=0 KILLING_UNKNOWN=0
 
 for pid in "${PIDS[@]}"; do
     # Skip current session unless --all
@@ -682,6 +711,7 @@ for pid in "${PIDS[@]}"; do
         case "$proc_status" in
             ACTIVE)   ((SKIPPED_ACTIVE++))   || true; continue ;;
             TMUX)     ((SKIPPED_TMUX++))     || true; continue ;;
+            AGENT_VIEW) ((SKIPPED_VIEW++))   || true; continue ;;
             RECENT)   ((SKIPPED_RECENT++))   || true; continue ;;
             UNKNOWN)  ((SKIPPED_UNKNOWN++))  || true; continue ;;
         esac
@@ -698,6 +728,7 @@ for pid in "${PIDS[@]}"; do
         GHOST)         ((KILLING_GHOST++))         || true ;;
         ACTIVE)        ((KILLING_ACTIVE++))        || true ;;
         TMUX)          ((KILLING_TMUX++))          || true ;;
+        AGENT_VIEW)    ((KILLING_VIEW++))          || true ;;
         RECENT)        ((KILLING_RECENT++))        || true ;;
         *)             ((KILLING_UNKNOWN++))       || true ;;
     esac
@@ -715,6 +746,7 @@ build_skip_msg() {
     [[ $SKIPPED_ACTIVE -gt 0 ]] && msg="$msg ($SKIPPED_ACTIVE active preserved, use --force to kill)"
     [[ $SKIPPED_TMUX -gt 0 ]] && msg="$msg ($SKIPPED_TMUX tmux preserved)"
     [[ $SKIPPED_BGJOB -gt 0 ]] && msg="$msg ($SKIPPED_BGJOB background-job processes preserved)"
+    [[ $SKIPPED_VIEW -gt 0 ]] && msg="$msg ($SKIPPED_VIEW agent views preserved)"
     [[ $SKIPPED_RECENT -gt 0 ]] && msg="$msg ($SKIPPED_RECENT recent output preserved)"
     [[ $SKIPPED_UNKNOWN -gt 0 ]] && msg="$msg ($SKIPPED_UNKNOWN background agents preserved)"
     echo "$msg"
@@ -731,6 +763,7 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Found $TOTAL Claude Code process(es)"
 [[ $SKIPPED_ACTIVE -gt 0 ]] && echo "  Preserving $SKIPPED_ACTIVE active process(es)"
 [[ $SKIPPED_TMUX -gt 0 ]] && echo "  Preserving $SKIPPED_TMUX tmux process(es)"
 [[ $SKIPPED_BGJOB -gt 0 ]] && echo "  Preserving $SKIPPED_BGJOB background-job process(es)"
+[[ $SKIPPED_VIEW -gt 0 ]] && echo "  Preserving $SKIPPED_VIEW agent view(s)"
 [[ $SKIPPED_RECENT -gt 0 ]] && echo "  Preserving $SKIPPED_RECENT process(es) with recent output"
 [[ $SKIPPED_UNKNOWN -gt 0 ]] && echo "  Preserving $SKIPPED_UNKNOWN background process(es) with living parent"
 
@@ -738,11 +771,12 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Found $TOTAL Claude Code process(es)"
 parts=()
 [[ $KILLING_ORPHANED -gt 0 ]] && parts+=("$KILLING_ORPHANED orphaned")
 [[ $KILLING_STOPPED -gt 0 ]] && parts+=("$KILLING_STOPPED stopped")
-[[ $KILLING_IDLE -gt 0 ]] && parts+=("$KILLING_IDLE idle>=${IDLE_THRESHOLD_HOURS}h")
+[[ $KILLING_IDLE -gt 0 ]] && parts+=("$KILLING_IDLE idle")
 [[ $KILLING_STALE_UNKNOWN -gt 0 ]] && parts+=("$KILLING_STALE_UNKNOWN stale_unknown")
 [[ $KILLING_GHOST -gt 0 ]] && parts+=("$KILLING_GHOST ghost_tty")
 [[ $KILLING_ACTIVE -gt 0 ]] && parts+=("$KILLING_ACTIVE active")
 [[ $KILLING_TMUX -gt 0 ]] && parts+=("$KILLING_TMUX tmux")
+[[ $KILLING_VIEW -gt 0 ]] && parts+=("$KILLING_VIEW agent_view")
 [[ $KILLING_RECENT -gt 0 ]] && parts+=("$KILLING_RECENT recent")
 [[ $KILLING_UNKNOWN -gt 0 ]] && parts+=("$KILLING_UNKNOWN unknown")
 
