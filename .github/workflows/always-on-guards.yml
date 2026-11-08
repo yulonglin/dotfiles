@@ -14,7 +14,7 @@ name: Always-on guards
 # and a public repo. A guard that stops running looks exactly like a guard that
 # passes, so these run on every push and every pull request, unfiltered.
 #
-# Deliberately NOT a suite runner for all 85 tests: several need zsh, a tailnet,
+# Deliberately NOT the full suite (python-tests.yml runs every pytest file): several need zsh, a tailnet,
 # a live router or a macOS host, and a workflow that is red for environmental
 # reasons teaches people to ignore it. This is the set that must never go quiet.
 #
