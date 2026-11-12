@@ -4,10 +4,10 @@
 #
 #   ~/.config/model-router/config.toml   the router's routes (generated, do not edit)
 #   ~/.config/model-router/managed-settings.json
-#                                        ANTHROPIC_BASE_URL and the first-party
-#                                        flag, and nothing else: they embed the
-#                                        token, so they cannot sit in a public
-#                                        file. Staged for the sudo line `apply`
+#                                        the gateway wiring keys (see `wiring`
+#                                        below) and nothing else; the base-url
+#                                        pair embeds the token, so it cannot sit
+#                                        in a public file. Staged for the sudo line `apply`
 #                                        prints, which installs it as a MANAGED
 #                                        drop-in (macOS: /Library/Application
 #                                        Support/ClaudeCode/managed-settings.d/
@@ -80,6 +80,17 @@ declared-context-window = 1000000
 # The Claude rows at the top pin exact versions, so a new Claude release needs
 # its id bumped here before it appears.
 picker-replace-built-in = true
+
+# How Claude Code reaches the router; the keys land in the managed drop-in.
+#   "proxy"    HTTPS_PROXY plus the router's proxyAuthHelper. Claude Code stays on
+#              api.anthropic.com, so Remote Control and the desktop app work.
+#              Needs the router CA trusted once (`bootstrap.sh trust-ca`), and
+#              while the router is down sessions and their tools have no network.
+#   "base-url" ANTHROPIC_BASE_URL with the ingress token. No Remote Control.
+#   "auto"     proxy on macOS, base-url elsewhere (proxy is untested on Linux).
+# Switched from base-url 2026-11-12 so Remote Control works while routed
+# (alignment-hive issue 94, fixed by the proxy wiring in model-router 0.1.42).
+wiring = "auto"
 
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
