@@ -82,6 +82,9 @@ s = json.load(open(sys.argv[1]))
 ms = s["modelSettings"]
 assert ms["kimi"] == {"autoCompactWindow": 250000}, ms.get("kimi")
 assert ms["astra"] == {"autoCompactWindow": 258400}, ms.get("astra")
+# The router's -fast twins of GPT routes get the base route's window, not the 1M ceiling.
+assert ms["astra-fast"] == {"autoCompactWindow": 258400}, ms.get("astra-fast")
+assert "kimi-fast" not in ms, "a non-GPT route got a -fast twin window"
 assert all(100000 <= v["autoCompactWindow"] <= 1000000 for v in ms.values()), ms
 assert not any(k.startswith("claude-") for k in ms), "passthrough Claude rows got a routed window"
 assert s["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "1000000", s["env"]

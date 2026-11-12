@@ -995,7 +995,13 @@
     "gpt-6-astra": {
       "autoCompactWindow": 258400
     },
+    "gpt-6-astra-fast": {
+      "autoCompactWindow": 258400
+    },
     "astra": {
+      "autoCompactWindow": 258400
+    },
+    "astra-fast": {
       "autoCompactWindow": 258400
     },
     "gemini-4-argon": {
@@ -1007,31 +1013,61 @@
     "gpt-6.1-sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-6.1-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "sol": {
+      "autoCompactWindow": 258400
+    },
+    "sol-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-6.1-terra": {
       "autoCompactWindow": 258400
     },
+    "gpt-6.1-terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "terra": {
+      "autoCompactWindow": 258400
+    },
+    "terra-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-6-sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-6-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "sol6": {
+      "autoCompactWindow": 258400
+    },
+    "sol6-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-6-luna": {
       "autoCompactWindow": 258400
     },
+    "gpt-6-luna-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-5.6-sol-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-terra": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-5.6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "kimi-k3.1-pro": {

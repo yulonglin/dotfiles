@@ -271,9 +271,23 @@ def compact_windows(src: dict) -> dict:
     real window: Claude Code keys the setting by the ID the session runs on and
     uses min(declared window, setting). Entries for non-claude- IDs are this
     script's to replace wholesale; claude-* entries (written by /autocompact on
-    a Claude model) are kept. The setting's range is 100000-1000000."""
-    return {rid: {"autoCompactWindow": max(100_000, min(m["context-window"], 1_000_000))}
-            for m in routed(enabled(src)) for rid in ids(m)}
+    a Claude model) are kept. The setting's range is 100000-1000000.
+
+    The router also serves a <routing-id>-fast twin of each GPT route whose model
+    has a Codex priority tier (gpt-6-astra, gpt-6.1-sol, ... and their aliases).
+    The twins are not in the source, so without their own entry Claude Code
+    compacts them at the declared 1000000 ceiling, far past their real window,
+    and `model-router doctor` fails context-windows. Which models have the tier
+    is the router's call, so every codex ID gets a twin entry; an entry for a
+    twin the router does not serve is never read."""
+    windows = {}
+    for m in routed(enabled(src)):
+        window = {"autoCompactWindow": max(100_000, min(m["context-window"], 1_000_000))}
+        for rid in ids(m):
+            windows[rid] = window
+            if m["provider"] == "codex":
+                windows[f"{rid}-fast"] = dict(window)
+    return windows
 
 
 def picker_row(m: dict) -> dict:
