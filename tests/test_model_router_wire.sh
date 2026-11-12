@@ -26,6 +26,7 @@ cat >"$WORK/bootstrap.sh" <<'EOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   doctor) echo '{"base_url":"http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef","version":"test","checks":[{"name":"router","ok":true}]}' ;;
+  settings) if [ "${CA_UNTRUSTED:-}" = 1 ]; then echo '{"canApply":false,"needed":true,"untrusted":true,"reason":"untrusted"}'; else echo '{"canApply":true,"needed":true,"wiring":"none"}'; fi ;;
   *) exit 0 ;;
 esac
 EOF
@@ -94,6 +95,9 @@ assert s["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "1000000", s["env"]
 router = open(sys.argv[2]).read()
 assert "context-window-scaling" not in router and "declared-context-window" not in router
 PY
+if ! grep -q '^\[auto-mode-classifier\]' "$MODEL_ROUTER_CONFIG" || ! grep -q '^enabled = false' "$MODEL_ROUTER_CONFIG"; then
+  fail "router config lacks the [auto-mode-classifier] answer from the source"
+fi
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"
@@ -212,6 +216,34 @@ json.dump(d, open(p, "w"))
 PY
 st="$("$WIRE" status || true)"  # exits 1 here: the base-url drop-in is drift under wiring = proxy
 printf '%s' "$st" | grep -q 'base URL .*no Remote Control' || fail "status does not name the base-url drop-in: $st"
+
+# Readiness gate: a working base-url Mac is never swapped to a proxy that cannot
+# work, even by the unattended `apply --install` deploy.sh runs. Each blocker
+# keeps the installed base-url drop-in byte for byte and says why.
+cp "$MODEL_ROUTER_MANAGED" "$WORK/managed.base-url.json"
+cp "$CLAUDE_SETTINGS" "$WORK/settings.pre-proxy.json"
+: >"$SUDO_LOG"
+out="$(CA_UNTRUSTED=1 "$WIRE" apply --install --no-restart </dev/null)"
+printf '%s' "$out" | grep -q 'NOT proxy: .*trust-ca' || fail "an untrusted CA did not hold the proxy back: $out"
+cmp -s "$WORK/managed.base-url.json" "$MODEL_ROUTER_MANAGED" || fail "an untrusted CA still replaced the base-url drop-in"
+has_key "$CLAUDE_SETTINGS" HTTPS_PROXY && fail "an untrusted CA still staged HTTPS_PROXY in the user file"
+mv "$MODEL_ROUTER_LAUNCHER" "$WORK/launcher.away"
+out="$("$WIRE" apply --install --no-restart </dev/null)"
+printf '%s' "$out" | grep -q 'NOT proxy: proxy helper .* is missing' || fail "a missing helper did not hold the proxy back: $out"
+cmp -s "$WORK/managed.base-url.json" "$MODEL_ROUTER_MANAGED" || fail "a missing helper still replaced the base-url drop-in"
+mv "$WORK/launcher.away" "$MODEL_ROUTER_LAUNCHER"
+# A proxy the user set themselves survives: no staging over it, no swap.
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["env"]["HTTPS_PROXY"] = "http://corp.example:3128"; json.dump(d, open(p, "w"))
+PY
+out="$("$WIRE" apply --install --no-restart </dev/null)"
+printf '%s' "$out" | grep -q 'NOT proxy: .*sets its own HTTPS_PROXY' || fail "a user HTTPS_PROXY did not hold the proxy back: $out"
+python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["env"]["HTTPS_PROXY"]=="http://corp.example:3128" else 1)' "$CLAUDE_SETTINGS" \
+  || fail "apply overwrote the user's own HTTPS_PROXY"
+cmp -s "$WORK/managed.base-url.json" "$MODEL_ROUTER_MANAGED" || fail "a user HTTPS_PROXY still let the drop-in swap"
+cp "$WORK/settings.pre-proxy.json" "$CLAUDE_SETTINGS"
+unset MODEL_ROUTER_SUDO
 out="$("$WIRE" apply --no-restart)"
 printf '%s' "$out" | grep -q 'wiring:  proxy' || fail "apply did not report the proxy wiring: $out"
 python3 - "$MODEL_ROUTER_STAGED" "$MODEL_ROUTER_LAUNCHER" <<'PY' || fail "staged proxy drop-in has the wrong keys"

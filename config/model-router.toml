@@ -92,6 +92,13 @@ picker-replace-built-in = true
 # (alignment-hive issue 94, fixed by the proxy wiring in model-router 0.1.42).
 wiring = "auto"
 
+# The router's experimental auto-mode classifier: true has the router check GPT
+# replies' tool calls on GPT (Luna, then Sol) instead of Claude Code's Sonnet
+# check. Either way Anthropic's native server-side classifier keeps checking
+# Claude's own tool calls. Rendered as [auto-mode-classifier] so setup stops
+# asking; false = Claude Code's own behaviour (decided 2026-11-12).
+auto-mode-classifier = false
+
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
 

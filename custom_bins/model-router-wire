@@ -197,6 +197,11 @@ def render_router_config(src: dict) -> str:
         "# repo; edits here are overwritten on the next `model-router-wire apply`.",
         "",
     ]
+    amc = src.get("auto-mode-classifier")
+    if amc is not None:
+        if not isinstance(amc, bool):
+            sys.exit(f"{SOURCE}: auto-mode-classifier must be true or false")
+        out += ["[auto-mode-classifier]", f"enabled = {'true' if amc else 'false'}", ""]
     for m in enabled(src):
         if m["provider"] != "codex":
             continue
@@ -265,11 +270,55 @@ def wiring_of(src: dict) -> str:
     return w
 
 
-def render_managed(src: dict, base_url: str) -> dict:
+def managed_is_proxy() -> bool:
+    try:
+        return is_router_key("HTTPS_PROXY", json.loads(MANAGED.read_text()).get("env", {}).get("HTTPS_PROXY"))
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return False
+
+
+def proxy_blocker(settings: dict) -> str | None:
+    """Why the proxy wiring cannot go live here yet, or None when it can. A Mac
+    already on the proxy drop-in stays on it. Otherwise: a proxy the user set in
+    their own settings would be overwritten or would win over the router's, the
+    helper must be executable, and the plugin's own readiness report must say it
+    can apply (CA trusted, no NO_PROXY / NODE_EXTRA_CA_CERTS conflict). `apply
+    --install` runs unattended from deploy.sh, so this is what keeps a deploy from
+    swapping working base-URL routing for TLS failures."""
+    if managed_is_proxy():
+        return None
+    env = settings.get("env", {})
+    for k in ("HTTPS_PROXY", "https_proxy"):
+        if env.get(k) and not is_router_key("HTTPS_PROXY", env[k]):
+            return f"{SETTINGS} sets its own {k}; the router's proxy would replace it"
+    if not os.access(LAUNCHER, os.X_OK):
+        return f"proxy helper {LAUNCHER} is missing; run /model-router:setup"
+    out = subprocess.run([bootstrap(), "settings", "proxy", "--project-dir", str(Path.home())],
+                         capture_output=True, text=True, check=False)
+    try:
+        report = json.loads(out.stdout.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError):
+        return "the plugin's `settings proxy` readiness report did not return JSON"
+    if report.get("untrusted"):
+        return "the router's CA is not trusted yet: run `bootstrap.sh trust-ca` (macOS asks for the password)"
+    if report.get("canApply") is False and report.get("needed", True):
+        return report.get("reason") or "the plugin's readiness report says the proxy cannot apply"
+    return None
+
+
+def effective_wiring(src: dict, settings: dict) -> tuple[str, str | None]:
+    """The wiring to render, and why the proxy was held back (None if it was not)."""
+    if wiring_of(src) == "base-url":
+        return "base-url", None
+    why = proxy_blocker(settings)
+    return ("base-url", why) if why else ("proxy", None)
+
+
+def render_managed(wiring: str, base_url: str) -> dict:
     """The managed drop-in: the wiring keys, and nothing else. The proxy wiring
     carries no token (the helper prints the credential), only the router's
     loopback origin, taken from doctor's base URL."""
-    if wiring_of(src) == "base-url":
+    if wiring == "base-url":
         return {"env": {"ANTHROPIC_BASE_URL": base_url, "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1"}}
     u = urlsplit(base_url)
     return {
@@ -474,7 +523,7 @@ def restart_and_report() -> int:
 
 # ---- commands ------------------------------------------------------------
 
-def known_base_url(src: dict, settings: dict) -> str | None:
+def known_base_url(wiring: str, settings: dict) -> str | None:
     """The router URL --check renders from without calling doctor: the staged
     file (what the last apply rendered from doctor) or, before any apply, the
     user file. Never the managed drop-in itself, or a tampered one would be
@@ -486,7 +535,7 @@ def known_base_url(src: dict, settings: dict) -> str | None:
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
     envs.append(settings.get("env", {}))
-    keys = ("ANTHROPIC_BASE_URL",) if wiring_of(src) == "base-url" else ("ANTHROPIC_BASE_URL", "HTTPS_PROXY")
+    keys = ("ANTHROPIC_BASE_URL",) if wiring == "base-url" else ("ANTHROPIC_BASE_URL", "HTTPS_PROXY")
     for env in envs:
         for k in keys:
             if env.get(k) and is_router_key(k, env[k]):
@@ -499,10 +548,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
         sys.exit("--install writes the managed drop-in, so it cannot run with --check")
     src = load_source()
     settings = load_settings()
-    known = known_base_url(src, settings)
+    wiring, held_back = effective_wiring(src, settings)
+    known = known_base_url(wiring, settings)
     base_url = known if (args.check and known) else base_url_from(doctor())
     want_router = render_router_config(src)
-    want_managed = render_managed(src, base_url)
+    want_managed = render_managed(wiring, base_url)
     want_managed_text = dump_settings(want_managed)
     want_agents = {agent_path(m): render_agent(m) for m in enabled(src) if effort_of(m) is not None}
     stale_agents = [p for p in generated_agent_files() if p not in want_agents]
@@ -525,6 +575,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
     drift += [f"{p} (stale generated agent)" for p in stale_agents]
 
     if args.check:
+        if held_back:
+            print(f"note: wiring = {src.get('wiring', 'auto')} wants the proxy, held back: {held_back}")
         if drift:
             print("drift from config/model-router.toml:")
             for d in drift:
@@ -556,8 +608,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
     print(f"routes:  {', '.join(rid for m in routed(enabled(src)) for rid in ids(m))}")
     print(f"picker:  {', '.join(rows) or 'none'}")
     print(f"agents:  {', '.join(p.name for p in want_agents) or 'none'}" + (f"; removed {', '.join(p.name for p in stale_agents)}" if stale_agents else ""))
-    if wiring_of(src) == "proxy":
-        print(f"wiring:  proxy (helper {LAUNCHER}{'' if LAUNCHER.exists() else ' NOT FOUND: run /model-router:setup first'})")
+    if wiring == "proxy":
+        print(f"wiring:  proxy (helper {LAUNCHER})")
+    elif held_back:
+        print(f"wiring:  base-url, NOT proxy: {held_back}. Fix that and rerun apply to move to the proxy (Remote Control).")
     else:
         print("wiring:  base-url (no Remote Control)")
     # Two phases, so no session is ever without the gateway: while the root-owned
