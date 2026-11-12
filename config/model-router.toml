@@ -149,13 +149,29 @@ agent = "high"
 # Gemini 3.7 Flash once returned "400 Provider returned error" on a full Claude
 # Code request (2026-09-22), not reproduced on 3.7 or 3.8 Flash on 2026-10-12.
 # If a 400 recurs on any Gemini, keep the upstream error.metadata.raw.
+#
+# `gemini` moved here from gemini-4-argon on 2026-11-12 (Carbon listed on
+# OpenRouter 2026-11-10 at Argon's $2/$10 per M). Epoch ECI on 2026-11-12:
+# Carbon 169.76 (CI 166.48-173.50), Argon 166.48 (CI 163.77-169.46); the
+# intervals overlap. One tool-calling request through OpenRouter returned a
+# well-formed call on both; a full Claude Code turn through the router is
+# what `tests/test_model_router_gateway.sh` checks after apply.
+[[models]]
+id = "gemini-4-carbon"
+aliases = ["gemini"]
+name = "Gemini 4 Carbon"
+provider = "openrouter"
+slug = "google/gemini-4-carbon"
+context-window = 1048576
+
 [[models]]
 id = "gemini-4-argon"
-aliases = ["gemini"]
 name = "Gemini 4 Argon"
 provider = "openrouter"
 slug = "google/gemini-4-argon"
 context-window = 1048576
+picker = false           # `gemini` is now Carbon; the route stays for anything naming gemini-4-argon
+agent = false
 
 # `sol` moved here from gpt-5.6-sol on 2026-10-01. Router 0.1.23 serves
 # gpt-6.1-sol through the account (released 2026-09-29, listed by the managed
