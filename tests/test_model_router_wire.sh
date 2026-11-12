@@ -26,6 +26,7 @@ cat >"$WORK/bootstrap.sh" <<'EOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   doctor) echo '{"base_url":"http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef","version":"test","checks":[{"name":"router","ok":true}]}' ;;
+  settings) if [ "${CA_UNTRUSTED:-}" = 1 ]; then echo '{"canApply":false,"needed":true,"untrusted":true,"reason":"untrusted"}'; else echo '{"canApply":true,"needed":true,"wiring":"none"}'; fi ;;
   *) exit 0 ;;
 esac
 EOF
@@ -36,6 +37,12 @@ cat >"$WORK/settings.json" <<'EOF'
 {"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:8787/t/0123456789abcdef0123456789abcdef","_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL":"1","ENABLE_TOOL_SEARCH":"1","TMPDIR":"/tmp/claude"},"modelPicker":{"options":[{"model":"old","label":"Old"}]},"statusLine":{},"hooks":{},"permissions":{}}
 EOF
 
+# The two-phase sequence below is pinned on the base-url wiring (the one that
+# carries the token); the proxy wiring has its own section at the end. The real
+# source says `wiring = "auto"`, which is proxy on macOS, so pin a copy.
+sed 's/^wiring = .*/wiring = "base-url"/' "$REPO_ROOT/config/model-router.toml" >"$WORK/source.toml"
+grep -q '^wiring = "base-url"' "$WORK/source.toml" || fail "could not pin wiring in the source copy"
+export MODEL_ROUTER_SOURCE="$WORK/source.toml"
 export MODEL_ROUTER_BOOTSTRAP="$WORK/bootstrap.sh"
 export CLAUDE_SETTINGS="$WORK/settings.json"
 export MODEL_ROUTER_CONFIG="$WORK/config.toml"
@@ -91,6 +98,9 @@ assert s["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "1000000", s["env"]
 router = open(sys.argv[2]).read()
 assert "context-window-scaling" not in router and "declared-context-window" not in router
 PY
+if ! grep -q '^\[auto-mode-classifier\]' "$MODEL_ROUTER_CONFIG" || ! grep -q '^enabled = false' "$MODEL_ROUTER_CONFIG"; then
+  fail "router config lacks the [auto-mode-classifier] answer from the source"
+fi
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"
@@ -194,4 +204,81 @@ has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "--install left ANTHROPIC_
 "$WIRE" apply --install --no-restart </dev/null >/dev/null
 [ -s "$SUDO_LOG" ] && fail "--install ran sudo with the drop-in already current"
 
-echo "PASS: model-router-wire stages the two gateway keys, keeps the rows and the rest in the user file, waits for the sudo step, then strips only those two, and --install does both steps in one pass"
+# --- proxy wiring: migrate a base-url drop-in to HTTPS_PROXY + proxyAuthHelper ---
+# Starting point is this Mac's real one: a base-url drop-in installed, a clean
+# user file, plus a proxy the user set themselves that must survive untouched.
+sed 's/^wiring = .*/wiring = "proxy"/' "$REPO_ROOT/config/model-router.toml" >"$WORK/source.toml"
+export MODEL_ROUTER_LAUNCHER="$WORK/launcher/bootstrap.sh"
+mkdir -p "$WORK/launcher" && cp "$WORK/bootstrap.sh" "$MODEL_ROUTER_LAUNCHER"
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for k in ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL"): d["env"].pop(k, None)
+d["env"]["HTTP_PROXY"] = "http://corp.example:3128"
+json.dump(d, open(p, "w"))
+PY
+st="$("$WIRE" status || true)"  # exits 1 here: the base-url drop-in is drift under wiring = proxy
+printf '%s' "$st" | grep -q 'base URL .*no Remote Control' || fail "status does not name the base-url drop-in: $st"
+
+# Readiness gate: a working base-url Mac is never swapped to a proxy that cannot
+# work, even by the unattended `apply --install` deploy.sh runs. Each blocker
+# keeps the installed base-url drop-in byte for byte and says why.
+cp "$MODEL_ROUTER_MANAGED" "$WORK/managed.base-url.json"
+cp "$CLAUDE_SETTINGS" "$WORK/settings.pre-proxy.json"
+: >"$SUDO_LOG"
+out="$(CA_UNTRUSTED=1 "$WIRE" apply --install --no-restart </dev/null)"
+printf '%s' "$out" | grep -q 'NOT proxy: .*trust-ca' || fail "an untrusted CA did not hold the proxy back: $out"
+cmp -s "$WORK/managed.base-url.json" "$MODEL_ROUTER_MANAGED" || fail "an untrusted CA still replaced the base-url drop-in"
+has_key "$CLAUDE_SETTINGS" HTTPS_PROXY && fail "an untrusted CA still staged HTTPS_PROXY in the user file"
+mv "$MODEL_ROUTER_LAUNCHER" "$WORK/launcher.away"
+out="$("$WIRE" apply --install --no-restart </dev/null)"
+printf '%s' "$out" | grep -q 'NOT proxy: proxy helper .* is missing' || fail "a missing helper did not hold the proxy back: $out"
+cmp -s "$WORK/managed.base-url.json" "$MODEL_ROUTER_MANAGED" || fail "a missing helper still replaced the base-url drop-in"
+mv "$WORK/launcher.away" "$MODEL_ROUTER_LAUNCHER"
+# A proxy the user set themselves survives: no staging over it, no swap.
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["env"]["HTTPS_PROXY"] = "http://corp.example:3128"; json.dump(d, open(p, "w"))
+PY
+out="$("$WIRE" apply --install --no-restart </dev/null)"
+printf '%s' "$out" | grep -q 'NOT proxy: .*sets its own HTTPS_PROXY' || fail "a user HTTPS_PROXY did not hold the proxy back: $out"
+python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["env"]["HTTPS_PROXY"]=="http://corp.example:3128" else 1)' "$CLAUDE_SETTINGS" \
+  || fail "apply overwrote the user's own HTTPS_PROXY"
+cmp -s "$WORK/managed.base-url.json" "$MODEL_ROUTER_MANAGED" || fail "a user HTTPS_PROXY still let the drop-in swap"
+cp "$WORK/settings.pre-proxy.json" "$CLAUDE_SETTINGS"
+unset MODEL_ROUTER_SUDO
+out="$("$WIRE" apply --no-restart)"
+printf '%s' "$out" | grep -q 'wiring:  proxy' || fail "apply did not report the proxy wiring: $out"
+python3 - "$MODEL_ROUTER_STAGED" "$MODEL_ROUTER_LAUNCHER" <<'PY' || fail "staged proxy drop-in has the wrong keys"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["env"] == {"HTTPS_PROXY": "http://127.0.0.1:8787", "CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER": "1", "CLAUDE_CODE_GATEWAY_HINT_HEADERS": "1"}, d
+assert d["proxyAuthHelper"] == f"{sys.argv[2]} proxy-authorization", d
+assert set(d) == {"env", "proxyAuthHelper"}, d
+assert "0123456789abcdef" not in json.dumps(d), "the proxy drop-in carries the ingress token"
+PY
+# Phase 1: the old drop-in still differs, so the user file carries the proxy keys meanwhile.
+has_key "$CLAUDE_SETTINGS" HTTPS_PROXY || fail "proxy phase 1 did not put HTTPS_PROXY in the user file"
+has_top "$CLAUDE_SETTINGS" proxyAuthHelper || fail "proxy phase 1 did not put proxyAuthHelper in the user file"
+has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "proxy phase 1 wrote a base URL into the user file"
+if "$WIRE" apply --check >/dev/null 2>&1; then fail "--check passed with the base-url drop-in still installed"; fi
+# Phase 2: install, then the user file sheds every router key and keeps the user's own proxy.
+cp "$MODEL_ROUTER_STAGED" "$MODEL_ROUTER_MANAGED"
+out="$("$WIRE" apply --no-restart)"
+printf '%s' "$out" | grep -q 'committable again' || fail "proxy phase 2 did not report the strip: $out"
+for k in HTTPS_PROXY CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER CLAUDE_CODE_GATEWAY_HINT_HEADERS ANTHROPIC_BASE_URL; do
+  has_key "$CLAUDE_SETTINGS" "$k" && fail "proxy phase 2 left $k in the user file"
+done
+has_top "$CLAUDE_SETTINGS" proxyAuthHelper && fail "proxy phase 2 left proxyAuthHelper in the user file"
+has_key "$CLAUDE_SETTINGS" HTTP_PROXY || fail "proxy phase 2 removed the user's own HTTP_PROXY"
+"$WIRE" apply --check >/dev/null 2>&1 || fail "--check fails after the proxy migration: $("$WIRE" apply --check 2>&1)"
+"$WIRE" status | grep -q 'HTTPS proxy http://127.0.0.1:8787 (Remote Control works) (from managed drop-in)' || fail "status does not report the proxy drop-in: $("$WIRE" status)"
+# A user-set (non-loopback) HTTPS_PROXY is never stripped or counted as the gateway.
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["env"]["HTTPS_PROXY"] = "http://corp.example:3128"; json.dump(d, open(p, "w"))
+PY
+"$WIRE" off >/dev/null
+has_key "$CLAUDE_SETTINGS" HTTPS_PROXY || fail "off stripped a user-set, non-loopback HTTPS_PROXY"
+
+echo "PASS: model-router-wire stages the gateway keys (base-url or proxy), keeps the rows and the rest in the user file, waits for the sudo step, then strips only the router's keys, and --install does both steps in one pass"
