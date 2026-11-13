@@ -143,8 +143,14 @@ def test_unknown_group_is_refused(tmp_path):
 
 
 def test_screenzen_allow_list_is_a_superset_of_every_mode(cfg):
-    # The wildcard rule is cut to a prefix that allows more; a cut with no domain is dropped.
-    assert ct.sz_allow_sites(cfg) == ["localhost", "arxiv.org", "github.com/"]
+    # The wildcard rule is cut to a prefix that allows more; a cut leaving only a scheme is
+    # kept, so local files open without a pause.
+    assert ct.sz_allow_sites(cfg) == ["file://", "localhost", "arxiv.org", "github.com/"]
+
+
+def test_screenzen_keeps_a_scheme_cut_and_drops_an_empty_one():
+    assert ct.sz_allow_pattern("file://*.*") == "file://"
+    assert ct.sz_allow_pattern("*adhd*") is None
 
 
 def test_conflict_when_a_mode_allows_what_an_always_on_block_bans(cfg):

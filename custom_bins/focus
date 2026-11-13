@@ -1236,12 +1236,14 @@ def sz_groups(raw: bytes) -> list[dict]:
 
 def sz_allow_pattern(site: str) -> str | None:
     """ScreenZen matches by substring. Cut a wildcard pattern at its first '*', so it allows
-    at least what Cold Turkey allows ('github.com/*/*/pull/*' -> 'github.com/'), and drop
-    a cut that leaves no domain ('file://*.*' -> 'file://')."""
+    at least what Cold Turkey allows ('github.com/*/*/pull/*' -> 'github.com/'). A cut
+    that leaves only a scheme is kept, so local files open without a pause
+    ('file://*.*' -> 'file://'); one that leaves no domain or scheme is dropped
+    ('*adhd*' -> '')."""
     if "*" not in site:
         return site
     head = site.split("*", 1)[0]
-    return head if "." in head else None
+    return head if "." in head or head.endswith("://") else None
 
 
 def sz_shared_sites(cfg: dict) -> set[str]:
