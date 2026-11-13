@@ -12,7 +12,6 @@ brew "mas"
 
 # ── CLI formulae ──
 brew "googleworkspace-cli"
-brew "python"
 brew "switchaudio-osx"
 
 # ── Casks (official Homebrew casks) ──
