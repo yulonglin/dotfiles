@@ -942,6 +942,12 @@ DRIFT_TEXT = {
         "The note allows {items}, but Cold Turkey does not.",
         "Run 'focus sync', which adds {them}.",
     ),
+    # An always-on block or timer: sync adds only what tightens it, never an exception.
+    "add_exc_fixed": (
+        "The note allows {items}, but Cold Turkey does not.",
+        "In Cold Turkey, add {them} to this block's allowed sites once its lock allows; "
+        "focus sync never loosens an always-on block.",
+    ),
     "extra_exc": (
         "Cold Turkey allows {items}, but the note does not.",
         "In Cold Turkey, remove {them} from this block's allowed sites (its exceptions).",
@@ -1046,7 +1052,7 @@ def cmd_status(cfg: dict) -> None:
         issues = {
             "add_web": [w for w in want_web if w not in block["web"]],
             "extra_web": [w for w in block["web"] if w not in want_web],
-            "add_exc": [e for e in want_exc if e not in block["exceptions"]],
+            "add_exc_fixed": [e for e in want_exc if e not in block["exceptions"]],
             "extra_exc": [e for e in block["exceptions"] if e not in want_exc],
             "add_apps": [a for a in want_apps if a not in block["apps"]],
             "extra_apps": [a for a in block["apps"] if a not in want_apps],

@@ -395,6 +395,28 @@ def test_sync_adds_a_timers_new_site_and_status_says_sync_can(
     assert "timer: deep: added arxiv.org" in capsys.readouterr().out
 
 
+def test_status_says_an_always_on_blocks_new_exception_is_a_hand_edit(
+    cfg, monkeypatch, capsys
+):
+    # sync never adds an exception to an always-on block, so status must not promise it.
+    avoid = {"enabled": "true", "web": ["x.com", "*casino*"], "exceptions": [], "apps": []}
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+        "avoid": avoid,
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+
+    ct.cmd_status(cfg)
+    out = capsys.readouterr().out
+    assert "avoid: differs" in out
+    assert "which adds" not in out
+    assert "In Cold Turkey, add them to this block's allowed sites" in out
+
+    ct.cmd_sync(cfg)
+    assert avoid["exceptions"] == []
+
+
 def test_sync_reports_every_addition_that_fails(cfg, monkeypatch):
     research, writing = (
         mode_block(cfg, "research", "false"),
