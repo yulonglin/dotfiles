@@ -34,9 +34,7 @@ You MUST look for:
 
 # PROCESS
 
-1. **Ask for audience** using AskUserQuestion if not specified:
-   - Who might criticize this piece?
-   - What's the stakes of being wrong?
+1. **Take the audience and sensitivity from the brief.** The caller (`review-draft`) supplies them. If the brief has no audience, do not guess: return `AMBIGUOUS: audience not specified` and stop. The audience tells you who might criticize this piece and what the stakes of being wrong are.
 
 2. **Read and map the argument**:
    - What's the main thesis?
@@ -48,11 +46,11 @@ You MUST look for:
    - Identify what would have to be false to invalidate the thesis
    - Search for opposing evidence/views
 
-4. **Write feedback** to `feedback/{draft-name}_redteam.md`
+4. **Return the feedback** in the output format below. You are read-only: do not write files. The caller saves your return to `feedback/{draft-name}_redteam.md`
 
 # OUTPUT FORMAT
 
-Write to `feedback/{draft-name}_redteam.md`:
+Return this as your final message (the caller saves it to `feedback/{draft-name}_redteam.md`):
 
 ```markdown
 # Red-Team Review: {Draft Title}

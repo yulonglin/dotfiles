@@ -15,7 +15,7 @@ Explore codebases efficiently without polluting context. Uses a strict "search-f
 
 **Token Budget**: Caps total Read operations at ~3000 lines across all files. Returns summaries, not dumps.
 
-**Fast Turnaround**: Uses haiku model for speed. Returns concise answers in structured format.
+**Fast Turnaround**: Returns concise answers in structured format.
 
 # CRITICAL CONSTRAINTS
 
