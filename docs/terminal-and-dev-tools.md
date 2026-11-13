@@ -117,6 +117,12 @@ Quota history is stored at `~/.claude/usage-data/quota-history.jsonl` without ac
 
 **The Codex quota line can only go stale, never self-heal.** It calls `account/rateLimits/read` on `codex app-server`, and that call reads the token without refreshing it, while any real request does refresh it — so once `~/.codex/auth.json` lapses the quota read can never recover on its own. `codex login status` still reports a logged-in ChatGPT account throughout, so it is not a usable check; the tell is `fetched_at` days older than `attempted_at` in the cache. One real `codex` request repairs it, and `custom_bins/codex-token-refresh` runs daily for that reason. This is **not** the credential model-router uses: the router keeps its own copy under `~/.local/state/model-router/codex-auth/` and refreshes it itself, so every GPT route can serve normally while this line reads days old.
 
+## Global memory toggle
+
+[`claude-memory`](../custom_bins/claude-memory) switches the global memory tier, `~/.claude/CLAUDE.md` plus `~/.claude/rules/*.md`, for sessions launched through the `claude()` wrapper: `full` (default), `minimal` (no rules) or `none` (no rules, no global CLAUDE.md, no auto memory). Bare `claude-memory` prints the mode and a per-file table of lines, words, chars and estimated tokens, including the current repo's project memory. `CLAUDE_MEMORY=none claude ...` overrides for one launch, and `deploy.sh --claude-memory=MODE` sets it at deploy time. The mode lives in `~/.config/claude-memory/mode`, not in `claude/settings.json`, so flipping it leaves no diff; the wrapper passes a generated `claudeMdExcludes` file as `--settings`. Two limits follow from that. The IDE extension and the desktop app never see it. A launch that brings its own `--settings` keeps the full tier, because Claude Code honours only the last `--settings`. Project memory is never touched; `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` drops every CLAUDE.md.
+
+Measured 2026-10-20 on Claude Code 2.1.304 by diffing `claude -p --output-format json` input usage between modes: the rules cost 9,512 tokens and the global CLAUDE.md 1,651, so `none` saves about 11.2k tokens a session. The estimator in `claude-memory` uses bytes / 2.7 to match; bytes / 4 undercounts this tokenizer by a third.
+
 ## Ignore Pattern Management
 
 `claude-tools ignore` manages per-repo `.gitignore` and `.ignore` patterns interactively.
