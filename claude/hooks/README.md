@@ -68,6 +68,19 @@ Hooks for automating task and agent management workflows.
 
 **Tests:** `test_simplify_reuse.sh`.
 
+### nudge_silent_turn.sh
+
+**Purpose:** Stop a turn from ending with no user-visible text after a human message. Thinking, tool calls and collapsed agent results are invisible to the user, so a silent turn reads as a crash (incident 2026-08-21).
+
+**Behavior:**
+- `Stop`, behind `nudges.silent-turn` in `features.conf` (explicitly on). The first stop of a silent turn returns `{"decision":"block"}` with a reason telling the model to answer, give pending status, or restate an agent result.
+- One-shot per turn: it returns at once when `stop_hook_active` is set, and a guard file keyed on (session, user message uuid, text) makes the retry pass. If the guard cannot be written, it does not block.
+- The turn starts at the last user entry that is neither a `tool_result` nor `isMeta` (skill bodies and cross-session messages land mid-turn as `isMeta`).
+- Exempt: `AskUserQuestion`, plan mode and `SendMessage` turns, slash-command, `!` shell-mode and interrupt carriers, reminder-only messages, turns with no assistant activity. Fails open on any parse error.
+- Disjoint from `nudge_bg_prose_question.sh`, which needs closing text to inspect.
+
+**Tests:** `test_nudge_silent_turn.sh` (one-shot guarantee, `stop_hook_active`, `isMeta` boundary, uuid key, exemptions, fail-open).
+
 ### fix_hook_permissions.sh / patch_ralph_loop_stop_hook.py
 
 **Purpose:** Repair ignored plugin-cache problems before a session uses them.

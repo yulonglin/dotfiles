@@ -117,6 +117,7 @@ external = {
     "nudge_remember.sh",
     "simplify_nudge.sh",
     "nudge_vault_lint.sh",
+    "nudge_silent_turn.sh",
     "check_git_root.sh",
     "check_venv.sh",
     "anthropic_keycheck.py",
