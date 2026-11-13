@@ -25,6 +25,12 @@ One source, three outputs, one command:
       Claude row goes with the rest, though its ID still works via /model)
   model-router-wire status
       what is live, and whether the rendered files drift from the source
+  model-router-wire picker [--on ID ...] [--off ID ...] [--built-in on|off] [--no-apply]
+      choose which /model rows show: with no flags, a checkbox menu
+      (claude-tools select) over every enabled model plus Claude Code's
+      built-in lineup; the flags do the same without a terminal. Writes
+      `picker = false` lines and picker-replace-built-in in the source, then
+      runs `apply --no-restart` (picker rows need no router restart)
 
 Two keys and only two -- ANTHROPIC_BASE_URL and the first-party flag -- live in
 a MANAGED settings drop-in, because they embed the per-install ingress token and
@@ -570,6 +576,133 @@ def cmd_status(_: argparse.Namespace) -> int:
     return cmd_apply(ns) if SOURCE.exists() else 0
 
 
+# ---- picker toggles --------------------------------------------------------
+
+BUILT_IN = "built-in"
+REPLACE_RE = re.compile(r"^picker-replace-built-in\s*=\s*(true|false)\b.*$", re.M)
+PICKER_LINE_RE = re.compile(r"^\s*picker\s*=\s*(true|false)\b.*$")
+
+
+def model_blocks(lines: list[str]) -> dict[str, tuple[int, int]]:
+    """Each [[models]] block's id -> (header line, end line exclusive). A block
+    ends at the next table header, so comments above the next block fall inside
+    this one; the edits below only touch `picker =` lines and insert after
+    `id =`, so that never matters."""
+    blocks: dict[str, tuple[int, int]] = {}
+    starts = [i for i, ln in enumerate(lines) if ln.strip() == "[[models]]"]
+    for s in starts:
+        e = next((j for j in range(s + 1, len(lines)) if lines[j].lstrip().startswith("[")), len(lines))
+        for j in range(s + 1, e):
+            m = re.match(r'^\s*id\s*=\s*"([^"]+)"', lines[j])
+            if m:
+                blocks[m.group(1)] = (s, e)
+                break
+    return blocks
+
+
+def set_picker(text: str, model_id: str, on: bool) -> str:
+    """Show or hide one model's /model row by its `picker =` line. On removes
+    the line (the default is shown); off writes `picker = false` after `id =`."""
+    lines = text.split("\n")
+    blocks = model_blocks(lines)
+    if model_id not in blocks:
+        sys.exit(f"{SOURCE}: no [[models]] block with id {model_id!r}")
+    s, e = blocks[model_id]
+    idx = next((j for j in range(s, e) if PICKER_LINE_RE.match(lines[j])), None)
+    off_line = f"picker = false           # off /model ({time.strftime('%Y-%m-%d')}, model-router-wire picker)"
+    if on and idx is not None:
+        del lines[idx]
+    elif not on and idx is None:
+        id_line = next(j for j in range(s, e) if re.match(r"^\s*id\s*=", lines[j]))
+        lines.insert(id_line + 1, off_line)
+    elif not on and PICKER_LINE_RE.match(lines[idx]).group(1) == "true":
+        lines[idx] = off_line
+    return "\n".join(lines)
+
+
+def set_built_in(text: str, keep: bool) -> str:
+    value = "false" if keep else "true"
+    if REPLACE_RE.search(text):
+        return REPLACE_RE.sub(f"picker-replace-built-in = {value}", text, count=1)
+    # No line yet: add it before the first table so it stays top-level.
+    first = re.search(r"^\[", text, re.M)
+    at = first.start() if first else len(text)
+    return text[:at] + f"picker-replace-built-in = {value}\n\n" + text[at:]
+
+
+def choose_rows(src: dict) -> set[str] | None:
+    """The checkbox menu. Returns the chosen names, or None when cancelled."""
+    tool = shutil.which("claude-tools")
+    if not tool:
+        sys.exit("claude-tools is not on PATH; use --on/--off/--built-in instead")
+    keep_built_in = not src.get("picker-replace-built-in", False)
+    rows = [f"Claude Code|{BUILT_IN}|built-in lineup first (Default and the current Claude models)|{'true' if keep_built_in else 'false'}"]
+    # Grouped by provider (a new group value opens a header), groups in source order.
+    first_seen = {}
+    for m in enabled(src):
+        first_seen.setdefault(m["provider"], len(first_seen))
+    for m in sorted(enabled(src), key=lambda m: first_seen[m["provider"]]):
+        group = PROVIDER_DESCRIPTION.get(m["provider"], m["provider"]).replace("|", "/")
+        label = m["name"] + (f"  (/model {canonical(m)})" if canonical(m) != m["id"] else "")
+        rows.append(f"{group}|{m['id']}|{label.replace('|', '/')}|{'true' if m.get('picker', True) else 'false'}")
+    items = Path(os.environ.get("TMPDIR", "/tmp")) / f"model-router-picker.{os.getpid()}"
+    items.write_text("\n".join(rows) + "\n")
+    try:
+        # stdin and stderr stay on the terminal: the menu paints on stderr and
+        # reads keys from fd 0; only the chosen names come back on stdout.
+        res = subprocess.run([tool, "select", "--title", "/model rows (space toggles, enter saves)", "--items", str(items)],
+                             stdout=subprocess.PIPE, text=True)
+    finally:
+        items.unlink(missing_ok=True)
+    if res.returncode != 0:
+        return None
+    return {ln.strip() for ln in res.stdout.splitlines() if ln.strip()}
+
+
+def cmd_picker(args: argparse.Namespace) -> int:
+    src = load_source()
+    known = {m["id"] for m in enabled(src)}
+    alias_to_id = {a: m["id"] for m in enabled(src) for a in ids(m)}
+    on = {alias_to_id.get(x, x) for x in args.on}
+    off = {alias_to_id.get(x, x) for x in args.off}
+    built_in = args.built_in
+    if not (on or off or built_in):
+        if not (sys.stdin.isatty() and sys.stderr.isatty()):
+            sys.exit("picker: no terminal for the menu; pass --on/--off/--built-in")
+        chosen = choose_rows(src)
+        if chosen is None:
+            print("cancelled; nothing changed")
+            return 1
+        on = known & chosen
+        off = known - chosen
+        built_in = "on" if BUILT_IN in chosen else "off"
+    unknown = (on | off) - known
+    if unknown:
+        sys.exit(f"picker: not an enabled model id or alias: {', '.join(sorted(unknown))}")
+    if on & off:
+        sys.exit(f"picker: both --on and --off for {', '.join(sorted(on & off))}")
+    before = SOURCE.read_text()
+    text = before
+    for mid in sorted(on):
+        text = set_picker(text, mid, True)
+    for mid in sorted(off):
+        text = set_picker(text, mid, False)
+    if built_in:
+        text = set_built_in(text, built_in == "on")
+    if text == before:
+        print("no change")
+        return 0
+    after = tomllib.loads(text)  # never write a source that no longer parses
+    SOURCE.write_text(text)
+    shown = [canonical(m) for m in enabled(after) if m.get("picker", True)]
+    lineup = "kept first" if not after.get("picker-replace-built-in") else "replaced"
+    print(f"{SOURCE}: built-in lineup {lineup}; rows: {', '.join(shown) or 'none'}")
+    if args.no_apply:
+        print("run `model-router-wire apply` to render it")
+        return 0
+    return cmd_apply(argparse.Namespace(check=False, no_restart=True, install=False))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -580,6 +713,12 @@ def main() -> int:
     ap.set_defaults(fn=cmd_apply)
     sub.add_parser("off", help="remove the settings keys and picker rows").set_defaults(fn=cmd_off)
     sub.add_parser("status", help="show what is live and any drift").set_defaults(fn=cmd_status)
+    pp = sub.add_parser("picker", help="toggle /model rows (checkbox menu with no flags), then apply")
+    pp.add_argument("--on", action="append", default=[], metavar="ID", help="show this model's row (id or alias; repeatable)")
+    pp.add_argument("--off", action="append", default=[], metavar="ID", help="hide this model's row (id or alias; repeatable)")
+    pp.add_argument("--built-in", choices=("on", "off"), help="keep (on) or replace (off) Claude Code's built-in lineup")
+    pp.add_argument("--no-apply", action="store_true", help="edit the source only")
+    pp.set_defaults(fn=cmd_picker)
     args = parser.parse_args()
     return args.fn(args)
 

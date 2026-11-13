@@ -75,11 +75,13 @@
 # ignore it. Replaced the router's usage scaling, deprecated in router 0.1.37.
 declared-context-window = 1000000
 
-# /model shows only the picker rows below (plus Claude Code's own Default row and
-# the session's current model), not the built-in lineup. Rows follow block order.
-# The Claude rows at the top pin exact versions, so a new Claude release needs
-# its id bumped here before it appears.
-picker-replace-built-in = true
+# false (since 2026-11-13): /model shows Claude Code's built-in lineup first, so a
+# new Claude release appears without a bump here, then the rows below in block
+# order; Claude Code skips a row the built-in lineup already covers. true shows
+# only the rows below (plus Default and the session's current model) -- the
+# 2026-10-01 to 2026-11-13 setting, dropped because a pinned Fable 5.1 row hid
+# Fable 5.2. Toggle rows and this flag with `model-router-wire picker`.
+picker-replace-built-in = false
 
 [providers.openrouter]
 base-url = "https://openrouter.ai/api/v1"
@@ -100,7 +102,9 @@ base-url = "https://openrouter.ai/api/v1"
 #   https://github.com/router-for-me/CLIProxyAPI/pull/5669
 
 # ---- Claude models, passed straight through to Anthropic -----------------
-# The current lineup, first in the picker: Opus, Fable, then Sonnet.
+# The current lineup. With the built-in lineup on, Claude Code skips these rows
+# (it already lists them); they lead /model only when picker-replace-built-in
+# is true, and then pin exact versions, so a new release needs its id bumped.
 
 [[models]]
 id = "claude-opus-5-5"
@@ -108,8 +112,8 @@ name = "Opus 5.5"
 provider = "anthropic"
 
 [[models]]
-id = "claude-fable-5-1"
-name = "Fable 5.1"
+id = "claude-fable-5-2"
+name = "Fable 5.2"
 provider = "anthropic"
 
 [[models]]
