@@ -31,4 +31,10 @@ else
 fi
 
 "$REAPER" >/dev/null 2>&1 || true
+# ~/.claude/jobs-archive is where the claude() wrapper moves finished jobs to
+# hide them from `claude agents`. It is a holding pen, not a second pile that
+# grows forever, so its dirs are purged 30 days after their last activity.
+if [ -d "$HOME/.claude/jobs-archive" ]; then
+  "$REAPER" --jobs-dir "$HOME/.claude/jobs-archive" --days 30 --keep-pins >/dev/null 2>&1 || true
+fi
 exit 0
