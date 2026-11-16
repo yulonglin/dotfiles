@@ -1801,3 +1801,58 @@ def test_sync_explains_a_site_only_cold_turkey_allows(cfg, monkeypatch, capsys):
     assert "extra_exc" not in out
     assert "Cold Turkey allows quantifiedmind.org, but the note does not." in out
     assert "remove it from this block's allowed sites" in out
+
+
+def test_status_leads_with_the_running_mode_and_splits_modes_from_always_on(
+    cfg, monkeypatch, capsys
+):
+    always = {
+        "enabled": "true",
+        "lock": "delay,1",
+        "type": "scheduled",
+        "web": [],
+        "exceptions": [],
+        "apps": [],
+    }
+    blocks = {
+        "night": always,
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "true"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_status(cfg)
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "now: mode: writing"
+    modes, always_on = out.index("modes"), out.index("always on")
+    assert out[modes + 1 : modes + 3] == ["  off      research", "  running  writing"]
+    assert out[always_on + 1] == "  enabled  night  (scheduled, lock delay)"
+
+
+def test_status_headline_names_a_break_an_only_session_and_a_timer(cfg, monkeypatch):
+    timer = {
+        "enabled": "true",
+        "lock": "2026,11,6,21,56",
+        "web": [],
+        "exceptions": [],
+        "apps": [],
+    }
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "timer: deep": timer,
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    assert ct.status_headline(cfg, blocks) == "now: no mode + timer: deep until 21:56"
+
+    until = ct.time.time() + 600
+    end = ct.dt.datetime.fromtimestamp(until)
+    ct.BREAK_FILE.write_text(ct.json.dumps({"modes": ["research"], "until": until}))
+    assert ct.status_headline(cfg, blocks).startswith(
+        f"now: break until {end:%H:%M}, then research"
+    )
+
+    ct.ONLY_FILE.write_text(
+        ct.json.dumps({"groups": ["bear"], "until": until, "back": []})
+    )
+    assert ct.status_headline(cfg, blocks).startswith(
+        f"now: only session until {end:%H:%M} (bear)"
+    )

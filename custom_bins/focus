@@ -7,7 +7,7 @@
 
     focus research            # stop the other 'mode: …' blocks, start this one
     focus off                 # stop every unlocked 'mode: …' block
-    focus status              # which blocks Cold Turkey has enabled, and drift from the config
+    focus status              # what runs now (mode, break, only, timer), every block by kind, drift
     focus sync                # add missing sites to existing mode blocks through the CLI
     focus export [PATH]       # write a .ctbbl file for Blocks → Import blocks…
     focus screenzen [--dry-run]  # write ScreenZen's groups from the same note
@@ -1043,14 +1043,83 @@ CT_MISSING_BLOCK = (
 )
 
 
+def lock_end(block: dict) -> dt.datetime | None:
+    """When a timed lock ends: Cold Turkey stores it as 'Y,M,D,H,M'. None for any other lock."""
+    try:
+        return dt.datetime(*(int(p) for p in block.get("lock", "").split(",")[:5]))
+    except (TypeError, ValueError):
+        return None
+
+
+def lock_label(block: dict) -> str:
+    end = lock_end(block)
+    return f"locked until {end:%H:%M}" if end else f"lock {block['lock'].split(',')[0]}"
+
+
+def status_headline(cfg: dict, blocks: dict) -> str:
+    """One line naming what is running now: the mode, or the break or only session that
+    stands in for one, plus any timer. The always-on blocks are left out: they never change."""
+
+    def on(b: dict) -> bool:
+        return b.get("enabled") == "true"
+
+    modes = [n[len(PREFIX) :] for n, b in mode_blocks(blocks).items() if on(b)]
+    brk, only = read_break(), read_only()
+    if only:
+        end = dt.datetime.fromtimestamp(only["until"])
+        now = paint(f"only session until {end:%H:%M}", "1;36")
+        now += f" ({', '.join(only['groups'])})"
+    elif modes:
+        now = paint(f"mode: {', '.join(modes)}", "1;36")
+    elif brk and brk["until"] > time.time():
+        end = dt.datetime.fromtimestamp(brk["until"])
+        back = f", then {', '.join(brk['modes'])}" if brk["modes"] else ""
+        now = paint(f"break until {end:%H:%M}", "1;33") + back
+    else:
+        now = paint("no mode", "1;33")
+    for name, b in blocks.items():
+        if name.startswith(TIMER_PREFIX) and on(b):
+            end = lock_end(b)
+            now += " + " + paint(name + (f" until {end:%H:%M}" if end else ""), "1;35")
+    return f"now: {now}"
+
+
 def cmd_status(cfg: dict) -> None:
     blocks = read_blocks()
+    print(status_headline(cfg, blocks))
+    sections: dict[str, list[tuple[str, dict]]] = {
+        "modes": [],
+        "timers": [],
+        "always on": [],
+    }
     for name, block in blocks.items():
-        on = block.get("enabled") == "true"
-        state = paint(f"{'enabled' if on else 'off':8}", "1;32" if on else "2")
-        lock = "" if not is_locked(block) else f", lock {block['lock'].split(',')[0]}"
-        detail = paint(f"({block.get('type')}{lock})", "2")
-        print(f"{state} {name}  {detail}")
+        key = (
+            "modes"
+            if name.startswith(PREFIX)
+            else "timers"
+            if name.startswith(TIMER_PREFIX)
+            else "always on"
+        )
+        sections[key].append((name, block))
+    for title, rows in sections.items():
+        if not rows:
+            continue
+        print()
+        print(paint(title, "1"))
+        for name, block in rows:
+            on = block.get("enabled") == "true"
+            if title == "modes":
+                # Only one mode runs at a time, so the running one carries the line.
+                label = name[len(PREFIX) :]
+                if on:
+                    print(f"  {paint('running', '1;36')}  {paint(label, '1;36')}")
+                else:
+                    print(f"  {paint('off'.ljust(7), '2')}  {paint(label, '2')}")
+                continue
+            state = paint(f"{'enabled' if on else 'off':7}", "1;32" if on else "2")
+            lock = f", {lock_label(block)}" if is_locked(block) else ""
+            detail = paint(f"({block.get('type')}{lock})", "2")
+            print(f"  {state}  {name}  {detail}")
     print()
     for mode in cfg["modes"]:
         d = drift(cfg, blocks, mode)
@@ -1107,9 +1176,6 @@ def cmd_status(cfg: dict) -> None:
             f"{paint('stale overlap', '33')}: {site!r} is listed under overlaps "
             "but no mode allows it against an always-on block; remove it from the note"
         )
-    if s := read_only():
-        end = dt.datetime.fromtimestamp(s["until"])
-        print(f"only: {', '.join(s['groups'])} until {end:%H:%M:%S}")
 
 
 def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
