@@ -32,3 +32,5 @@ chrome-native-hosts-v2.json
 mcp-oauth-locks/
 packages/
 thread-writer-locks/
+auth.json.lock
+models_cache.*.json
