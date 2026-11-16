@@ -274,9 +274,10 @@ DEFAULT_DELAY_MIN = 10
 EXPIRE_S = 3600  # a due request not run within this long must be queued again
 
 
-def paint(text: str, sgr: str) -> str:
-    """ANSI colour for a terminal; plain text when piped (Alfred) or when NO_COLOR is set."""
-    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+def paint(text: str, sgr: str, stream=None) -> str:
+    """ANSI colour for a terminal; plain text when piped (Alfred) or when NO_COLOR is set.
+    Pass stream=sys.stderr for text bound for stderr, such as a sys.exit message."""
+    if not (stream or sys.stdout).isatty() or os.environ.get("NO_COLOR"):
         return text
     return f"\033[{sgr}m{text}\033[0m"
 
@@ -828,7 +829,10 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
     if not by_agent():
         spawn_self("sz-apply")
         print(
-            f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
+            f"{paint('ScreenZen', '1')}: "
+            + paint(
+                f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen", "32"
+            )
         )
         return
     try:
@@ -1108,7 +1112,7 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
     for mode in cfg["modes"]:
         name, d = PREFIX + mode, drift(cfg, blocks, mode)
         if not d["exists"]:
-            needs_import.append(f"{name}: {CT_MISSING_BLOCK}")
+            needs_import.append(f"{paint(name, '1')}: {CT_MISSING_BLOCK}")
             continue
         modes.append(name)
         # Exceptions before '*.*', so a running block never blocks a site it should allow.
@@ -1120,9 +1124,13 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
                 sent.append(add_site(name, flag, kind, site))
         for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
             if d[k]:
-                needs_import.append(f"{name}:\n{describe(k, d[k], '    ')}")
+                needs_import.append(f"{paint(name, '1')}:\n{describe(k, d[k], '    ')}")
         if d["missing_apps"]:
-            print(f"  apps not found on this Mac: {', '.join(d['missing_apps'])}")
+            print(
+                "  "
+                + paint("apps not found on this Mac:", "33")
+                + f" {', '.join(d['missing_apps'])}"
+            )
     # Always-on blocks and timers: adding a banned site only tightens, so try it even though
     # they may be locked. Whether the CLI accepts an addition to a locked block is untested.
     bans = dict((cfg.get("blocklists") or {}).get("cold_turkey", {}))
@@ -1137,7 +1145,10 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
     missing = unconfirmed(sent + banned)
     for name in modes:
         added = sum(s[0] == name and s not in missing for s in sent)
-        print(f"{name}: added {added} site(s)")
+        short = any(s[0] == name for s in missing)  # some additions did not land
+        print(
+            f"{paint(name, '1')}: {paint(f'added {added} site(s)', '33' if short else '32')}"
+        )
     for s in sent:
         if s in missing:
             name, kind, site = s
@@ -1145,17 +1156,26 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             failed.append(f"{name}: {site} (to its {listed} sites)")
     for s in banned:
         name, _, site = s
-        print(f"{name}: {'could not add' if s in missing else 'added'} {site}")
+        verdict = (
+            paint(f"could not add {site}", "31")
+            if s in missing
+            else paint(f"added {site}", "32")
+        )
+        print(f"{paint(name, '1')}: {verdict}")
         if s in missing:
             needs_import.append(
-                f"{name}:\n    Cold Turkey did not take the new blocked site {site}; "
+                f"{paint(name, '1')}:\n    Cold Turkey did not take the new blocked site {site}; "
                 "the block may be locked.\n      Fix: in Cold Turkey, add it to this "
                 "block's blocked sites once the lock allows."
             )
     if needs_import:
         print(
-            "\nThese differences between the note and Cold Turkey need a hand edit in "
-            "Cold Turkey, because its command line can only add sites:"
+            "\n"
+            + paint(
+                "These differences between the note and Cold Turkey need a hand edit in "
+                "Cold Turkey, because its command line can only add sites:",
+                "33",
+            )
         )
         print("\n".join(f"  {line}" for line in needs_import))
     # One command applies the note everywhere: ScreenZen too, for the running mode.
@@ -1164,9 +1184,14 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
         cmd_screenzen(cfg, dry_run=False, gated=False, quiet=True)
     if failed:
         sys.exit(
-            "focus: Cold Turkey did not take these additions, so the mode blocks still "
-            "differ from the note. Run 'focus sync' again; if one still fails, add it by "
-            "hand in Cold Turkey:\n  " + "\n  ".join(failed)
+            paint(
+                "focus: Cold Turkey did not take these additions, so the mode blocks "
+                "still differ from the note.",
+                "31",
+                sys.stderr,
+            )
+            + " Run 'focus sync' again; if one still fails, add it by hand in Cold "
+            "Turkey:\n  " + "\n  ".join(failed)
         )
 
 
@@ -1594,7 +1619,10 @@ def cmd_screenzen(
     hand_back_focus(front)
     if quiet:
         print(
-            f"ScreenZen: {len(sz_allow_sites(cfg, modes))} sites without a pause screen"
+            f"{paint('ScreenZen', '1')}: "
+            + paint(
+                f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen", "32"
+            )
         )
     else:
         print(f"wrote ScreenZen and reopened it; backup at {backup}")
