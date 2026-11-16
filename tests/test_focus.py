@@ -162,6 +162,25 @@ def test_conflict_when_a_mode_allows_what_an_always_on_block_bans(cfg):
     ]
 
 
+def test_a_listed_overlap_is_by_design_not_a_conflict(cfg):
+    cfg["groups"]["papers"]["sites"].append("x.com")
+    cfg["overlaps"] = {"x.com": "opens only on avoid's breaks", "gone.com": "old"}
+    assert ct.conflicts(cfg) == []
+    lines, stale = ct.deliberate_overlaps(cfg)
+    assert lines == [
+        "x.com opens in research, writing only while 'avoid' is off or on a break: "
+        "opens only on avoid's breaks"
+    ]
+    assert stale == ["gone.com"]
+
+
+def test_overlaps_need_a_reason(tmp_path):
+    p = tmp_path / "note.md"
+    p.write_text(NOTE.replace("blocklists:", "overlaps: [x.com]\nblocklists:"))
+    with pytest.raises(SystemExit, match="'overlaps' must map each site"):
+        ct.load_config(p)
+
+
 def test_decode_settings_round_trip():
     payload = json.dumps({"blocks": {"b": {"web": ["*.*"]}}}).encode()
     encoded = "CTB17" + "".join(f"{(c + 0x11) % 256:02X}" for c in payload)

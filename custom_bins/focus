@@ -341,9 +341,15 @@ def load_config(path: Path) -> dict:
         "break_max_minutes",
         "no_mode_allow",
         "only",
+        "overlaps",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
+    ov = cfg.get("overlaps")
+    if ov is not None and not (
+        isinstance(ov, dict) and all(isinstance(v, str) and v for v in ov.values())
+    ):
+        problems.append("'overlaps' must map each site to a one-line reason")
     for span in cfg.get("off_hours") or []:
         if not re.fullmatch(r"\d\d:\d\d-\d\d:\d\d", str(span)):
             problems.append(f"off_hours entry {span!r} must look like '22:00-23:15'")
@@ -438,18 +444,48 @@ def desired_apps(cfg: dict, mode: str) -> tuple[list[str], list[str]]:
     return ct_apps(group_items(cfg, cfg["modes"][mode].get("block") or [], "apps"))
 
 
-def conflicts(cfg: dict) -> list[str]:
-    """A Cold Turkey exception only overrides its own block, so a site another block bans stays banned."""
+def overlaps(cfg: dict) -> list[tuple[str, str, str]]:
+    """Every (site, mode, block) where a mode allows a site an always-on Cold Turkey block bans.
+
+    A Cold Turkey exception only overrides its own block, so the site stays banned
+    in that mode for as long as the always-on block runs.
+    """
     out = []
     for bl_name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
         banned = set(group_items(cfg, bl.get("block") or [], "sites"))
         for mode in cfg["modes"]:
             for site in desired_exceptions(cfg, mode):
                 if site in banned:
-                    out.append(
-                        f"{site!r} is allowed in mode {mode!r} but blocked by {bl_name!r}"
-                    )
+                    out.append((site, mode, bl_name))
     return out
+
+
+def conflicts(cfg: dict) -> list[str]:
+    """Overlaps the note does not list under `overlaps`: likely mistakes."""
+    known = cfg.get("overlaps") or {}
+    return [
+        f"{site!r} is allowed in mode {mode!r} but blocked by {bl!r}"
+        for site, mode, bl in overlaps(cfg)
+        if site not in known
+    ]
+
+
+def deliberate_overlaps(cfg: dict) -> tuple[list[str], list[str]]:
+    """Lines for the overlaps the note lists on purpose, and for listed sites that no longer overlap."""
+    known = cfg.get("overlaps") or {}
+    found: dict[str, dict[str, list[str]]] = {}
+    for site, mode, bl in overlaps(cfg):
+        if site in known:
+            found.setdefault(site, {}).setdefault(bl, []).append(mode)
+    lines = []
+    for site, blocks in found.items():
+        for bl, modes in blocks.items():
+            lines.append(
+                f"{site} opens in {', '.join(modes)} only while {bl!r} is off "
+                f"or on a break: {known[site]}"
+            )
+    stale = [site for site in known if site not in found]
+    return lines, stale
 
 
 def decode_settings(value: str) -> dict:
@@ -1058,7 +1094,15 @@ def cmd_status(cfg: dict) -> None:
         for k, v in issues.items():
             print(describe(k, v))
     for line in conflicts(cfg):
-        print(f"conflict: {line}")
+        print(f"{paint('conflict', '33')}: {line}")
+    deliberate, stale = deliberate_overlaps(cfg)
+    for line in deliberate:
+        print(paint(f"by design: {line}", "2"))
+    for site in stale:
+        print(
+            f"{paint('stale overlap', '33')}: {site!r} is listed under overlaps "
+            "but no mode allows it against an always-on block; remove it from the note"
+        )
     if s := read_only():
         end = dt.datetime.fromtimestamp(s["until"])
         print(f"only: {', '.join(s['groups'])} until {end:%H:%M:%S}")
