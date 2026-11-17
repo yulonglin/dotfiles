@@ -1070,7 +1070,7 @@ def status_headline(cfg: dict, blocks: dict) -> str:
         now = paint(f"only session until {end:%H:%M}", "1;36")
         now += f" ({', '.join(only['groups'])})"
     elif modes:
-        now = paint(f"mode: {', '.join(modes)}", "1;36")
+        now = paint(f"{', '.join(modes)} mode{'s' if len(modes) > 1 else ''}", "1;36")
     elif brk and brk["until"] > time.time():
         end = dt.datetime.fromtimestamp(brk["until"])
         back = f", then {', '.join(brk['modes'])}" if brk["modes"] else ""
@@ -1080,7 +1080,10 @@ def status_headline(cfg: dict, blocks: dict) -> str:
     for name, b in blocks.items():
         if name.startswith(TIMER_PREFIX) and on(b):
             end = lock_end(b)
-            now += " + " + paint(name + (f" until {end:%H:%M}" if end else ""), "1;35")
+            label = f"{name[len(TIMER_PREFIX) :]} timer" + (
+                f" until {end:%H:%M}" if end else ""
+            )
+            now += " + " + paint(label, "1;35")
     return f"now: {now}"
 
 

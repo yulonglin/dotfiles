@@ -1822,7 +1822,7 @@ def test_status_leads_with_the_running_mode_and_splits_modes_from_always_on(
     fake_cold_turkey(monkeypatch, blocks)
     ct.cmd_status(cfg)
     out = capsys.readouterr().out.splitlines()
-    assert out[0] == "now: mode: writing"
+    assert out[0] == "now: writing mode"
     modes, always_on = out.index("modes"), out.index("always on")
     assert out[modes + 1 : modes + 3] == ["  off      research", "  running  writing"]
     assert out[always_on + 1] == "  enabled  night  (scheduled, lock delay)"
@@ -1841,7 +1841,7 @@ def test_status_headline_names_a_break_an_only_session_and_a_timer(cfg, monkeypa
         "timer: deep": timer,
     }
     fake_cold_turkey(monkeypatch, blocks)
-    assert ct.status_headline(cfg, blocks) == "now: no mode + timer: deep until 21:56"
+    assert ct.status_headline(cfg, blocks) == "now: no mode + deep timer until 21:56"
 
     until = ct.time.time() + 600
     end = ct.dt.datetime.fromtimestamp(until)
