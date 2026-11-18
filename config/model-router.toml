@@ -56,8 +56,12 @@
 #                   "OpenRouter, pay per token"
 #   enabled         default true
 #   picker          default true: a row in /model, in this file's block order
-#   agent           default true: an agent file; a string sets the effort
-#                   (low|medium|high|xhigh) for models that honour it; false = none
+#   agent           default true: an agent file with no fixed effort, so the
+#                   level comes from the Agent call's `effort`, else the level
+#                   /effort saved for that model (apply keeps it), else the
+#                   model's default (high for routed models, per the plugin). A
+#                   string (low|medium|high|xhigh) bakes one level in and names
+#                   the agent <alias>(<level>); avoid it. false = none.
 #   writer-priority optional positive integer: eligible writers, lowest first.
 #                   Used by write-prose, not emitted into generated router files.
 #                   Only enabled models with an agent qualify; omit to opt out.
@@ -173,7 +177,6 @@ writer-priority = 2
 name = "GPT-6.2 Astra"
 provider = "codex"
 context-window = 258400
-agent = "high"
 
 # The plugin's own gpt-6-astra(-fast) agents and doctor's shipped-agent-routes
 # check name this id, so the route stays.
@@ -234,7 +237,6 @@ aliases = ["sol"]
 name = "GPT-6.2 Sol"
 provider = "codex"
 context-window = 258400
-agent = "high"
 
 # GPT-6.1 Terra (released 2026-10-26) is the mid tier of the 6.1 line, listed
 # by the managed CLIProxyAPI 7.3.16 child on 2026-10-28 with no pin change. It
@@ -245,8 +247,7 @@ aliases = ["terra"]
 name = "GPT-6.1 Terra"
 provider = "codex"
 context-window = 258400
-picker = false           # subagent only: terra(high)
-agent = "high"
+picker = false           # subagent only: the `terra` agent
 
 # GPT-6 Sol on the account. It went through OpenRouter while the router pinned
 # CLIProxyAPI 7.2.154, which answered "unknown provider for model gpt-6-sol"
