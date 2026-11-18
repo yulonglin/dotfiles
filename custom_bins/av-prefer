@@ -48,10 +48,14 @@ camera_helper() {  # run the Swift helper, compiling it when stale
     "$BIN" "$@"
 }
 
-command -v SwitchAudioSource >/dev/null 2>&1 \
-    || { print -u2 "av-prefer: SwitchAudioSource not found (brew install switchaudio-osx)"; exit 1; }
+sas() {  # SwitchAudioSource, checked only when an audio kind needs it
+    command -v SwitchAudioSource >/dev/null 2>&1 \
+        || { print -u2 "av-prefer: SwitchAudioSource not found (brew install switchaudio-osx)"; exit 1; }
+    SwitchAudioSource "$@"
+}
 
-# Config: "<kind> <name>" per line; '#' starts a comment. Fills WANT_<kind>.
+# Config: "<kind> <name>" per line; a line starting with '#' is a comment, and
+# a '#' later in a line is part of the name ("Mixer #2"). Fills WANT_<kind>.
 typeset -a WANT_camera WANT_speaker WANT_mic
 load_config() {
     [[ -r $CONFIG ]] || { print -u2 "av-prefer: config not found: $CONFIG"; exit 1; }
@@ -59,8 +63,7 @@ load_config() {
     local line kind name n=0
     while IFS= read -r line || [[ -n $line ]]; do
         (( ++n ))
-        line=${line%%\#*}
-        [[ $line == *[^[:space:]]* ]] || continue
+        [[ $line == [[:space:]]#(\#*|) ]] && continue
         kind=${${=line}[1]}
         name=${${line#*$kind}##[[:space:]]#}
         name=${name%%[[:space:]]#}
@@ -74,12 +77,12 @@ load_config() {
 
 present() {  # present <kind>: every device of that kind, one per line
     if [[ $1 == camera ]]; then camera_helper list
-    else SwitchAudioSource -a -t "${SAS_TYPE[$1]}" || { print -u2 "av-prefer: could not list ${1}s"; return 1; }
+    else sas -a -t "${SAS_TYPE[$1]}" || { print -u2 "av-prefer: could not list ${1}s"; return 1; }
     fi
 }
 
 current() {  # current <kind>: the default device of that kind
-    if [[ $1 == camera ]]; then camera_helper status; else SwitchAudioSource -c -t "${SAS_TYPE[$1]}"; fi
+    if [[ $1 == camera ]]; then camera_helper status; else sas -c -t "${SAS_TYPE[$1]}"; fi
 }
 
 pick() {  # pick <kind>: the first present device matching the config; 1 = none, 2 = list failed
@@ -96,7 +99,7 @@ pick() {  # pick <kind>: the first present device matching the config; 1 = none,
 
 set_device() {  # set_device <kind> <exact name>
     if [[ $1 == camera ]]; then camera_helper set "$2" >/dev/null
-    else SwitchAudioSource -t "${SAS_TYPE[$1]}" -s "$2" >/dev/null; fi
+    else sas -t "${SAS_TYPE[$1]}" -s "$2" >/dev/null; fi
 }
 
 configured() { local -a w=("${(@P)${:-WANT_$1}}"); (( ${#w} > 0 )); }
@@ -105,8 +108,8 @@ status() {
     local kind cur want rc
     for kind in "${KINDS[@]}"; do
         printf '%-8s ' "$kind"
-        if ! configured "$kind"; then print -n "$(current "$kind")"; print " (not in config, left alone)"; continue; fi
-        cur=$(current "$kind")
+        cur=$(current "$kind") || { print; print -u2 "av-prefer: could not read the current $kind"; exit 1; }
+        if ! configured "$kind"; then print -r -- "$cur (not in config, left alone)"; continue; fi
         rc=0; want=$(pick "$kind") || rc=$?
         (( rc == 2 )) && exit 1
         if (( rc == 1 )); then paint yellow "$cur"; print " (no present $kind is in the config)"
