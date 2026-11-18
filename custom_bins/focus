@@ -15,8 +15,10 @@
     focus pull [--dry-run]    # copy sites and apps added inside Cold Turkey into the note
     focus deep [MINUTES]      # a timer: block its groups on top of any mode, locked
     focus only [GROUP…] [MINUTES]  # pick what to allow; everything else gets a pause screen
+    focus CAPPED [MINUTES]    # a capped mode: at most its minutes, then back to the mode before
+    focus CAPPED --day [MIN]  # one longer stretch from its daily budget
     focus alfred [QUERY]      # Alfred script-filter JSON (config/alfred/workflows/focus)
-    focus install-agent       # launchd job that ends an overdue break every minute
+    focus install-agent       # launchd job that ends overdue breaks and stretches every minute
     focus uninstall-agent     # remove that job (deploy.sh --no-focus)
 
 Every site and app is defined once, in a named group. Modes and the always-on
@@ -65,6 +67,17 @@ hard. It lives in a state file, not in `modes`. When the time is up focus sends 
 notification and starts the mode it replaced. While a session runs, 'focus only' adds
 groups and 'focus only 20' sets the end to 20 minutes from now; 'focus only end' or any
 mode ends it. The section `only:` in the note switches all this on.
+
+A capped mode (`capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fallback:
+<mode>}}`) runs for at most `minutes` a stretch, then switches back to the mode that
+ran before it, or to `fallback` if none did, and sends a notification. A waiter and
+the once-a-minute launchd job end it, so it ends after a restart too. Renewing at
+once is allowed, but every start of that mode after the first of the local day asks
+for a one-line reason at the terminal (and refuses without one), appended with the
+time and the command to ~/.local/state/focus/commit-log.jsonl. '--day' runs one
+longer stretch from the daily budget `day_minutes`, asking the reason once; a day
+stretch left early gives back its unused minutes. A capped mode is never brought
+back without its cap: a break or only session returns to the mode before it.
 
 An agent (CLAUDECODE=1) loosens only after a delay (`agent_loosen_delay_minutes`,
 default 10): stopping a mode, switching modes, a sync that allows new sites, or
@@ -346,6 +359,7 @@ def load_config(path: Path) -> dict:
         "only",
         "overlaps",
         "strong_lock_blocks",
+        "capped_modes",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
@@ -391,6 +405,27 @@ def load_config(path: Path) -> dict:
             refs += [
                 (f"{app} {name}", (bl.get("block") or []) + (bl.get("allow") or []))
             ]
+    capped = cfg.get("capped_modes")
+    if capped is not None and not isinstance(capped, dict):
+        problems.append("'capped_modes' must map a mode to its limits")
+        capped = None
+    for name, c in (capped or {}).items():
+        cfg["capped_modes"][name] = c = c or {}
+        if name not in (cfg.get("modes") or {}):
+            problems.append(f"capped_modes names unknown mode {name!r}")
+        if not isinstance(c, dict) or set(c) - {"minutes", "day_minutes", "fallback"}:
+            problems.append(
+                f"capped mode {name!r} may only have 'minutes', 'day_minutes' and 'fallback'"
+            )
+            continue
+        for key in ("minutes", "day_minutes"):
+            if key in c and not (isinstance(c[key], int) and c[key] >= 1):
+                problems.append(
+                    f"capped mode {name!r} {key} must be a whole number >= 1"
+                )
+        fb = c.get("fallback")
+        if fb is not None and (fb in capped or fb not in (cfg.get("modes") or {})):
+            problems.append(f"capped mode {name!r} fallback must be a mode with no cap")
     for name, t in (cfg.get("timers") or {}).items():
         if set(t or {}) - {"block", "minutes"}:
             problems.append(f"timer {name!r} may only have 'block' and 'minutes'")
@@ -649,6 +684,53 @@ SZ_LOCK = PENDING.parent / "screenzen.lock"  # one ScreenZen write at a time
 DEFAULT_BREAK_MAX = 30
 ONLY_FILE = PENDING.parent / "only.json"
 DEFAULT_ONLY_MIN = 45
+CAPPED_FILE = PENDING.parent / "capped.json"  # the capped stretch that runs now
+CAPPED_DAY_FILE = PENDING.parent / "capped-day.json"  # today's starts and day budget
+COMMIT_LOG = PENDING.parent / "commit-log.jsonl"  # every reason asked for, one per line
+DEFAULT_CAPPED_MIN = 30
+DEFAULT_CAPPED_DAY_MIN = 180
+
+
+def read_state(path: Path) -> dict | None:
+    """A JSON state file as a dict; None when it is missing or does not parse."""
+    try:
+        s = json.loads(path.read_text())
+    except (FileNotFoundError, ValueError):
+        return None
+    return s if isinstance(s, dict) else None
+
+
+def write_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state))
+
+
+def log_reason(command: str, reason: str, **extra) -> None:
+    """Append one line to COMMIT_LOG: when, what was run, and why."""
+    COMMIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "ts": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "command": command,
+        "reason": reason,
+        **extra,
+    }
+    with COMMIT_LOG.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def need_terminal(what: str) -> None:
+    """Refuse unless a person is at a terminal: stdin must be a TTY."""
+    if not sys.stdin.isatty():
+        sys.exit(f"focus: {what} asks for typed input, so it runs only in a terminal")
+
+
+def ask_reason(what: str) -> str:
+    """A one-line reason typed at the terminal; refuse without one."""
+    need_terminal(what)
+    reason = input(f"Why {what}? One line: ").strip()
+    if not reason:
+        sys.exit("focus: no reason given; nothing changed")
+    return reason
 
 
 def read_break() -> dict | None:
@@ -758,8 +840,9 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
 
 
 def cmd_install_agent() -> None:
-    """Install the once-a-minute launchd job that ends overdue breaks, so a break ends
-    even if its waiter dies, the Mac restarts, or focus is never run again."""
+    """Install the once-a-minute launchd job ('focus tick') that ends overdue breaks, only
+    sessions and capped stretches, so each ends even if its waiter dies, the Mac
+    restarts, or focus is never run again."""
     path = os.environ.get("PATH", "")
     extra = ["/opt/homebrew/bin", str(Path.home() / ".local/bin"), "/usr/bin", "/bin"]
     plist = {
@@ -791,7 +874,10 @@ def cmd_install_agent() -> None:
         sys.exit(
             f"focus: wrote {AGENT_PLIST} but launchctl refused it: {r.stderr.strip()}"
         )
-    print(f"installed {AGENT_LABEL}: checks every minute for a break that is over")
+    print(
+        f"installed {AGENT_LABEL}: checks every minute for a break, only session or "
+        "capped stretch that is over"
+    )
 
 
 def cmd_uninstall_agent() -> None:
@@ -813,7 +899,196 @@ def cmd_resume(cfg: dict) -> None:
     end_break(cfg)
 
 
-def cmd_start(cfg: dict, mode: str) -> None:
+def read_capped() -> dict | None:
+    """The capped stretch that runs now, {'mode', 'until', 'back', 'day'}, or None. 'day'
+    is the minutes it drew from the day budget: 0 for a normal stretch."""
+    s = read_state(CAPPED_FILE)
+    if not s or not isinstance(s.get("mode"), str):
+        return None
+    until, day = s.get("until"), s.get("day")
+    return {
+        "mode": s["mode"],
+        "until": until if isinstance(until, (int, float)) else 0,
+        "back": [m for m in s.get("back") or [] if isinstance(m, str)],
+        "day": day if isinstance(day, int) else 0,
+    }
+
+
+def capped_day(now: float | None = None) -> dict:
+    """Today's use of the capped modes, {'date', 'starts': {mode: n}, 'used': {mode: min}}.
+    It is keyed by the local date, so each day starts empty."""
+    today = dt.datetime.fromtimestamp(now or time.time()).date().isoformat()
+    d = read_state(CAPPED_DAY_FILE) or {}
+    if d.get("date") != today:
+        d = {}
+    return {
+        "date": today,
+        "starts": dict(d.get("starts") or {}),
+        "used": dict(d.get("used") or {}),
+    }
+
+
+def clear_capped(now: float | None = None) -> None:
+    """Drop the record of a capped stretch. A day stretch that ends early gives the whole
+    minutes it did not use back to the day budget."""
+    c = read_capped()
+    now = now or time.time()
+    if c and c["day"] and c["until"] > now:
+        d = capped_day(now)
+        unused = min(c["day"], int((c["until"] - now) // 60))
+        d["used"][c["mode"]] = max(0, d["used"].get(c["mode"], 0) - unused)
+        write_state(CAPPED_DAY_FILE, d)
+    CAPPED_FILE.unlink(missing_ok=True)
+
+
+def restore_point(cfg: dict, leaving: str) -> list[str]:
+    """The modes to go back to after `leaving` ends: what runs now, or what a break or an
+    only session would bring back. A capped mode is never one of them, so it cannot come
+    back without its cap: its own predecessor takes its place."""
+    capped = cfg.get("capped_modes") or {}
+    c = read_capped()
+    brk, only = read_break(), read_only()
+    here = (
+        [m for m in running_modes(cfg) if m != leaving]
+        or (brk["modes"] if brk and time.time() < brk["until"] else [])
+        or (only["back"] if only else [])
+    )
+    out = []
+    for m in here:
+        if m not in capped:
+            out.append(m)
+        elif c and c["mode"] == m:
+            out += c["back"]
+    return [m for m in dict.fromkeys(out) if m != leaving and m not in capped]
+
+
+def capped_target(cfg: dict, c: dict) -> str | None:
+    """Where a capped stretch goes when it ends: the mode before it, else its fallback,
+    else no mode."""
+    for m in c["back"]:
+        if m in cfg["modes"] and m not in (cfg.get("capped_modes") or {}):
+            return m
+    fb = ((cfg.get("capped_modes") or {}).get(c["mode"]) or {}).get("fallback")
+    return fb if fb in cfg["modes"] else None
+
+
+def end_capped(cfg: dict) -> bool:
+    """If a capped stretch is over, switch back to the mode before it (or its fallback),
+    notify, and clear it. The waiter that a capped start leaves, the start of every focus
+    command and the once-a-minute launchd job all call this, as for a break. A stretch
+    whose mode was switched away from by hand is only forgotten; one stopped by a break
+    ends once the break brings it back."""
+    c = read_capped()
+    if c is None or time.time() < c["until"]:
+        return False
+    running = running_modes(cfg)
+    if c["mode"] not in running:
+        brk = read_break()
+        if brk and time.time() < brk["until"] and c["mode"] in brk["modes"]:
+            return False
+        CAPPED_FILE.unlink(missing_ok=True)
+        return True
+    target = capped_target(cfg, c)
+    # Start the next mode before stopping this one, as a switch does; a failed start
+    # exits and leaves the record, so the next tick tries again.
+    if target and target not in running:
+        switch(PREFIX + target, on=True)
+    switch(PREFIX + c["mode"], on=False)
+    CAPPED_FILE.unlink(missing_ok=True)
+    sz_follow(cfg, running_modes(cfg), switched=True)
+    text = f"back to {target}" if target else "no mode runs now"
+    notify(f"{c['mode']} stretch over: {text}.")
+    print(f"{c['mode']} stretch over; {text}")
+    return True
+
+
+def cmd_capped_wait(cfg: dict) -> None:
+    """Wait for the capped stretch to end, which a renewal can move, then end it (run
+    detached by a capped start)."""
+    while (c := read_capped()) and time.time() < c["until"]:
+        time.sleep(min(20, max(1, c["until"] - time.time())))
+    end_capped(cfg)
+
+
+def cmd_capped(cfg: dict, mode: str, args: list[str], day: bool = False) -> None:
+    """Run a capped mode for at most its `minutes`, then go back to the mode before it.
+
+    The first start of the local day is free; every later one, and every --day stretch,
+    asks for a one-line reason, logged to COMMIT_LOG. --day runs one longer stretch from
+    the day budget `day_minutes`. Renewing straight away is allowed."""
+    spec = cfg["capped_modes"][mode]
+    cap = int(spec.get("minutes", DEFAULT_CAPPED_MIN))
+    budget = int(spec.get("day_minutes", DEFAULT_CAPPED_DAY_MIN))
+    if len(args) > 1 or (args and (not args[0].isdigit() or int(args[0]) < 1)):
+        sys.exit(f"focus: usage: focus {mode} [MINUTES] [--day]")
+    want = int(args[0]) if args else None
+    now = time.time()
+    today = capped_day(now)
+    current = read_capped()
+    renewing = current is not None and current["mode"] == mode
+    refund = 0
+    if renewing and current["day"] and current["until"] > now:
+        refund = min(current["day"], int((current["until"] - now) // 60))
+    if day:
+        left = budget - today["used"].get(mode, 0) + refund
+        if left < 1:
+            sys.exit(
+                f"focus: today's {budget} min of {mode} are used up; "
+                f"'focus {mode}' starts a normal stretch of up to {cap} min"
+            )
+        minutes = min(want or left, left)
+    else:
+        if want and want > cap:
+            sys.exit(f"focus: a {mode} stretch is 1 to {cap} minutes, got {want}")
+        minutes = want or cap
+    need_reason = day or today["starts"].get(mode, 0) > 0
+    if need_reason:  # refuse before any wait, not after it
+        need_terminal(f"another start of {mode} today")
+    if renewing:
+        back = current["back"]
+        # Keeping a looser mode on longer is loosening, so an agent waits.
+        gate(cfg, f"capped:{mode}:{minutes}:{day}", f"{minutes} more min of {mode}")
+    else:
+        back = restore_point(cfg, mode)
+    until = now + minutes * 60
+
+    def prepare():
+        if need_reason:
+            what = f"a day stretch of {mode}" if day else f"{mode} again today"
+            command = f"focus {mode} {'--day ' if day else ''}{minutes}"
+            log_reason(command, ask_reason(what), mode=mode, minutes=minutes)
+        clear_capped(now)  # a renewed day stretch gives back what it did not use
+        d = capped_day(now)
+        d["starts"][mode] = d["starts"].get(mode, 0) + 1
+        if day:
+            d["used"][mode] = d["used"].get(mode, 0) + minutes
+        write_state(CAPPED_DAY_FILE, d)
+        write_state(
+            CAPPED_FILE,
+            {"mode": mode, "until": until, "back": back, "day": minutes if day else 0},
+        )
+
+    cmd_start(cfg, mode, prepare=prepare)
+    try:
+        spawn_self("capped-wait")
+    except OSError as e:
+        print(
+            f"focus: could not start the stretch timer ({e}); the launchd job ends it"
+        )
+    target = capped_target(cfg, {"mode": mode, "back": back})
+    end = dt.datetime.fromtimestamp(until)
+    print(f"{mode} until {end:%H:%M}, then {target or 'no mode'}")
+    if day:
+        print(f"day budget: {left - minutes} of {budget} min left today")
+    if not AGENT_PLIST.exists():
+        print(
+            "tip: 'focus install-agent' makes sure a stretch ends even after a restart"
+        )
+
+
+def cmd_start(cfg: dict, mode: str, prepare=None) -> None:
+    """Start a mode and stop the others. prepare(), when given, runs once the agent gate
+    has passed and before anything is switched: the place for prompts and state."""
     if mode not in cfg["modes"]:
         sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
     blocks = read_blocks()
@@ -843,14 +1118,18 @@ def cmd_start(cfg: dict, mode: str) -> None:
             f"switch:{','.join(sorted(here))}->{mode}",
             f"switching from {', '.join(here)} to {target!r}",
         )
+    if prepare:
+        prepare()
     # Start the target before stopping the others: for a moment both run, which only blocks
     # more, and if the start fails the old mode is still on. Failing closed, not open.
     switched = blocks[target].get("enabled") != "true"
     if switched:
         switch(target, on=True)
     # A mode started by hand ends any break, but only once it is confirmed running, so a
-    # failed start leaves the break to be restored.
+    # failed start leaves the break to be restored. It ends another mode's capped stretch.
     BREAK_FILE.unlink(missing_ok=True)
+    if (c := read_capped()) and c["mode"] != mode:
+        clear_capped()
     for name in running:
         switch(name, on=False)
     if session:  # any mode ends a session, which the gate above approved
@@ -971,6 +1250,8 @@ def cmd_off(cfg: dict) -> None:
     BREAK_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
+    if (c := read_capped()) and PREFIX + c["mode"] in running:
+        clear_capped()
     # Back to the no-mode list, or a locked mode's; the gate above approved that state.
     sz_follow(cfg, running_modes(cfg), switched=True)
     print(f"stopped {', '.join(running)}")
@@ -1101,6 +1382,10 @@ def status_headline(cfg: dict, blocks: dict) -> str:
         now += f" ({', '.join(only['groups'])})"
     elif modes:
         now = paint(f"{', '.join(modes)} mode{'s' if len(modes) > 1 else ''}", "1;36")
+        if (c := read_capped()) and c["mode"] in modes:
+            end = dt.datetime.fromtimestamp(c["until"])
+            after = capped_target(cfg, c) or "no mode"
+            now += " " + paint(f"until {end:%H:%M}, then {after}", "1;33")
     elif brk and brk["until"] > time.time():
         end = dt.datetime.fromtimestamp(brk["until"])
         back = f", then {', '.join(brk['modes'])}" if brk["modes"] else ""
@@ -2244,8 +2529,9 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
     for m in running:
         if is_locked(blocks[PREFIX + m]):
             sys.exit(f"focus: {PREFIX + m!r} is locked, so a session cannot replace it")
-    on_break = read_break()
-    back = running or (on_break["modes"] if on_break else [])
+    # What runs, or what a break would bring back. A capped mode is not brought back
+    # after the session: the mode before it is.
+    back = restore_point(cfg, ONLY)
     # A session stops a mode's hard allowlist, and its picks can open what a 🚫 group
     # holds, so an agent always waits. The key names the picks, so an approval for one
     # session does not carry over to another.
@@ -2418,8 +2704,13 @@ def cmd_overview(cfg: dict) -> None:
         print(f"  {sym} {label}  {detail}")
 
     head("Modes", "focus <mode>")
+    capped = cfg.get("capped_modes") or {}
     for m, spec in cfg["modes"].items():
-        row(mark(PREFIX + m, m), m, paint(", ".join(spec.get("allow") or []), "2"))
+        detail = ", ".join(spec.get("allow") or [])
+        if m in capped:
+            cap = capped[m].get("minutes", DEFAULT_CAPPED_MIN)
+            detail += f" · at most {cap} min a time"
+        row(mark(PREFIX + m, m), m, paint(detail, "2"))
     for t, spec in (cfg.get("timers") or {}).items():
         print()
         head("Timer", f"focus {t} [minutes]")
@@ -2501,13 +2792,20 @@ def main() -> None:
     p.add_argument(
         "args",
         nargs="*",
-        help="export: output file; add: GROUP SITE [SITE…]; only: [GROUP…] [MINUTES] | end",
+        help="export: output file; add: GROUP SITE [SITE…]; only: [GROUP…] [MINUTES] | end;"
+        " a capped mode: [MINUTES]",
     )
     p.add_argument(
         "--dry-run", action="store_true", help="screenzen, pull: show changes only"
     )
     p.add_argument("--app", action="store_true", help="add: the items are app names")
-    a = p.parse_args()
+    p.add_argument(
+        "--day",
+        action="store_true",
+        help="a capped mode: one longer stretch from its daily budget (asks a reason)",
+    )
+    # Intermixed, so a flag may come before or after the minutes: 'focus x --day 90'.
+    a = p.parse_intermixed_args()
     # Before load_config: uninstalling must work when the config note is gone.
     if a.command == "uninstall-agent":
         cmd_uninstall_agent()
@@ -2521,6 +2819,7 @@ def main() -> None:
     if a.command not in (
         "resume",
         "only-wait",
+        "capped-wait",
         "sz-apply",
         "alfred",
         "tick",
@@ -2529,8 +2828,9 @@ def main() -> None:
         try:
             end_break(cfg)
             end_only(cfg)
+            end_capped(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
-            print(f"focus: could not end an expired break or session: {e}")
+            print(f"focus: could not end an expired break, session or stretch: {e}")
     match a.command:
         case None:
             cmd_overview(cfg)
@@ -2541,8 +2841,9 @@ def main() -> None:
         case "resume":  # internal: the detached waiter that 'break' starts
             cmd_resume(cfg)
         case "tick":  # internal: the launchd job; ends what is overdue, else silent
-            end_break(cfg)
-            end_only(cfg)
+            cmd_tick(cfg)
+        case "capped-wait":  # internal: the detached waiter that a capped start leaves
+            cmd_capped_wait(cfg)
         case "only":
             cmd_only(cfg, a.args)
         case "only-wait":  # internal: the detached waiter that 'only' starts
@@ -2574,8 +2875,24 @@ def main() -> None:
             cmd_alfred(cfg, " ".join(a.args))
         case name if name in (cfg.get("timers") or {}):
             cmd_timer(cfg, name, a.args)
+        case mode if mode in (cfg.get("capped_modes") or {}):
+            cmd_capped(cfg, mode, a.args, day=a.day)
         case mode:
+            if a.args or a.day:
+                sys.exit(
+                    f"focus: usage: focus {mode}; minutes and --day are for capped modes"
+                )
             cmd_start(cfg, mode)
+
+
+def cmd_tick(cfg: dict) -> None:
+    """The once-a-minute launchd job: end what is overdue, else stay silent. Each step
+    runs on its own, so one that fails (switch() exits) does not skip the others."""
+    for step in (end_break, end_only, end_capped):
+        try:
+            step(cfg)
+        except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
+            print(f"focus tick: {step.__name__} failed: {e}")
 
 
 if __name__ == "__main__":

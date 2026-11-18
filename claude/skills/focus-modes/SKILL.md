@@ -24,6 +24,8 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | "turn blocking off" | `focus off`, which works only in the note's `off_hours`; at any other time offer a break or another mode instead. Never route around this |
 | "deep focus for 90 minutes", "block AI chat for a bit" | `focus deep 90`: the `timer: deep` block, locked until it ends, on top of any mode. Starting it only tightens, so it runs at once; nobody can end it early |
 | "only Bear and ChatGPT for 45 minutes", "let me pick what's allowed", "something like Micromanager" | `focus only` opens the search (a terminal and fzf, so Yulong runs it himself); `focus only bear chatgpt 45` names the picks, as a group, a word in one group, or an installed app. See "Only sessions" below |
+| "a stretch of a capped mode", "another half hour of it" | `focus <capped mode> [MINUTES]`: at most the mode's `minutes`, then back to the mode before it. A later start the same day asks Yulong for a reason at the terminal, so an agent can make only the first. See "Capped modes" below |
+| "a long day in a capped mode" | `focus <capped mode> --day [MINUTES]`: one stretch from the daily budget, with a reason; Yulong runs it himself |
 | "what's running", "is it in sync" | `focus status` |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
 | "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
@@ -38,6 +40,15 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 - **At the end:** a notification, then the mode it replaced starts again. `focus break` and `focus off` refuse during a session and name `focus only end`.
 - **The cost, accepted by Yulong:** a session has no time cap, so it is a pause-only state that `off_hours` and `break_max_minutes` do not limit.
 - **Keep list:** add to the `only-tools` group an app that must never pause, such as the terminal that runs `focus`.
+
+## Capped modes run for a limited stretch
+
+The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fallback: <mode>}}` caps a mode. `focus <mode> [MINUTES]` runs it for at most `minutes`, then switches back to the mode that ran before it, or to `fallback` if none did, with a notification. A detached waiter and the launchd tick (`focus install-agent`) end it, so it ends after a restart too.
+
+- **Renewal:** allowed at once, with no cooldown. Every start of the mode after the first of the local day asks for a one-line reason at the terminal and refuses without a terminal. Each reason goes to `~/.local/state/focus/commit-log.jsonl` with the time and the command.
+- **Day budget:** `--day [MINUTES]` runs one longer stretch from `day_minutes`, asking the reason once. A day stretch left early gives its unused minutes back; later starts that day are normal stretches.
+- **The mode before is kept:** a renewal keeps it, and a break or only session started during a stretch returns to it, never to the capped mode without its cap. A switch to another mode by hand ends the stretch.
+- **The agent delay still applies:** switching into a capped mode from another mode, and renewing one, wait like any loosening.
 
 ## Loosening waits; do not work around it
 

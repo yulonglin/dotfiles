@@ -33,6 +33,10 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
     monkeypatch.setattr(ct, "ONLY_FILE", tmp_path / "only.json")
+    monkeypatch.setattr(ct, "CAPPED_FILE", tmp_path / "capped.json")
+    monkeypatch.setattr(ct, "CAPPED_DAY_FILE", tmp_path / "capped-day.json")
+    monkeypatch.setattr(ct, "COMMIT_LOG", tmp_path / "commit-log.jsonl")
+    monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
@@ -1902,3 +1906,248 @@ def test_no_strong_lock_key_means_no_warning(cfg):
 def test_strong_lock_blocks_must_be_a_list_of_names(tmp_path):
     with pytest.raises(SystemExit, match="strong_lock_blocks"):
         ct.load_config(note_with(tmp_path, "strong_lock_blocks: avoid"))
+
+
+class Clock:
+    """A settable time.time for the code under test."""
+
+    def __init__(self, start: float):
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, minutes: float) -> None:
+        self.now += minutes * 60
+
+
+def at_terminal(monkeypatch, answers: list[str]) -> list[str]:
+    """A person at a terminal who types the given answers; returns the prompts shown."""
+    prompts = []
+
+    class TTY:
+        @staticmethod
+        def isatty():
+            return True
+
+    monkeypatch.setattr(ct.sys, "stdin", TTY)
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return answers.pop(0)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    return prompts
+
+
+def no_terminal(monkeypatch):
+    class Pipe:
+        @staticmethod
+        def isatty():
+            return False
+
+    monkeypatch.setattr(ct.sys, "stdin", Pipe)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt="": pytest.fail("asked without a terminal")
+    )
+
+
+def log_lines() -> list[dict]:
+    if not ct.COMMIT_LOG.exists():
+        return []
+    return [json.loads(line) for line in ct.COMMIT_LOG.read_text().splitlines()]
+
+
+CAPPED = "capped_modes: {writing: {minutes: 30, day_minutes: 120, fallback: research}}"
+
+
+@pytest.fixture
+def capped_env(tmp_path, monkeypatch):
+    """research running, writing capped at 30 min a stretch and 120 a day."""
+    cfg = ct.load_config(note_with(tmp_path, CAPPED))
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    clock = Clock(dt.datetime(2026, 11, 17, 10, 0).timestamp())
+    monkeypatch.setattr(ct.time, "time", clock)
+    spawned, notes = [], []
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    monkeypatch.setattr(ct, "notify", notes.append)
+    no_terminal(monkeypatch)
+    return cfg, blocks, clock, spawned, notes
+
+
+def on(blocks):
+    return sorted(n for n, b in blocks.items() if b["enabled"] == "true")
+
+
+def test_a_capped_note_is_checked(tmp_path):
+    for bad in (
+        "capped_modes: {nope: {}}",
+        "capped_modes: {writing: {fallback: writing}}",
+        "capped_modes: {writing: {minutes: 0}}",
+        "capped_modes: {writing: {cap: 3}}",
+    ):
+        with pytest.raises(SystemExit, match="capped"):
+            ct.load_config(note_with(tmp_path, bad))
+
+
+def test_the_first_capped_start_of_the_day_asks_nothing_and_ends_back_where_it_was(
+    capped_env,
+):
+    cfg, blocks, clock, spawned, notes = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: writing"]
+    c = ct.read_capped()
+    assert c["back"] == ["research"] and c["until"] == clock.now + 30 * 60
+    assert ("capped-wait",) in spawned and log_lines() == []
+    clock.advance(29)
+    assert not ct.end_capped(cfg) and on(blocks) == ["mode: writing"]
+    clock.advance(1)
+    ct.cmd_capped_wait(cfg)  # the waiter: the stretch is over
+    assert on(blocks) == ["mode: research"]
+    assert ct.read_capped() is None
+    assert notes == ["writing stretch over: back to research."]
+
+
+def test_with_no_mode_before_it_a_capped_mode_ends_in_its_fallback(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.cmd_capped(cfg, "writing", ["10"])
+    clock.advance(10)
+    ct.cmd_tick(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_stretch_longer_than_the_cap_is_refused(capped_env):
+    cfg, *_ = capped_env
+    with pytest.raises(SystemExit, match="1 to 30"):
+        ct.cmd_capped(cfg, "writing", ["45"])
+
+
+def test_a_later_start_the_same_day_needs_a_reason_at_a_terminal(
+    capped_env, monkeypatch
+):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: research"]
+    prompts = at_terminal(monkeypatch, ["the draft is due"])
+    ct.cmd_capped(cfg, "writing", ["20"])
+    assert prompts == ["Why writing again today? One line: "]
+    (entry,) = log_lines()
+    assert entry["command"] == "focus writing 20"
+    assert entry["reason"] == "the draft is due" and "ts" in entry
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_renewing_straight_away_keeps_the_mode_from_before(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(25)
+    at_terminal(monkeypatch, ["one more section"])
+    ct.cmd_capped(cfg, "writing", [])  # no cooldown
+    c = ct.read_capped()
+    assert c["back"] == ["research"] and c["until"] == clock.now + 30 * 60
+    clock.advance(30)
+    ct.end_capped(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_an_empty_reason_changes_nothing(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    at_terminal(monkeypatch, ["  "])
+    with pytest.raises(SystemExit, match="no reason"):
+        ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: research"] and log_lines() == []
+
+
+def test_a_new_day_starts_free_again(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    clock.advance(24 * 60)
+    ct.cmd_capped(cfg, "writing", [])  # no terminal needed
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_a_day_stretch_asks_once_and_draws_on_the_budget(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    prompts = at_terminal(monkeypatch, ["a long writing day"])
+    ct.cmd_capped(cfg, "writing", [], day=True)
+    assert len(prompts) == 1 and log_lines()[0]["command"] == "focus writing --day 120"
+    assert ct.read_capped()["until"] == clock.now + 120 * 60
+    assert ct.capped_day(clock.now)["used"] == {"writing": 120}
+    clock.advance(120)
+    ct.end_capped(cfg)
+    assert on(blocks) == ["mode: research"]
+    at_terminal(monkeypatch, ["again"])
+    with pytest.raises(SystemExit, match="used up"):
+        ct.cmd_capped(cfg, "writing", [], day=True)
+    at_terminal(monkeypatch, ["a normal stretch after the day one"])
+    ct.cmd_capped(cfg, "writing", [])
+    assert ct.read_capped()["until"] == clock.now + 30 * 60
+
+
+def test_a_day_stretch_left_early_gives_back_what_it_did_not_use(
+    capped_env, monkeypatch
+):
+    cfg, _, clock, *_ = capped_env
+    at_terminal(monkeypatch, ["first part"])
+    ct.cmd_capped(cfg, "writing", ["90"], day=True)
+    clock.advance(40)
+    ct.cmd_start(cfg, "research")  # switching away by hand ends the stretch
+    assert ct.read_capped() is None
+    assert ct.capped_day(clock.now)["used"] == {"writing": 40}
+    at_terminal(monkeypatch, ["second part"])
+    ct.cmd_capped(cfg, "writing", [], day=True)  # the rest of the budget
+    assert ct.read_capped()["until"] == clock.now + 80 * 60
+
+
+def test_a_capped_mode_is_never_brought_back_without_its_cap(capped_env):
+    cfg, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    # An only session or a break started now must return to research, not writing.
+    assert ct.restore_point(cfg, ct.ONLY) == ["research"]
+
+
+def test_a_break_holds_an_overdue_stretch_until_it_brings_the_mode_back(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    blocks["mode: writing"]["enabled"] = "false"  # a break stopped it
+    ct.BREAK_FILE.write_text(
+        json.dumps({"modes": ["writing"], "until": clock.now + 3600})
+    )
+    clock.advance(31)
+    assert not ct.end_capped(cfg) and ct.read_capped() is not None
+    clock.advance(30)
+    ct.cmd_tick(cfg)  # the break ends, then the stretch it brought back
+    assert on(blocks) == ["mode: research"] and ct.read_capped() is None
+
+
+def test_an_agent_switching_into_a_capped_mode_waits(capped_env, monkeypatch):
+    cfg, blocks, *_ = capped_env
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_capped(cfg, "writing", [])
+    assert e.value.code == 3 and on(blocks) == ["mode: research"]
+    assert ct.read_capped() is None
+
+
+def test_status_names_the_end_of_a_capped_stretch(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    end = dt.datetime.fromtimestamp(clock.now + 30 * 60)
+    assert ct.status_headline(cfg, blocks) == (
+        f"now: writing mode until {end:%H:%M}, then research"
+    )
