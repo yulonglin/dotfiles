@@ -2694,3 +2694,43 @@ def test_default_mode_config_is_checked(tmp_path):
     ):
         with pytest.raises(SystemExit, match="default_mode"):
             ct.load_config(note_with(tmp_path, bad))
+
+
+def test_sync_names_what_a_committed_blocks_lock_keeps_out(
+    commit_env, monkeypatch, capsys
+):
+    cfg, blocks, clock, calls = committed(commit_env)
+    blocks["mode: research"]["exceptions"].remove("arxiv.org")
+    gated = []
+    monkeypatch.setattr(ct, "gate", lambda *a: gated.append(a))
+    ct.cmd_sync(cfg)  # no "did not take these additions" exit
+    out = capsys.readouterr().out
+    assert "committed and locked" in out and "focus allow arxiv.org" in out
+    assert not any("mode: research" in c and "-add" in c for c in calls)
+    assert gated == []  # nothing for an agent to wait for: it could not land
+
+
+def test_an_allow_of_a_site_the_note_already_has_adds_no_copy(commit_env, monkeypatch):
+    cfg, blocks, clock, _ = committed(commit_env)
+    blocks["mode: research"]["exceptions"].remove("arxiv.org")
+    request(commit_env, monkeypatch, ct.cmd_allow, ["arxiv.org"], False)
+    run_out(blocks)
+    ct.cmd_commit_wait(cfg)
+    assert "arxiv.org" in blocks["mode: research"]["exceptions"]
+    assert "added-research" not in ct.CONFIG_PATH.read_text()
+
+
+def test_a_commitments_end_names_sites_held_out_but_does_not_add_them(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, calls = committed(commit_env, "30")
+    blocks["mode: research"]["exceptions"].remove("arxiv.org")
+    said = []
+    monkeypatch.setattr(ct, "notify", said.append)
+    clock.advance(40)
+    run_out(blocks)
+    ct.catch_up(cfg)
+    assert ct.read_commit() is None
+    assert "focus sync" in said[-1] and "arxiv.org" in said[-1]
+    # the tick never loosens by itself
+    assert "arxiv.org" not in blocks["mode: research"]["exceptions"]
