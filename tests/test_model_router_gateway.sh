@@ -87,17 +87,25 @@ committed_url="$(git -C "$REPO" show HEAD:claude/settings.json 2>/dev/null | pyt
 # supported state for as long as the fleet is part-migrated, so it skips rather
 # than fails -- otherwise this suite is red on every un-migrated machine and the
 # noise teaches you to ignore it. Only a machine that has BOTH is drift.
+# The proxy wiring (`wiring = "proxy"`) puts HTTPS_PROXY in the drop-in instead
+# of a base URL; the route probes below still go through the router's base-URL
+# front, which it serves alongside the proxy.
+managed_proxy="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("env",{}).get("HTTPS_PROXY",""))' "$MANAGED" 2>/dev/null)"
+case "$managed_proxy" in http://127.0.0.1:*) managed_kind=proxy ;; *) managed_kind="" ;; esac
 case "$managed_url" in
   http://127.0.0.1:*) ok "settings  managed drop-in wired to loopback" ;;
-  "")
+  "") if [ "$managed_kind" = proxy ]; then ok "settings  managed drop-in wired as HTTPS proxy $managed_proxy (Remote Control works)"; else
     case "$deployed_url" in
       http://127.0.0.1:*) skip "settings  no drop-in yet; gateway is in $SETTINGS (pre-migration state; run: model-router-wire apply, then its sudo line)" ;;
       *) fail "settings  no managed drop-in at $MANAGED and no base URL in $SETTINGS (run: model-router-wire apply, then its sudo line)" ;;
     esac
+    fi
     ;;
   *) fail "settings  managed ANTHROPIC_BASE_URL is not loopback: $managed_url" ;;
 esac
-if [ -z "$managed_url" ]; then
+if [ -z "$managed_url" ] && [ "$managed_kind" = proxy ]; then
+  if [ -n "$deployed_url" ]; then fail "settings  deployed $SETTINGS carries ANTHROPIC_BASE_URL under the proxy drop-in (run: model-router-wire apply)"; else ok "settings  deployed user file carries no base URL"; fi
+elif [ -z "$managed_url" ]; then
   :  # pre-migration: the user file is meant to carry the URL, already reported above
 elif [ -n "$deployed_url" ]; then
   fail "settings  deployed $SETTINGS still carries ANTHROPIC_BASE_URL as well as the drop-in (run: model-router-wire apply)"
