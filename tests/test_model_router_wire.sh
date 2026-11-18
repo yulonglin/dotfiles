@@ -77,7 +77,7 @@ assert desc["claude-opus-5-5"] == "Claude subscription", desc
 assert [o["model"] for o in p["options"]][:3] == ["claude-opus-5-5", "claude-fable-5-2", "claude-sonnet-5-5"], p
 PY
 # Each routing ID compacts at its own window; usage scaling is gone from the router config.
-python3 - "$CLAUDE_SETTINGS" "$MODEL_ROUTER_CONFIG" <<'PY' || fail "per-route compaction windows missing or scaling still rendered"
+python3 - "$CLAUDE_SETTINGS" "$MODEL_ROUTER_CONFIG" "$REPO_ROOT/config/model-router.toml" <<'PY' || fail "per-route compaction windows missing, scaling still rendered, or a pass-through table not copied"
 import json, sys
 s = json.load(open(sys.argv[1]))
 ms = s["modelSettings"]
@@ -91,6 +91,11 @@ assert not any(k.startswith("claude-") for k in ms), "passthrough Claude rows go
 assert s["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "1000000", s["env"]
 router = open(sys.argv[2]).read()
 assert "context-window-scaling" not in router and "declared-context-window" not in router
+import tomllib
+src = tomllib.load(open(sys.argv[3], "rb"))
+rendered = tomllib.loads(router)
+for table in ("auto-mode-classifier",):
+    assert rendered.get(table) == src.get(table), (table, rendered.get(table), src.get(table))
 PY
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
