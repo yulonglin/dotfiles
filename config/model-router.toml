@@ -161,14 +161,29 @@ picker = false           # off /model (2026-10-28); subagents still take `model:
 
 # ---- OpenAI, from the account (never through OpenRouter) ----------------
 
+# `astra` moved here from gpt-6-astra on 2026-11-17. The managed CLIProxyAPI
+# 8.0.58 child lists gpt-6.2-astra and gpt-6.2-sol on the account with no pin
+# change (router 0.1.36, plugin 0.1.48, both the latest releases), and one chat
+# request to each answered. Router 0.1.36 has no built-in route for either, so
+# the rendered block names the upstream model itself.
 [[models]]
-id = "gpt-6-astra"
+id = "gpt-6.2-astra"
 aliases = ["astra"]
 writer-priority = 2
-name = "GPT-6 Astra"
+name = "GPT-6.2 Astra"
 provider = "codex"
 context-window = 258400
 agent = "high"
+
+# The plugin's own gpt-6-astra(-fast) agents and doctor's shipped-agent-routes
+# check name this id, so the route stays.
+[[models]]
+id = "gpt-6-astra"
+name = "GPT-6 Astra"
+provider = "codex"
+context-window = 258400
+picker = false           # `astra` is now GPT-6.2 Astra
+agent = false
 
 # Gemini sits right below Astra in /model (Yulong, 2026-10-28), so its block is
 # here although it routes through OpenRouter like the families further down.
@@ -199,15 +214,24 @@ context-window = 1048576
 picker = false           # `gemini` is now Carbon; the route stays for anything naming gemini-4-argon
 agent = false
 
-# `sol` moved here from gpt-5.6-sol on 2026-10-01. Router 0.1.23 serves
+# `sol` named this model from 2026-10-01 to 2026-11-17. Router 0.1.23 serves
 # gpt-6.1-sol through the account (released 2026-09-29, listed by the managed
 # CLIProxyAPI 7.3.16 child with no pin change), and the plugin's own
 # adversarial-code-reviewer, plan-reviewer and gpt-6.1-sol(medium|high) agents
 # call this id -- without the route they fail with model_not_found.
 [[models]]
 id = "gpt-6.1-sol"
-aliases = ["sol"]
 name = "GPT-6.1 Sol"
+provider = "codex"
+context-window = 258400
+picker = false           # `sol` is now GPT-6.2 Sol; the plugin's agents still call this id
+agent = false
+
+# `sol` moved here from gpt-6.1-sol on 2026-11-17, with astra (see above).
+[[models]]
+id = "gpt-6.2-sol"
+aliases = ["sol"]
+name = "GPT-6.2 Sol"
 provider = "codex"
 context-window = 258400
 agent = "high"
