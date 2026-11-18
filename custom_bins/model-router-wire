@@ -224,14 +224,19 @@ def render_router_config(src: dict) -> str:
             out.append(f"[{table}]")
             out += [f"{k} = {toml_scalar(v)}" for k, v in src[table].items()]
             out.append("")
+    # [[model-overrides]] merges onto the router's built-in GPT routes by
+    # routing-id and adds a route for any new one, so a route a later router
+    # release ships still reaches this install. The deprecated [[models]] form
+    # (used until 2026-11-17) replaced the built-in list wholesale. Every field
+    # is written, so each entry stands alone whether or not its id is built in.
     for m in enabled(src):
         if m["provider"] != "codex":
             continue
         for rid in ids(m):
             out += [
-                "[[models]]",
+                "[[model-overrides]]",
                 f'routing-id = "{rid}"',
-                'upstream = "cliproxy"',
+                'family = "gpt"',
                 f'upstream-model = "{m.get("slug", m["id"])}"',
                 f'display-name = "{m["name"]}"',
                 f"context-window = {m['context-window']}",

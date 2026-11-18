@@ -1,5 +1,5 @@
 sandbox_mode = "workspace-write"
-model = "gpt-6-astra"
+model = "gpt-6.2-astra"
 model_reasoning_effort = "medium"
 service_tier = "default"
 # Default to "Approve for me": automatically review requests, keeping the sandbox.
