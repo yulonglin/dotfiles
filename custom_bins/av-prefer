@@ -50,9 +50,10 @@ need_sas() {
         || { print -u2 "av-prefer: SwitchAudioSource not found (brew install switchaudio-osx)"; exit 1; }
 }
 
-pick_speaker() {  # print the first present output device matching SPEAKERS
-    local want dev
-    local -a present=("${(@f)$(SwitchAudioSource -a -t output)}")
+pick_speaker() {  # print the first present output matching SPEAKERS; 1 = no match, 2 = list failed
+    local want dev out
+    out=$(SwitchAudioSource -a -t output) || { print -u2 "av-prefer: could not list audio outputs"; return 2; }
+    local -a present=("${(@f)out}")
     for want in "${SPEAKERS[@]}"; do
         for dev in "${present[@]}"; do
             [[ ${dev:l} == *${want:l}* ]] && { print -r -- "$dev"; return 0; }
@@ -61,32 +62,43 @@ pick_speaker() {  # print the first present output device matching SPEAKERS
     return 1
 }
 
-# show <label> <current> <preferred>: green when they agree, yellow otherwise
+# show <label> <current> <preferred>: green when they agree, yellow otherwise;
+# an empty <preferred> means no present device is in the priority list
 show() {
     printf '%-8s ' "$1"
-    if [[ $2 == "$3" ]]; then paint green "$2"; print " (preferred)"
+    if [[ -z $3 ]]; then paint yellow "$2"; print " (no present device is in the $1 list)"
+    elif [[ $2 == "$3" ]]; then paint green "$2"; print " (preferred)"
     else paint yellow "$2"; print " (preferred: $3 — run av-prefer apply)"; fi
 }
 
 status() {
     need_sas
-    local cam spk
+    local cam spk want_cam want_spk rc=0
     cam=$(camera status)
     spk=$(SwitchAudioSource -c -t output)
-    show camera "$cam" "$(camera pick "${CAMERAS[@]}" 2>/dev/null || print -r -- "$cam")"
-    show speaker "$spk" "$(pick_speaker || print -r -- "$spk")"
+    want_cam=$(camera pick "${CAMERAS[@]}" 2>/dev/null) || want_cam=""
+    want_spk=$(pick_speaker) || rc=$?
+    (( rc == 2 )) && exit 1
+    show camera "$cam" "$want_cam"
+    show speaker "$spk" "$want_spk"
 }
 
 apply() {
     need_sas
-    local cam spk
-    cam=$(camera set "${CAMERAS[@]}")
-    print -n "camera   "; paint green "$cam"; print
-    if spk=$(pick_speaker); then
+    local cam spk rc=0
+    if cam=$(camera set "${CAMERAS[@]}" 2>/dev/null); then
+        print -n "camera   "; paint green "$cam"; print
+    else
+        print -n "camera   "; paint yellow "no match for: ${(j:, :)CAMERAS} — left as is"; print
+    fi
+    spk=$(pick_speaker) || rc=$?
+    if (( rc == 0 )); then
         SwitchAudioSource -t output -s "$spk" >/dev/null
         print -n "speaker  "; paint green "$spk"; print
-    else
+    elif (( rc == 1 )); then
         print -n "speaker  "; paint yellow "no match for: ${(j:, :)SPEAKERS} — left as is"; print
+    else
+        exit 1
     fi
 }
 
