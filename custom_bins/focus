@@ -394,6 +394,7 @@ def load_config(path: Path) -> dict:
         "agent_loosen_delay_minutes",
         "off_hours",
         "break_max_minutes",
+        "break_every_minutes",
         "no_mode_allow",
         "only",
         "overlaps",
@@ -746,6 +747,9 @@ def is_locked(block: dict) -> bool:
 BREAK_FILE = PENDING.parent / "break.json"
 SZ_LOCK = PENDING.parent / "screenzen.lock"  # one ScreenZen write at a time
 DEFAULT_BREAK_MAX = 30
+# break_every_minutes: a new break waits this long after the last one started (0: none)
+DEFAULT_BREAK_EVERY = 60
+LAST_BREAK_FILE = PENDING.parent / "last-break.json"
 ONLY_FILE = PENDING.parent / "only.json"
 DEFAULT_ONLY_MIN = 45
 CAPPED_FILE = PENDING.parent / "capped.json"  # the capped stretch that runs now
@@ -935,6 +939,22 @@ def spawn_self(*args: str) -> None:
     )
 
 
+def break_every(cfg: dict) -> int:
+    v = cfg.get("break_every_minutes")
+    return DEFAULT_BREAK_EVERY if v is None else int(v)
+
+
+def next_break_at(cfg: dict) -> float | None:
+    """When the next break may start, or None if it may start now: a break waits
+    'break_every_minutes' after the last one started (Yulong, 2026-11-18)."""
+    every = break_every(cfg)
+    last = (read_state(LAST_BREAK_FILE) or {}).get("started")
+    if not every or not isinstance(last, (int, float)):
+        return None
+    at = last + every * 60
+    return at if time.time() < at else None
+
+
 def cmd_break(cfg: dict, args: list[str]) -> None:
     """Stop the running modes for N minutes; they start again when the break ends."""
     refuse_if_committed("a break")
@@ -952,6 +972,12 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
         sys.exit(
             f"focus: already on a break until {end:%H:%M:%S} (back to {', '.join(b['modes'])})"
         )
+    if at := next_break_at(cfg):
+        every = break_every(cfg)
+        sys.exit(
+            f"focus: one break per {every} min; the next can start at "
+            f"{dt.datetime.fromtimestamp(at):%H:%M}"
+        )
     blocks = read_blocks()
     running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
     if not running:
@@ -962,6 +988,7 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     until = time.time() + int(minutes) * 60
     BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
     BREAK_FILE.write_text(json.dumps({"modes": running, "until": until}))
+    write_state(LAST_BREAK_FILE, {"started": time.time()})
     # Start the waiter before anything is switched off: if it cannot start, no mode stops.
     # Any later focus command also ends an expired break, so the waiter is not the only way.
     try:
@@ -3312,16 +3339,22 @@ def cmd_alfred(cfg: dict, query: str) -> None:
         if len(words_) == 2 and words_[0] == "break" and words_[1].isdigit()
         else "15"
     )
+    next_at = next_break_at(cfg)
     items.append(
         {
             "uid": "break",
             "title": f"break for {mins} min",
-            "subtitle": "stop "
+            "subtitle": (
+                f"one break per {break_every(cfg)} min; the next can "
+                f"start at {dt.datetime.fromtimestamp(next_at):%H:%M}"
+            )
+            if next_at
+            else "stop "
             + (", ".join(sorted(running)) if running else "nothing: no mode runs")
             + "; it starts again by itself. Type minutes after 'break' to change it",
             "arg": f"break {mins}",
             "autocomplete": "break ",
-            "valid": bool(running),
+            "valid": bool(running) and not next_at,
         }
     )
     # Timers: 'focus deep 90' runs for 90 minutes; plain 'focus deep' uses the default.

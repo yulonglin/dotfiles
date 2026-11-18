@@ -21,7 +21,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 |---|---|
 | "switch to / start writing" | `focus writing` |
 | "start research by itself in the morning", "what runs by default" | the note's `default_mode`: the launchd job starts it once a day between its `start` and `until` (09:00–12:00 on weekdays unless set) when nothing runs; a mode stopped by hand stays stopped that day |
-| "take a break", "pause for 15 minutes" | `focus break 15`: stops the mode, which starts again by itself after the break (at most `break_max_minutes`). `focus install-agent` adds a once-a-minute launchd job so a break ends even after a restart |
+| "take a break", "pause for 15 minutes" | `focus break 15`: stops the mode, which starts again by itself after the break (at most `break_max_minutes`). One break per `break_every_minutes` (default 60), counted from the last break's start. `focus install-agent` adds a once-a-minute launchd job so a break ends even after a restart |
 | "turn blocking off" | `focus off`, which works only in the note's `off_hours`; at any other time offer a break or another mode instead. Never route around this |
 | "deep focus for 90 minutes", "block AI chat for a bit" | `focus deep 90`: the `timer: deep` block, locked until it ends, on top of any mode. Starting it only tightens, so it runs at once; nobody can end it early |
 | "only Bear and ChatGPT for 45 minutes", "let me pick what's allowed", "something like Micromanager" | `focus only` opens the search (a terminal and fzf, so Yulong runs it himself); `focus only bear chatgpt 45` names the picks, as a group, a word in one group, or an installed app. See "Only sessions" below |

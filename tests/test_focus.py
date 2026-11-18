@@ -35,6 +35,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
     monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
+    monkeypatch.setattr(ct, "LAST_BREAK_FILE", tmp_path / "last-break.json")
     monkeypatch.setattr(ct, "ONLY_FILE", tmp_path / "only.json")
     monkeypatch.setattr(ct, "CAPPED_FILE", tmp_path / "capped.json")
     monkeypatch.setattr(ct, "CAPPED_DAY_FILE", tmp_path / "capped-day.json")
@@ -1055,6 +1056,32 @@ def test_a_break_stops_the_mode_and_the_waiter_starts_it_again(
     ct.cmd_resume(cfg)
     assert blocks["mode: research"]["enabled"] == "true"
     assert not (tmp_path / "break.json").exists()
+
+
+def test_a_second_break_waits_for_break_every_minutes(cfg, tmp_path, monkeypatch):
+    cfg = {**cfg, "break_every_minutes": 60}
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    monkeypatch.setattr(ct.subprocess, "Popen", lambda cmd, **k: None)
+    now = [1_800_000_000.0]
+    monkeypatch.setattr(ct.time, "time", lambda: now[0])
+    ct.cmd_break(cfg, ["10"])
+    now[0] += 11 * 60
+    ct.end_break(cfg)
+    assert blocks["mode: research"]["enabled"] == "true"
+    with pytest.raises(SystemExit, match="one break per 60 min"):
+        ct.cmd_break(cfg, ["10"])
+    assert blocks["mode: research"]["enabled"] == "true"
+    now[0] += 50 * 60  # an hour after the first started
+    ct.cmd_break(cfg, ["10"])
+    assert blocks["mode: research"]["enabled"] == "false"
+
+
+def test_breaks_are_spaced_an_hour_by_default_and_zero_turns_it_off(cfg):
+    ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
+    assert ct.next_break_at(cfg) is not None
+    assert ct.next_break_at({**cfg, "break_every_minutes": 0}) is None
 
 
 def test_a_block_group_off_in_none_stands_aside_with_no_mode(cfg):
