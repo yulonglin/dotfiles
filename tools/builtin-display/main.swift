@@ -12,6 +12,7 @@
 //
 // Compiled by custom_bins/builtin-display on first run; see that file for usage.
 
+import AppKit
 import CoreGraphics
 import Darwin
 import Foundation
@@ -129,8 +130,20 @@ func describe(_ id: CGDirectDisplayID) -> String {
 // MARK: actions
 
 // Returns nil on success, else what went wrong. The watcher logs the error and
-// keeps running; the one-shot commands exit on it.
+// keeps running; the one-shot commands exit on it. Retries, because applying a
+// configuration while the previous one is still settling fails with CGError
+// 1001 (seen 3 s after an `off`, 2026-11-18).
 func trySetEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) -> String? {
+    var error: String?
+    for attempt in 1...5 {
+        error = setEnabledOnce(id, enabled)
+        if error == nil { return nil }
+        if attempt < 5 { sleep(1) }
+    }
+    return error
+}
+
+func setEnabledOnce(_ id: CGDirectDisplayID, _ enabled: Bool) -> String? {
     guard let configure = loadConfigureEnabled() else {
         return "this macOS no longer exports CGSConfigureDisplayEnabled; the private API is gone"
     }
@@ -272,10 +285,16 @@ func log(_ message: String) {
     fflush(stdout)
 }
 
+var lastSnapshot = ""
+
 func reconcile() {
     let now = Set(externals().map(hardwareKey))
     let added = now.subtracting(knownExternals)
-    log("reconfigured: externals=\(now.sorted()) builtin=\(builtinIsOn() ? "on" : "off") lid=\(lidClosed() ? "closed" : "open")")
+    let snapshot = "externals=\(now.sorted()) builtin=\(builtinIsOn() ? "on" : "off") lid=\(lidClosed() ? "closed" : "open")"
+    if snapshot != lastSnapshot {
+        log("state: \(snapshot)")
+        lastSnapshot = snapshot
+    }
     defer { knownExternals = now }
 
     if !added.isEmpty, let id = onlineBuiltinID(), !lidClosed() {
@@ -311,7 +330,22 @@ func watch() {
     }
     CGDisplayRegisterReconfigurationCallback(callback, nil)
     scheduleReconcile()
-    dispatchMain()
+    // A bare command-line process never saw changes made elsewhere (unplugging
+    // the monitor, or `on` from another shell): not through the callback, and
+    // not by re-reading the display list, which stays cached until WindowServer
+    // events are processed. Measured 2026-11-18 under dispatchMain and
+    // CFRunLoopRun. Running as a faceless NSApplication (no Dock icon, no menu)
+    // gives the process a real WindowServer connection; the 2 s poll is a
+    // backstop in case a notification is missed.
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    NotificationCenter.default.addObserver(
+        forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+    ) { _ in scheduleReconcile() }
+    let timer = DispatchSource.makeTimerSource(queue: .main)
+    timer.schedule(deadline: .now() + 2, repeating: 2)
+    timer.setEventHandler { reconcile() }
+    timer.resume()
+    NSApplication.shared.run()
 }
 
 let usage = """
