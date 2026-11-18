@@ -104,6 +104,28 @@ rendered = tomllib.loads(router)
 for table in ("auto-mode-classifier",):
     assert rendered.get(table) == src.get(table), (table, rendered.get(table), src.get(table))
 PY
+# An effort level /effort saved for a routed model survives the next apply; only
+# the compaction window is the script's, and a stale window-only entry goes.
+python3 - "$CLAUDE_SETTINGS" <<'PY'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["modelSettings"]["astra"]["effortLevel"] = "medium"
+s["modelSettings"]["gone-route"] = {"autoCompactWindow": 200000}
+s["modelSettings"]["gone-picked"] = {"autoCompactWindow": 200000, "effortLevel": "low"}
+json.dump(s, open(p, "w"))
+PY
+"$WIRE" apply --no-restart >/dev/null
+python3 - "$CLAUDE_SETTINGS" <<'PY' || fail "apply dropped an /effort level saved for a routed model, or kept a stale window"
+import json, sys
+ms = json.load(open(sys.argv[1]))["modelSettings"]
+assert ms["astra"] == {"effortLevel": "medium", "autoCompactWindow": 258400}, ms["astra"]
+assert ms["kimi"] == {"autoCompactWindow": 250000}, ms["kimi"]
+assert "gone-route" not in ms, ms.get("gone-route")
+assert ms["gone-picked"] == {"effortLevel": "low"}, ms.get("gone-picked")
+PY
+# Generated GPT agents carry no fixed effort: the Agent call or the saved level picks it.
+grep -l '^effort:' "$MODEL_ROUTER_AGENTS"/*.md 2>/dev/null && fail "a generated agent bakes in an effort level"
+[ -f "$MODEL_ROUTER_AGENTS/sol.md" ] || fail "no bare sol agent generated"
 "$WIRE" status | grep -q 'not wired' && fail "status calls the gateway off while the user file carries it"
 [ -f "$MODEL_ROUTER_CONFIG" ] || fail "router config not rendered"
 [ -f "$MODEL_ROUTER_MANAGED" ] && fail "apply wrote the managed path itself (it must go through sudo)"
