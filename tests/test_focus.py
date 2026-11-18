@@ -2021,7 +2021,7 @@ def test_with_no_mode_before_it_a_capped_mode_ends_in_its_fallback(capped_env):
     blocks["mode: research"]["enabled"] = "false"
     ct.cmd_capped(cfg, "writing", ["10"])
     clock.advance(10)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     assert on(blocks) == ["mode: research"]
 
 
@@ -2134,7 +2134,7 @@ def test_a_break_holds_an_overdue_stretch_until_it_brings_the_mode_back(capped_e
     clock.advance(31)
     assert not ct.end_capped(cfg) and ct.read_capped() is not None
     clock.advance(30)
-    ct.cmd_tick(cfg)  # the break ends, then the stretch it brought back
+    ct.catch_up(cfg)  # the break ends, then the stretch it brought back
     assert on(blocks) == ["mode: research"] and ct.read_capped() is None
 
 
@@ -2241,11 +2241,50 @@ def test_a_commitment_needs_the_launchd_job(commit_env):
 def test_a_commitment_starts_the_mode_and_locks_it_one_wait_ahead(commit_env):
     cfg, blocks, clock, calls, *_ = commit_env
     ct.cmd_commit(cfg, "research", ["60"])
-    assert ("-start", "mode: research", "-lock", "5") in calls
+    # Started already locked: no plain '-start' leaves it running unlocked first.
+    assert calls == [("-start", "mode: research", "-lock", "5")]
     assert blocks["mode: research"]["enabled"] == "true"
     assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
     s = ct.read_commit()
     assert s["until"] == clock.now + 3600 and s["pending"] == []
+
+
+def test_committing_the_running_mode_locks_it_where_it_runs(commit_env):
+    cfg, blocks, clock, calls, *_ = commit_env
+    blocks["mode: research"]["enabled"] = "true"
+    ct.cmd_commit(cfg, "research", ["30"])
+    assert calls == [("-start", "mode: research", "-lock", "5")]
+    assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
+
+
+def test_an_allow_still_locks_again_when_the_note_cannot_be_edited(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, _ = committed(commit_env)
+    request(commit_env, monkeypatch, ct.cmd_allow, ["docs.example.org"], False)
+    monkeypatch.setattr(ct, "CONFIG_PATH", ct.CONFIG_PATH.with_name("gone.md"))
+    run_out(blocks)
+    ct.cmd_commit_wait(cfg)
+    b = blocks["mode: research"]
+    assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
+    assert "docs.example.org" in b["exceptions"]
+    assert ct.read_commit()["pending"] == []
+    assert log_lines()[-1]["note_failed"]
+
+
+def test_any_focus_command_first_keeps_the_commitment(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env, "30")
+    # Without the launchd job the lock ran out; the next command puts it back.
+    clock.advance(10)
+    run_out(blocks)
+    ct.catch_up(cfg)
+    assert blocks["mode: research"]["enabled"] == "true"
+    clock.advance(30)
+    run_out(blocks)
+    ct.catch_up(cfg)  # past the end: cleared, and the mode stays on
+    assert ct.read_commit() is None
+    ct.cmd_break(cfg, ["10"])  # no longer refused
+    assert blocks["mode: research"]["enabled"] == "false"
 
 
 def test_a_capped_mode_cannot_be_committed(commit_env):
@@ -2281,10 +2320,10 @@ def test_an_extension_never_asks_for_a_shorter_lock():
 def test_the_tick_extends_the_lock_shortly_before_it_runs_out(commit_env):
     cfg, blocks, clock, calls = committed(commit_env)
     clock.advance(2)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     assert calls == []  # three minutes of lock left
     clock.advance(1)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     assert calls == [("-start", "mode: research", "-lock", "5")]
     assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
 
@@ -2362,7 +2401,7 @@ def test_an_allow_waits_for_the_lock_then_lands_in_the_note_and_the_block(
     assert ("commit-wait",) in spawned
     # While the request waits, the tick stops extending the lock.
     clock.advance(4)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     assert calls == []
     # The waiter polls until Cold Turkey's lock runs out and the block stops.
     ran_out = []
@@ -2402,7 +2441,7 @@ def test_a_dead_waiter_is_covered_by_the_tick(commit_env, monkeypatch):
     cfg, blocks, *_ = committed(commit_env)
     request(commit_env, monkeypatch, ct.cmd_end)
     run_out(blocks)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     assert ct.read_commit() is None
 
 
@@ -2410,7 +2449,7 @@ def test_a_block_found_stopped_before_the_end_is_locked_again_and_logged(commit_
     cfg, blocks, clock, _ = committed(commit_env)
     clock.advance(20)  # the Mac slept through the extensions
     run_out(blocks)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     b = blocks["mode: research"]
     assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
     (entry,) = log_lines()
@@ -2421,7 +2460,7 @@ def test_a_restart_that_does_not_land_is_not_logged(commit_env, monkeypatch):
     cfg, blocks, _, _ = committed(commit_env)
     run_out(blocks)
     monkeypatch.setattr(ct, "ct_send", lambda *a: None)  # the screen is locked
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     assert log_lines() == [] and ct.read_commit() is not None
 
 
@@ -2429,11 +2468,11 @@ def test_after_the_end_the_mode_stays_on_unlocked(commit_env):
     cfg, blocks, clock, _ = committed(commit_env, "10")
     for _ in range(10):  # the tick keeps the lock ahead until the end
         clock.advance(1)
-        ct.cmd_tick(cfg)
+        ct.catch_up(cfg)
     assert ct.read_commit() is not None  # the last lock reaches the end
     clock.advance(1)
     run_out(blocks)
-    ct.cmd_tick(cfg)
+    ct.catch_up(cfg)
     b = blocks["mode: research"]
     assert ct.read_commit() is None and b["enabled"] == "true" and b["lock"] == "none"
 
@@ -2449,6 +2488,8 @@ def test_status_shows_the_commitment(commit_env):
 def test_commit_note_keys_and_reserved_names_are_checked(tmp_path):
     with pytest.raises(SystemExit, match="commit_wait_minutes"):
         ct.load_config(note_with(tmp_path, "commit_wait_minutes: soon"))
+    with pytest.raises(SystemExit, match=">= 2"):  # it would lapse between ticks
+        ct.load_config(note_with(tmp_path, "commit_wait_minutes: 1"))
     p = tmp_path / "n.md"
     p.write_text(NOTE.replace("writing:", "end:", 1))
     with pytest.raises(SystemExit, match="taken by the command"):

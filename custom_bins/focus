@@ -91,8 +91,9 @@ not delayed by this, with one exception: a committed block delays a person too
 (2026-11-18).
 
 'focus <mode> [MINUTES] --commit' (default 60 min) starts the mode and keeps its
-block locked until the end time with a rolling lock: the launchd tick keeps the
-lock about `commit_wait_minutes` (default 5) ahead with '-start <block> -lock N',
+block locked until the end time with a rolling lock: the launchd tick (and every
+focus command, first) keeps the lock about `commit_wait_minutes` (default 5, at
+least 2) ahead with '-start <block> -lock N',
 and starts and locks the block again if it finds it stopped before the end with
 nothing pending (a missed tick, sleep, a locked screen), logging that. It needs the
 launchd job, and refuses without it. While it runs, 'break', 'off', 'only' and
@@ -398,9 +399,10 @@ def load_config(path: Path) -> dict:
         isinstance(ov, dict) and all(isinstance(v, str) and v for v in ov.values())
     ):
         problems.append("'overlaps' must map each site to a one-line reason")
-    for key in ("commit_wait_minutes", "commit_text_chars"):
-        if key in cfg and not (isinstance(cfg[key], int) and cfg[key] >= 1):
-            problems.append(f"'{key}' must be a whole number >= 1")
+    # A one-minute lock would run out between two once-a-minute ticks.
+    for key, low in (("commit_wait_minutes", 2), ("commit_text_chars", 1)):
+        if key in cfg and not (isinstance(cfg[key], int) and cfg[key] >= low):
+            problems.append(f"'{key}' must be a whole number >= {low}")
     for name in [*(cfg.get("modes") or {}), *(cfg.get("timers") or {})]:
         if name in ("allow", "end"):
             problems.append(f"{name!r} is taken by the command 'focus {name}'")
@@ -1131,9 +1133,10 @@ def cmd_capped(cfg: dict, mode: str, args: list[str], day: bool = False) -> None
         )
 
 
-def cmd_start(cfg: dict, mode: str, prepare=None) -> None:
+def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
     """Start a mode and stop the others. prepare(), when given, runs once the agent gate
-    has passed and before anything is switched: the place for prompts and state."""
+    has passed and before anything is switched: the place for prompts and state.
+    starter(block), when given, starts a stopped target instead of a plain '-start'."""
     if mode not in cfg["modes"]:
         sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
     refuse_if_committed(f"starting {mode!r}", mode)
@@ -1170,7 +1173,7 @@ def cmd_start(cfg: dict, mode: str, prepare=None) -> None:
     # more, and if the start fails the old mode is still on. Failing closed, not open.
     switched = blocks[target].get("enabled") != "true"
     if switched:
-        switch(target, on=True)
+        (starter or (lambda name: switch(name, on=True)))(target)
     # A mode started by hand ends any break, but only once it is confirmed running, so a
     # failed start leaves the break to be restored. It ends another mode's capped stretch.
     BREAK_FILE.unlink(missing_ok=True)
@@ -2784,8 +2787,21 @@ def cmd_commit(cfg: dict, mode: str, args: list[str]) -> None:
             "focus: the launchd job keeps a committed block locked, and it is not "
             "installed; run 'focus install-agent' first"
         )
-    cmd_start(cfg, mode)  # a switch from another mode passes the agent gate here
     wait = commit_wait(cfg)
+
+    def start_locked(name: str) -> None:
+        """Start the stopped block already locked, so it never runs unlocked, and record
+        the commitment as soon as the lock lands."""
+        now = time.time()
+        s = {"mode": mode, "block": name, "until": now + minutes * 60}
+        s.update(locked_to=0, pending=[])
+        if not roll_lock(s, lock_minutes(now, None, s["until"], wait), None):
+            sys.exit(f"focus: Cold Turkey did not start {name!r} locked: {CT_DROPPED}")
+        write_commit(s)
+
+    # A switch from another mode passes the agent gate here. A block that already runs
+    # is locked below instead.
+    cmd_start(cfg, mode, starter=start_locked)
     with commit_lock():
         now = time.time()
         s = read_commit() or {"mode": mode, "block": PREFIX + mode, "until": 0}
@@ -2900,8 +2916,16 @@ def apply_pending(cfg: dict, s: dict, block: dict) -> None:
         print(f"committed block over; {mode} is off")
         return
     sites = list(dict.fromkeys(p["site"] for p in s["pending"]))
-    allow_in_note(CONFIG_PATH, mode, sites)
-    cfg = load_config(CONFIG_PATH)
+    # A note that cannot be edited must not leave the block stopped: report it, and go
+    # on to the exceptions and the lock.
+    from ruamel.yaml.error import YAMLError
+
+    note_failed = None
+    try:
+        allow_in_note(CONFIG_PATH, mode, sites)
+        cfg = load_config(CONFIG_PATH)
+    except (SystemExit, OSError, ValueError, KeyError, TypeError, YAMLError) as e:
+        note_failed = str(e) or type(e).__name__
     have = block.get("exceptions", [])
     sent = [
         add_site(name, "-exception", "exceptions", x) for x in sites if x not in have
@@ -2918,9 +2942,17 @@ def apply_pending(cfg: dict, s: dict, block: dict) -> None:
         switch(name, on=True)
         COMMIT_FILE.unlink(missing_ok=True)
         locked = True
-    log_reason("focus allow (applied)", ", ".join(sites), mode=mode, missing=missing)
+    log_reason(
+        "focus allow (applied)",
+        ", ".join(sites),
+        mode=mode,
+        missing=missing,
+        note_failed=note_failed,
+    )
     sz_follow(cfg, running_modes(cfg))
     text = f"Allowed {', '.join(sites)} in {mode}"
+    if note_failed:
+        text += f"; the note was not changed ({note_failed}), so add it there by hand"
     if missing:
         text += (
             f"; Cold Turkey did not take {', '.join(missing)}, which the note now has, "
@@ -3276,12 +3308,7 @@ def main() -> None:
         "tick",
         "install-agent",
     ):
-        try:
-            end_break(cfg)
-            end_only(cfg)
-            end_capped(cfg)
-        except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
-            print(f"focus: could not end an expired break, session or stretch: {e}")
+        catch_up(cfg)
     match a.command:
         case None:
             cmd_overview(cfg)
@@ -3292,7 +3319,7 @@ def main() -> None:
         case "resume":  # internal: the detached waiter that 'break' starts
             cmd_resume(cfg)
         case "tick":  # internal: the launchd job; ends what is overdue, else silent
-            cmd_tick(cfg)
+            catch_up(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
         case "allow":
@@ -3347,15 +3374,18 @@ def main() -> None:
             cmd_start(cfg, mode)
 
 
-def cmd_tick(cfg: dict) -> None:
-    """The once-a-minute launchd job: keep a committed block locked, then end what is
-    overdue; else stay silent. The lock goes first because it is the one that lapses.
-    Each step runs on its own, so one that fails (switch() exits) skips no other."""
+def catch_up(cfg: dict) -> None:
+    """What the once-a-minute launchd job runs, and every focus command first, so a
+    lost waiter or a missing job cannot leave anything open: keep a committed block
+    locked (or clear it past its end), then end an overdue break, only session or
+    capped stretch; else stay silent. The lock goes first because it is the one that
+    lapses. Each step runs on its own, so one that fails (switch() exits) skips no
+    other."""
     for step in (commit_tick, end_break, end_only, end_capped):
         try:
             step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
-            print(f"focus tick: {step.__name__} failed: {e}")
+            print(f"focus: {step.__name__} could not finish: {e}")
 
 
 if __name__ == "__main__":

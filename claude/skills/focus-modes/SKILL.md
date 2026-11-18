@@ -28,7 +28,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | "a long day in a capped mode" | `focus <capped mode> --day [MINUTES]`: one stretch from the daily budget, with a reason; Yulong runs it himself |
 | "lock me into research for two hours", "commit to writing" | `focus research 120 --commit`: starts the mode and keeps its block locked until the end. Needs `focus install-agent`. See "Committed blocks" below |
 | "allow X" or "end it" during a committed block | `focus allow X` or `focus end`: a typed text and a reason at the terminal, so Yulong runs these himself; the change lands when Cold Turkey's lock runs out |
-| "what's running", "is it in sync" | `focus status` |
+| "what's running", "is it in sync", "is X locked strongly enough" | `focus status` |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
 | "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
 | after editing the note by hand | `focus status`, then `focus sync` (applies the note to Cold Turkey and to ScreenZen for the running mode) |
@@ -43,6 +43,10 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 - **The cost, accepted by Yulong:** a session has no time cap, so it is a pause-only state that `off_hours` and `break_max_minutes` do not limit.
 - **Keep list:** add to the `only-tools` group an app that must never pause, such as the terminal that runs `focus`.
 
+## Status flags blocks with a weak lock
+
+The note's optional `strong_lock_blocks: [<block>, ...]` lists Cold Turkey blocks that should carry a random-text lock. `focus status` prints a yellow `weak lock:` line for each listed block whose lock is none or a delay lock, since a delay lock is one short wait from being turned off, and for a listed block that Cold Turkey does not have. Without the key, nothing is printed. The lock itself is set by hand in Cold Turkey; Cold Turkey's stored form of a random-text lock is unknown, so any lock other than none or a delay counts as strong enough.
+
 ## Capped modes run for a limited stretch
 
 The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fallback: <mode>}}` caps a mode. `focus <mode> [MINUTES]` runs it for at most `minutes`, then switches back to the mode that ran before it, or to `fallback` if none did, with a notification. A detached waiter and the launchd tick (`focus install-agent`) end it, so it ends after a restart too.
@@ -54,7 +58,7 @@ The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fall
 
 ## Committed blocks hold a person too
 
-`focus <mode> [MINUTES] --commit` (default 60) starts the mode and keeps its Cold Turkey block locked until the end time. This reverses "people are never delayed" for that time (2026-11-18). The lock rolls: the launchd tick keeps it about `commit_wait_minutes` (default 5) ahead with `-start <block> -lock N`, extending it once less than about 2.5 minutes remain. State is in `~/.local/state/focus/commit.json`.
+`focus <mode> [MINUTES] --commit` (default 60) starts the mode and keeps its Cold Turkey block locked until the end time. This reverses "people are never delayed" for that time (2026-11-18). The lock rolls: the launchd tick, and every focus command before it does its own work, keep it about `commit_wait_minutes` (default 5, at least 2) ahead with `-start <block> -lock N`, extending it once less than about 2.5 minutes remain. Each extension brings Cold Turkey to the front for about 0.5 s. State is in `~/.local/state/focus/commit.json`.
 
 - **What refuses:** `focus break`, `focus off`, `focus only` and starting any other mode, capped or not, each naming `focus allow` and `focus end`. `focus deep` still runs, since it only tightens. `focus status` and the overview show the committed block and its end time.
 - **Allow and end:** each shows a random text of `commit_text_chars` (default 300) characters to type back exactly, then asks for a reason, logged to `~/.local/state/focus/commit-log.jsonl`. Both need a terminal, so an agent cannot finish them, and an agent also meets the usual delay first. focus then stops extending the lock and prints when it runs out. Cold Turkey then stops the block, and a waiter applies the request within a few seconds.
@@ -82,7 +86,6 @@ When Claude runs it, `focus` delays anything that loosens blocking: stopping a m
 - **"Block X":** add it to an always-blocked group, or remove it from the allow group that lets it through.
 - **"Why is X blocked":** check, in order, whether the running mode allows a group containing X, whether a Cold Turkey always-on block bans X (`focus status` prints `conflict:` lines; an exception never overrides another block)
 - **A mode allowing what an always-on block bans, on purpose:** list the site under the note's top-level `overlaps:` with a one-line reason. `focus status` then prints it dimmed as `by design:` instead of a yellow `conflict:`, and prints `stale overlap:` once the site no longer overlaps, so the list cannot go stale silently., and whether a ScreenZen 🚫 group lists it.
-- **Blocks that need a strong lock:** the note's optional `strong_lock_blocks:` lists Cold Turkey blocks that should carry a random-text lock. `focus status` prints a yellow `weak lock:` line for each one whose lock is none or a delay lock, and for a listed block Cold Turkey does not have. The lock itself is set by hand in Cold Turkey.
 - **What stays manual in Cold Turkey:** removing a site, changing a mode's apps, and loosening an always-on block (the Cold Turkey blocks under `blocklists.cold_turkey` in the note). `focus sync` tries to add newly banned sites to the always-on blocks and timers through the CLI, which only tightens; whether the CLI accepts additions to a locked block is untested, and sync says when one did not land. `focus status` says "focus sync adds these" for a difference sync can make; for the rest, give Yulong that line as the step to do by hand. Sync sends additions one at a time and waits about 1 s for each to land before sending the next, because the command slot holds one.
 - **Why not write Cold Turkey's database directly:** it is possible (the settings are lightly obfuscated JSON), but it is exactly the path around the delay locks, and the running app can overwrite or corrupt it. Do not build or suggest it.
 - **ScreenZen's 🚫 groups win inside ScreenZen.** A site a mode allows but a ScreenZen 🚫 group blocks is left out of every "✅ focus:" group, so it keeps its pause screen all day. A 🚫 group with `off_in: [admin]` in the note stands aside while those modes run (messaging apps during admin) and is back on otherwise.
