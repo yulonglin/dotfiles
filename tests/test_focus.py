@@ -33,6 +33,15 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
     monkeypatch.setattr(ct, "ONLY_FILE", tmp_path / "only.json")
+    monkeypatch.setattr(ct, "CAPPED_FILE", tmp_path / "capped.json")
+    monkeypatch.setattr(ct, "CAPPED_DAY_FILE", tmp_path / "capped-day.json")
+    monkeypatch.setattr(ct, "COMMIT_LOG", tmp_path / "commit-log.jsonl")
+    monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
+    monkeypatch.setattr(ct, "COMMIT_FILE", tmp_path / "commit.json")
+    monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
+    monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
+    monkeypatch.setattr(ct, "DEFAULT_FILE", tmp_path / "default.json")
+    monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
@@ -143,8 +152,19 @@ def test_unknown_group_is_refused(tmp_path):
 
 
 def test_screenzen_allow_list_is_a_superset_of_every_mode(cfg):
-    # The wildcard rule is cut to a prefix that allows more; a cut with no domain is dropped.
-    assert ct.sz_allow_sites(cfg) == ["localhost", "arxiv.org", "github.com/"]
+    # The wildcard rule is cut to a prefix that allows more; a cut leaving only a scheme is
+    # kept, so local files open without a pause.
+    assert ct.sz_allow_sites(cfg) == [
+        "file://",
+        "localhost",
+        "arxiv.org",
+        "github.com/",
+    ]
+
+
+def test_screenzen_keeps_a_scheme_cut_and_drops_an_empty_one():
+    assert ct.sz_allow_pattern("file://*.*") == "file://"
+    assert ct.sz_allow_pattern("*adhd*") is None
 
 
 def test_conflict_when_a_mode_allows_what_an_always_on_block_bans(cfg):
@@ -154,6 +174,25 @@ def test_conflict_when_a_mode_allows_what_an_always_on_block_bans(cfg):
         "'x.com' is allowed in mode 'research' but blocked by 'avoid'",
         "'x.com' is allowed in mode 'writing' but blocked by 'avoid'",
     ]
+
+
+def test_a_listed_overlap_is_by_design_not_a_conflict(cfg):
+    cfg["groups"]["papers"]["sites"].append("x.com")
+    cfg["overlaps"] = {"x.com": "opens only on avoid's breaks", "gone.com": "old"}
+    assert ct.conflicts(cfg) == []
+    lines, stale = ct.deliberate_overlaps(cfg)
+    assert lines == [
+        "x.com opens in research, writing only while 'avoid' is off or on a break: "
+        "opens only on avoid's breaks"
+    ]
+    assert stale == ["gone.com"]
+
+
+def test_overlaps_need_a_reason(tmp_path):
+    p = tmp_path / "note.md"
+    p.write_text(NOTE.replace("blocklists:", "overlaps: [x.com]\nblocklists:"))
+    with pytest.raises(SystemExit, match="'overlaps' must map each site"):
+        ct.load_config(p)
 
 
 def test_decode_settings_round_trip():
@@ -1776,3 +1815,882 @@ def test_sync_explains_a_site_only_cold_turkey_allows(cfg, monkeypatch, capsys):
     assert "extra_exc" not in out
     assert "Cold Turkey allows quantifiedmind.org, but the note does not." in out
     assert "remove it from this block's allowed sites" in out
+
+
+def test_status_leads_with_the_running_mode_and_splits_modes_from_always_on(
+    cfg, monkeypatch, capsys
+):
+    always = {
+        "enabled": "true",
+        "lock": "delay,1",
+        "type": "scheduled",
+        "web": [],
+        "exceptions": [],
+        "apps": [],
+    }
+    blocks = {
+        "night": always,
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "true"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_status(cfg)
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "now: writing mode"
+    modes, always_on = out.index("modes"), out.index("always on")
+    assert out[modes + 1 : modes + 3] == ["  off      research", "  running  writing"]
+    assert out[always_on + 1] == "  enabled  night  (scheduled, lock delay)"
+
+
+def test_status_headline_names_a_break_an_only_session_and_a_timer(cfg, monkeypatch):
+    timer = {
+        "enabled": "true",
+        "lock": "2026,11,6,21,56",
+        "web": [],
+        "exceptions": [],
+        "apps": [],
+    }
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "timer: deep": timer,
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    assert ct.status_headline(cfg, blocks) == "now: no mode + deep timer until 21:56"
+
+    until = ct.time.time() + 600
+    end = ct.dt.datetime.fromtimestamp(until)
+    ct.BREAK_FILE.write_text(ct.json.dumps({"modes": ["research"], "until": until}))
+    assert ct.status_headline(cfg, blocks).startswith(
+        f"now: break until {end:%H:%M}, then research"
+    )
+
+    ct.ONLY_FILE.write_text(
+        ct.json.dumps({"groups": ["bear"], "until": until, "back": []})
+    )
+    assert ct.status_headline(cfg, blocks).startswith(
+        f"now: only session until {end:%H:%M} (bear)"
+    )
+
+
+def note_with(tmp_path, extra: str) -> Path:
+    """The test note with extra top-level YAML lines in its block."""
+    p = tmp_path / "extra.md"
+    p.write_text(NOTE.replace("blocklists:", extra.rstrip("\n") + "\nblocklists:"))
+    return p
+
+
+def test_status_warns_when_a_strong_lock_block_has_no_or_a_delay_lock(
+    tmp_path, monkeypatch, capsys
+):
+    cfg = ct.load_config(
+        note_with(tmp_path, "strong_lock_blocks: [avoid, night, gone]")
+    )
+    blank = {"enabled": "true", "web": [], "exceptions": [], "apps": []}
+    blocks = {
+        "avoid": {**blank, "lock": "none"},
+        "night": {**blank, "lock": "delay,5,m,0"},
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    assert ct.weak_locks(cfg, blocks) == [
+        "'avoid' has no lock; a random-text lock is wanted",
+        "'night' has a delay lock; a random-text lock is wanted",
+        "'gone' is listed under strong_lock_blocks, but Cold Turkey has no such block",
+    ]
+    blocks["night"]["lock"] = "random,300"  # any other lock counts as strong enough
+    assert len(ct.weak_locks(cfg, blocks)) == 2
+    fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_status(cfg)
+    assert "weak lock: 'avoid' has no lock" in capsys.readouterr().out
+
+
+def test_no_strong_lock_key_means_no_warning(cfg):
+    assert ct.weak_locks(cfg, {"avoid": {"lock": "none"}}) == []
+
+
+def test_strong_lock_blocks_must_be_a_list_of_names(tmp_path):
+    with pytest.raises(SystemExit, match="strong_lock_blocks"):
+        ct.load_config(note_with(tmp_path, "strong_lock_blocks: avoid"))
+
+
+class Clock:
+    """A settable time.time for the code under test."""
+
+    def __init__(self, start: float):
+        self.now = start
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, minutes: float) -> None:
+        self.now += minutes * 60
+
+
+def at_terminal(monkeypatch, answers: list[str]) -> list[str]:
+    """A person at a terminal who types the given answers; returns the prompts shown."""
+    prompts = []
+
+    class TTY:
+        @staticmethod
+        def isatty():
+            return True
+
+    monkeypatch.setattr(ct.sys, "stdin", TTY)
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return answers.pop(0)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    return prompts
+
+
+def no_terminal(monkeypatch):
+    class Pipe:
+        @staticmethod
+        def isatty():
+            return False
+
+    monkeypatch.setattr(ct.sys, "stdin", Pipe)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt="": pytest.fail("asked without a terminal")
+    )
+
+
+def log_lines() -> list[dict]:
+    if not ct.COMMIT_LOG.exists():
+        return []
+    return [json.loads(line) for line in ct.COMMIT_LOG.read_text().splitlines()]
+
+
+CAPPED = "capped_modes: {writing: {minutes: 30, day_minutes: 120, fallback: research}}"
+
+
+@pytest.fixture
+def capped_env(tmp_path, monkeypatch):
+    """research running, writing capped at 30 min a stretch and 120 a day."""
+    cfg = ct.load_config(note_with(tmp_path, CAPPED))
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    clock = Clock(dt.datetime(2026, 11, 17, 10, 0).timestamp())
+    monkeypatch.setattr(ct.time, "time", clock)
+    spawned, notes = [], []
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    monkeypatch.setattr(ct, "notify", notes.append)
+    no_terminal(monkeypatch)
+    return cfg, blocks, clock, spawned, notes
+
+
+def on(blocks):
+    return sorted(n for n, b in blocks.items() if b["enabled"] == "true")
+
+
+def test_a_capped_note_is_checked(tmp_path):
+    for bad in (
+        "capped_modes: {nope: {}}",
+        "capped_modes: {writing: {fallback: writing}}",
+        "capped_modes: {writing: {minutes: 0}}",
+        "capped_modes: {writing: {cap: 3}}",
+    ):
+        with pytest.raises(SystemExit, match="capped"):
+            ct.load_config(note_with(tmp_path, bad))
+
+
+def test_the_first_capped_start_of_the_day_asks_nothing_and_ends_back_where_it_was(
+    capped_env,
+):
+    cfg, blocks, clock, spawned, notes = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: writing"]
+    c = ct.read_capped()
+    assert c["back"] == ["research"] and c["until"] == clock.now + 30 * 60
+    assert ("capped-wait",) in spawned and log_lines() == []
+    clock.advance(29)
+    assert not ct.end_capped(cfg) and on(blocks) == ["mode: writing"]
+    clock.advance(1)
+    ct.cmd_capped_wait(cfg)  # the waiter: the stretch is over
+    assert on(blocks) == ["mode: research"]
+    assert ct.read_capped() is None
+    assert notes == ["writing stretch over: back to research."]
+
+
+def test_with_no_mode_before_it_a_capped_mode_ends_in_its_fallback(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    blocks["mode: research"]["enabled"] = "false"
+    ct.cmd_capped(cfg, "writing", ["10"])
+    clock.advance(10)
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_stretch_longer_than_the_cap_is_refused(capped_env):
+    cfg, *_ = capped_env
+    with pytest.raises(SystemExit, match="1 to 30"):
+        ct.cmd_capped(cfg, "writing", ["45"])
+
+
+def test_a_later_start_the_same_day_needs_a_reason_at_a_terminal(
+    capped_env, monkeypatch
+):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: research"]
+    prompts = at_terminal(monkeypatch, ["the draft is due"])
+    ct.cmd_capped(cfg, "writing", ["20"])
+    assert prompts == ["Why writing again today? One line: "]
+    (entry,) = log_lines()
+    assert entry["command"] == "focus writing 20"
+    assert entry["reason"] == "the draft is due" and "ts" in entry
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_renewing_straight_away_keeps_the_mode_from_before(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(25)
+    at_terminal(monkeypatch, ["one more section"])
+    ct.cmd_capped(cfg, "writing", [])  # no cooldown
+    c = ct.read_capped()
+    assert c["back"] == ["research"] and c["until"] == clock.now + 30 * 60
+    clock.advance(30)
+    ct.end_capped(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_an_empty_reason_changes_nothing(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    at_terminal(monkeypatch, ["  "])
+    with pytest.raises(SystemExit, match="no reason"):
+        ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: research"] and log_lines() == []
+
+
+def test_a_new_day_starts_free_again(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    clock.advance(24 * 60)
+    ct.cmd_capped(cfg, "writing", [])  # no terminal needed
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_a_day_stretch_asks_once_and_draws_on_the_budget(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    prompts = at_terminal(monkeypatch, ["a long writing day"])
+    ct.cmd_capped(cfg, "writing", [], day=True)
+    assert len(prompts) == 1 and log_lines()[0]["command"] == "focus writing --day 120"
+    assert ct.read_capped()["until"] == clock.now + 120 * 60
+    assert ct.capped_day(clock.now)["used"] == {"writing": 120}
+    clock.advance(120)
+    ct.end_capped(cfg)
+    assert on(blocks) == ["mode: research"]
+    at_terminal(monkeypatch, ["again"])
+    with pytest.raises(SystemExit, match="used up"):
+        ct.cmd_capped(cfg, "writing", [], day=True)
+    at_terminal(monkeypatch, ["a normal stretch after the day one"])
+    ct.cmd_capped(cfg, "writing", [])
+    assert ct.read_capped()["until"] == clock.now + 30 * 60
+
+
+def test_a_day_stretch_left_early_gives_back_what_it_did_not_use(
+    capped_env, monkeypatch
+):
+    cfg, _, clock, *_ = capped_env
+    at_terminal(monkeypatch, ["first part"])
+    ct.cmd_capped(cfg, "writing", ["90"], day=True)
+    clock.advance(40)
+    ct.cmd_start(cfg, "research")  # switching away by hand ends the stretch
+    assert ct.read_capped() is None
+    assert ct.capped_day(clock.now)["used"] == {"writing": 40}
+    at_terminal(monkeypatch, ["second part"])
+    ct.cmd_capped(cfg, "writing", [], day=True)  # the rest of the budget
+    assert ct.read_capped()["until"] == clock.now + 80 * 60
+
+
+def test_a_capped_mode_is_never_brought_back_without_its_cap(capped_env):
+    cfg, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    # An only session or a break started now must return to research, not writing.
+    assert ct.restore_point(cfg, ct.ONLY) == ["research"]
+
+
+def test_a_break_holds_an_overdue_stretch_until_it_brings_the_mode_back(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    blocks["mode: writing"]["enabled"] = "false"  # a break stopped it
+    ct.BREAK_FILE.write_text(
+        json.dumps({"modes": ["writing"], "until": clock.now + 3600})
+    )
+    clock.advance(31)
+    assert not ct.end_capped(cfg) and ct.read_capped() is not None
+    clock.advance(30)
+    ct.catch_up(cfg)  # the break ends, then the stretch it brought back
+    assert on(blocks) == ["mode: research"] and ct.read_capped() is None
+
+
+def test_an_agent_switching_into_a_capped_mode_waits(capped_env, monkeypatch):
+    cfg, blocks, *_ = capped_env
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_capped(cfg, "writing", [])
+    assert e.value.code == 3 and on(blocks) == ["mode: research"]
+    assert ct.read_capped() is None
+
+
+def contended(monkeypatch, name: str, meanwhile):
+    """Make the lock `name` contended: before this process gets it, another process
+    finishes its own change (meanwhile()), as when two workers race."""
+    real = getattr(ct, name)
+
+    @ct.contextmanager
+    def lock():
+        meanwhile()
+        with real():
+            yield
+
+    monkeypatch.setattr(ct, name, lock)
+
+
+def test_an_expiry_that_waited_for_the_lock_spares_a_renewed_stretch(
+    capped_env, monkeypatch
+):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)  # over: the waiter and the tick both see the old record
+    renewed = {**ct.read_capped(), "until": clock.now + 30 * 60}
+    contended(
+        monkeypatch, "capped_lock", lambda: ct.write_state(ct.CAPPED_FILE, renewed)
+    )
+    assert not ct.end_capped(cfg)
+    assert on(blocks) == ["mode: writing"]
+    assert ct.read_capped()["until"] == renewed["until"]
+
+
+def test_the_state_locks_exclude_other_processes_and_nest_in_one(tmp_path):
+    path = tmp_path / "x.lock"
+    with ct.file_lock(path):
+        with ct.file_lock(path):  # a helper called by a holder does not deadlock
+            pass
+        with path.open("w") as other:  # another open file, as another process has
+            with pytest.raises(BlockingIOError):
+                ct.fcntl.flock(other, ct.fcntl.LOCK_EX | ct.fcntl.LOCK_NB)
+    with path.open("w") as other:
+        ct.fcntl.flock(other, ct.fcntl.LOCK_EX | ct.fcntl.LOCK_NB)  # free again
+
+
+def test_status_names_the_end_of_a_capped_stretch(capped_env):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    end = dt.datetime.fromtimestamp(clock.now + 30 * 60)
+    assert ct.status_headline(cfg, blocks) == (
+        f"now: writing mode until {end:%H:%M}, then research"
+    )
+
+
+def stamp(t: float) -> str:
+    """A timed lock's end as Cold Turkey stores it: 'Y,M,D,H,M'."""
+    d = dt.datetime.fromtimestamp(t)
+    return f"{d.year},{d.month},{d.day},{d.hour},{d.minute}"
+
+
+def locking_cold_turkey(monkeypatch, blocks, clock):
+    """Cold Turkey with locks: '-start B -lock N' starts B and locks it until N minutes
+    from now (never shorter); '-stop' and '-add' do nothing to a locked block."""
+    calls = []
+
+    def ct_call(*args):
+        calls.append(args)
+        op, name = args[0], args[1]
+        b = blocks[name]
+        locked = b["lock"] != "none"
+        if op == "-start":
+            b["enabled"] = "true"
+            if "-lock" in args:
+                new = stamp(clock.now + int(args[3]) * 60)
+                old = ct.lock_end(b)
+                if old is None or ct.lock_end({"lock": new}) > old:
+                    b["lock"] = new
+        elif op == "-stop" and not locked:
+            b["enabled"] = "false"
+        elif op == "-add" and not locked:
+            b["exceptions" if args[2] == "-exception" else "web"].append(args[3])
+
+    monkeypatch.setattr(ct, "ct_send", ct_call)
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    return calls
+
+
+def run_out(blocks, name="mode: research"):
+    """Cold Turkey's lock runs out: it stops the block."""
+    blocks[name].update(enabled="false", lock="none")
+
+
+TIMER = "timers: {deep: {block: [feeds], minutes: 30}}"
+
+
+@pytest.fixture
+def commit_env(tmp_path, monkeypatch):
+    """Both modes off, the launchd job installed, the clock at 10:00."""
+    note = note_with(tmp_path, TIMER + "\n" + CAPPED.replace("fallback: research", ""))
+    monkeypatch.setattr(ct, "CONFIG_PATH", note)
+    cfg = ct.load_config(note)
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+        "timer: deep": {**mode_block(cfg, "writing", "false"), "web": []},
+    }
+    clock = Clock(dt.datetime(2026, 11, 17, 10, 0).timestamp())
+    monkeypatch.setattr(ct.time, "time", clock)
+    calls = locking_cold_turkey(monkeypatch, blocks, clock)
+    ct.AGENT_PLIST.write_text("")
+    monkeypatch.setattr(ct, "launchd_print", lambda: loaded_job(ct.tick_args()))
+    spawned, followed = [], []
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
+    monkeypatch.setattr(
+        ct, "sz_follow", lambda cfg, modes, switched=False: followed.append(modes)
+    )
+    monkeypatch.setattr(ct, "random_text", lambda n: "x" * 3)
+    no_terminal(monkeypatch)
+    return cfg, blocks, clock, calls, spawned, followed
+
+
+def committed(commit_env, minutes="60"):
+    cfg, blocks, clock, calls, *_ = commit_env
+    ct.cmd_commit(cfg, "research", [minutes])
+    calls.clear()
+    return cfg, blocks, clock, calls
+
+
+def loaded_job(args: list[str]) -> str:
+    """What 'launchctl print' shows for a loaded job, trimmed to what focus reads."""
+    lines = "".join(f"\t\t{a}\n" for a in args)
+    return (
+        f"gui/501/{ct.AGENT_LABEL} = {{\n\tstate = not running\n\n"
+        f"\tprogram = {args[0]}\n\targuments = {{\n{lines}\t}}\n\n"
+        "\tinherited environment = {\n\t\tSSH_AUTH_SOCK => /x\n\t}\n}\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "printed, why",
+    [
+        (lambda: None, "no job"),  # the plist exists, but launchd has not loaded it
+        (lambda: loaded_job(["/elsewhere/focus", "--config", "/n.md", "tick"]), "runs"),
+    ],
+)
+def test_a_commitment_needs_the_launchd_job_loaded_for_this_focus(
+    commit_env, monkeypatch, printed, why
+):
+    cfg, _, _, calls, spawned, _ = commit_env
+    assert ct.AGENT_PLIST.exists()
+    monkeypatch.setattr(ct, "launchd_print", printed)
+    with pytest.raises(SystemExit, match=f"{why}.*install-agent"):
+        ct.cmd_commit(cfg, "research", ["60"])
+    assert ct.read_commit() is None and calls == [] and spawned == []
+
+
+def test_the_loaded_job_is_read_from_launchctl_print(commit_env):
+    assert ct.tick_job_problem() is None
+
+
+def test_a_refused_install_leaves_no_plist(monkeypatch, tmp_path):
+    monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agents" / "tick.plist")
+
+    def run(cmd, **k):
+        return ct.subprocess.CompletedProcess(
+            cmd, 5 if cmd[1] == "bootstrap" else 0, "", "Input/output error"
+        )
+
+    monkeypatch.setattr(ct.subprocess, "run", run)
+    with pytest.raises(SystemExit, match="refused"):
+        ct.cmd_install_agent()
+    assert not ct.AGENT_PLIST.exists()
+
+
+def test_a_commitment_leaves_a_keeper_that_ticks_until_it_ends(commit_env, monkeypatch):
+    cfg, blocks, clock, calls, spawned, _ = commit_env
+    ct.cmd_commit(cfg, "research", ["10"])
+    assert ("commit-keep",) in spawned
+    calls.clear()
+
+    def sleep(s):  # the launchd job is gone; only the keeper runs
+        clock.advance(s / 60)
+        if clock.now >= ct.read_commit()["until"]:
+            run_out(blocks)
+
+    monkeypatch.setattr(ct.time, "sleep", sleep)
+    ct.cmd_commit_keep(cfg)
+    assert ct.read_commit() is None
+    assert [c[:3] for c in calls if "-lock" in c][0] == (
+        "-start",
+        "mode: research",
+        "-lock",
+    )
+    assert blocks["mode: research"]["enabled"] == "true"  # the mode stays on, unlocked
+
+
+def test_a_commitment_starts_the_mode_and_locks_it_one_wait_ahead(commit_env):
+    cfg, blocks, clock, calls, *_ = commit_env
+    ct.cmd_commit(cfg, "research", ["60"])
+    # Started already locked: no plain '-start' leaves it running unlocked first.
+    assert calls == [("-start", "mode: research", "-lock", "5")]
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
+    s = ct.read_commit()
+    assert s["until"] == clock.now + 3600 and s["pending"] == []
+
+
+def test_committing_the_running_mode_locks_it_where_it_runs(commit_env):
+    cfg, blocks, clock, calls, *_ = commit_env
+    blocks["mode: research"]["enabled"] = "true"
+    ct.cmd_commit(cfg, "research", ["30"])
+    assert calls == [("-start", "mode: research", "-lock", "5")]
+    assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
+
+
+def test_an_allow_still_locks_again_when_the_note_cannot_be_edited(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, _ = committed(commit_env)
+    request(commit_env, monkeypatch, ct.cmd_allow, ["docs.example.org"], False)
+    monkeypatch.setattr(ct, "CONFIG_PATH", ct.CONFIG_PATH.with_name("gone.md"))
+    run_out(blocks)
+    ct.cmd_commit_wait(cfg)
+    b = blocks["mode: research"]
+    assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
+    assert "docs.example.org" in b["exceptions"]
+    assert ct.read_commit()["pending"] == []
+    assert log_lines()[-1]["note_failed"]
+
+
+def test_any_focus_command_first_keeps_the_commitment(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env, "30")
+    # Without the launchd job the lock ran out; the next command puts it back.
+    clock.advance(10)
+    run_out(blocks)
+    ct.catch_up(cfg)
+    assert blocks["mode: research"]["enabled"] == "true"
+    clock.advance(30)
+    run_out(blocks)
+    ct.catch_up(cfg)  # past the end: cleared, and the mode stays on
+    assert ct.read_commit() is None
+    ct.cmd_break(cfg, ["10"])  # no longer refused
+    assert blocks["mode: research"]["enabled"] == "false"
+
+
+def test_a_tick_that_waited_for_the_lock_does_not_restart_an_ended_commitment(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, calls = committed(commit_env)
+    clock.advance(10)
+    run_out(blocks)  # stopped: a restart is due, unless the end was applied meanwhile
+    contended(monkeypatch, "commit_lock", lambda: ct.COMMIT_FILE.unlink())
+    ct.commit_tick(cfg)
+    assert calls == [] and blocks["mode: research"]["enabled"] == "false"
+
+
+def test_a_capped_mode_cannot_be_committed(commit_env):
+    cfg, *_ = commit_env
+    with pytest.raises(SystemExit, match="capped"):
+        ct.cmd_commit(cfg, "writing", ["60"])
+
+
+@pytest.mark.parametrize(
+    "lock_left, until_left, want",
+    [
+        (None, 3600, 5),  # unlocked or stopped: lock at once
+        (240, 3600, None),  # four minutes left: not yet
+        (120, 3600, 5),  # two minutes left: extend a full wait
+        (120, 150, 3),  # near the end: just past the end, rounded up
+        (120, 100, None),  # the lock already reaches the end
+        (30, -10, None),  # past the end: let the last lock run out
+        (None, 50, 1),
+    ],
+)
+def test_when_and_how_far_the_rolling_lock_is_extended(lock_left, until_left, want):
+    now = 1_000_000.0
+    lock_to = None if lock_left is None else now + lock_left
+    assert ct.lock_minutes(now, lock_to, now + until_left, 5) == want
+
+
+def test_an_extension_never_asks_for_a_shorter_lock():
+    now = 1_000_000.0
+    # five minutes of lock left and a five-minute wait: nothing to gain
+    assert ct.lock_minutes(now, now + 300, now + 3600, 5, ahead=ct.math.inf) is None
+
+
+def test_the_tick_extends_the_lock_shortly_before_it_runs_out(commit_env):
+    cfg, blocks, clock, calls = committed(commit_env)
+    clock.advance(2)
+    ct.catch_up(cfg)
+    assert calls == []  # three minutes of lock left
+    clock.advance(1)
+    ct.catch_up(cfg)
+    assert calls == [("-start", "mode: research", "-lock", "5")]
+    assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
+
+
+def refused(fn, *args):
+    with pytest.raises(SystemExit) as e:
+        fn(*args)
+    msg = str(e.value)
+    assert "committed block" in msg and "focus allow" in msg and "focus end" in msg
+
+
+def test_a_commitment_refuses_break_off_only_and_other_modes(
+    commit_env, only_cfg, monkeypatch
+):
+    cfg, blocks, _, calls = committed(commit_env)
+    refused(ct.cmd_break, cfg, ["10"])
+    refused(ct.cmd_off, cfg)
+    refused(ct.cmd_start, cfg, "writing")
+    refused(ct.cmd_capped, cfg, "writing", [])
+    refused(ct.cmd_commit, cfg, "writing", ["30"])
+    refused(ct.cmd_only, only_cfg, ["bear", "5"])
+    assert calls == [] and blocks["mode: research"]["enabled"] == "true"
+    ct.cmd_start(cfg, "research")  # its own mode: nothing to refuse
+    ct.cmd_timer(cfg, "deep", ["30"])  # a timer only tightens
+    assert blocks["timer: deep"]["enabled"] == "true"
+
+
+def test_allow_and_end_refuse_without_a_terminal(commit_env):
+    committed(commit_env)
+    for fn, args in ((ct.cmd_allow, (["docs.example.org"], False)), (ct.cmd_end, ())):
+        with pytest.raises(SystemExit, match="only in a terminal"):
+            fn(commit_env[0], *args)
+    assert ct.read_commit()["pending"] == [] and log_lines() == []
+
+
+def test_allow_needs_the_text_typed_back_exactly(commit_env, monkeypatch):
+    cfg, *_ = committed(commit_env)
+    at_terminal(monkeypatch, ["xx"])
+    with pytest.raises(SystemExit, match="did not match"):
+        ct.cmd_allow(cfg, ["docs.example.org"], False)
+    assert ct.read_commit()["pending"] == []
+
+
+def test_only_sites_can_be_allowed_and_only_during_a_commitment(commit_env):
+    cfg, *_ = commit_env
+    with pytest.raises(SystemExit, match="focus add"):
+        ct.cmd_allow(cfg, ["docs.example.org"], False)
+    committed(commit_env)
+    with pytest.raises(SystemExit, match="not apps"):
+        ct.cmd_allow(cfg, ["Some App"], True)
+
+
+def test_an_agent_allow_waits_before_any_prompt(commit_env, monkeypatch):
+    cfg, *_ = committed(commit_env)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_allow(cfg, ["docs.example.org"], False)
+    assert e.value.code == 3 and ct.read_commit()["pending"] == []
+
+
+def request(commit_env, monkeypatch, fn, *args):
+    at_terminal(monkeypatch, ["xxx", "need the reference docs"])
+    fn(commit_env[0], *args)
+
+
+def test_an_allow_waits_for_the_lock_then_lands_in_the_note_and_the_block(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, calls = committed(commit_env)
+    spawned = commit_env[4]
+    request(commit_env, monkeypatch, ct.cmd_allow, ["docs.example.org"], False)
+    (entry,) = log_lines()
+    assert entry["command"] == "focus allow docs.example.org"
+    assert entry["reason"] == "need the reference docs"
+    assert ("commit-wait",) in spawned
+    # While the request waits, the tick stops extending the lock.
+    clock.advance(4)
+    ct.catch_up(cfg)
+    assert calls == []
+    # The waiter polls until Cold Turkey's lock runs out and the block stops.
+    ran_out = []
+
+    def sleep(s):
+        if not ran_out:
+            ran_out.append(s)
+            run_out(blocks)
+
+    monkeypatch.setattr(ct.time, "sleep", sleep)
+    ct.cmd_commit_wait(cfg)
+    assert ran_out
+    assert [c[0] for c in calls] == ["-add", "-start"]  # the exception first
+    b = blocks["mode: research"]
+    assert "docs.example.org" in b["exceptions"]
+    assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
+    assert ct.read_commit()["pending"] == []
+    note = ct.load_config(ct.CONFIG_PATH)
+    assert note["groups"]["added-research"] == {"sites": ["docs.example.org"]}
+    assert "added-research" in note["modes"]["research"]["allow"]
+    assert "docs.example.org" in ct.desired_exceptions(note, "research")
+
+
+def test_an_end_waits_for_the_lock_then_leaves_no_mode(commit_env, monkeypatch):
+    cfg, blocks, _, calls = committed(commit_env)
+    followed = commit_env[5]
+    request(commit_env, monkeypatch, ct.cmd_end)
+    assert ct.status_headline(cfg, blocks).endswith(", end requested)")
+    run_out(blocks)
+    ct.cmd_commit_wait(cfg)
+    assert ("-stop", "mode: research") in calls  # sent even though it shows stopped
+    assert blocks["mode: research"]["enabled"] == "false"
+    assert ct.read_commit() is None and followed[-1] == []
+
+
+def test_a_dead_waiter_is_covered_by_the_tick(commit_env, monkeypatch):
+    cfg, blocks, *_ = committed(commit_env)
+    request(commit_env, monkeypatch, ct.cmd_end)
+    run_out(blocks)
+    ct.catch_up(cfg)
+    assert ct.read_commit() is None
+
+
+def test_a_block_found_stopped_before_the_end_is_locked_again_and_logged(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env)
+    clock.advance(20)  # the Mac slept through the extensions
+    run_out(blocks)
+    ct.catch_up(cfg)
+    b = blocks["mode: research"]
+    assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
+    (entry,) = log_lines()
+    assert entry["command"] == "focus tick" and "again" in entry["reason"]
+
+
+def test_a_restart_that_does_not_land_is_not_logged(commit_env, monkeypatch):
+    cfg, blocks, _, _ = committed(commit_env)
+    run_out(blocks)
+    monkeypatch.setattr(ct, "ct_send", lambda *a: None)  # the screen is locked
+    ct.catch_up(cfg)
+    assert log_lines() == [] and ct.read_commit() is not None
+
+
+def test_after_the_end_the_mode_stays_on_unlocked(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env, "10")
+    for _ in range(10):  # the tick keeps the lock ahead until the end
+        clock.advance(1)
+        ct.catch_up(cfg)
+    assert ct.read_commit() is not None  # the last lock reaches the end
+    clock.advance(1)
+    run_out(blocks)
+    ct.catch_up(cfg)
+    b = blocks["mode: research"]
+    assert ct.read_commit() is None and b["enabled"] == "true" and b["lock"] == "none"
+
+
+def test_status_shows_the_commitment(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env)
+    end = dt.datetime.fromtimestamp(clock.now + 3600)
+    assert ct.status_headline(cfg, blocks) == (
+        f"now: research mode (committed until {end:%H:%M})"
+    )
+
+
+def test_commit_note_keys_and_reserved_names_are_checked(tmp_path):
+    with pytest.raises(SystemExit, match="commit_wait_minutes"):
+        ct.load_config(note_with(tmp_path, "commit_wait_minutes: soon"))
+    with pytest.raises(SystemExit, match=">= 2"):  # it would lapse between ticks
+        ct.load_config(note_with(tmp_path, "commit_wait_minutes: 1"))
+    p = tmp_path / "n.md"
+    p.write_text(NOTE.replace("writing:", "end:", 1))
+    with pytest.raises(SystemExit, match="taken by the command"):
+        ct.load_config(p)
+
+
+def alfred_rows(capsys, cfg, query):
+    capsys.readouterr()
+    ct.cmd_alfred(cfg, query)
+    return json.loads(capsys.readouterr().out)["items"]
+
+
+def test_alfred_offers_committed_blocks(cfg, capsys, monkeypatch):
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    rows = alfred_rows(capsys, cfg, "commit")
+    assert {r["arg"] for r in rows} == {
+        f"{m} {ct.ALFRED_COMMIT_MIN} --commit" for m in cfg["modes"]
+    }
+    # 'research 25' means a committed research block for 25 minutes, and only that.
+    rows = alfred_rows(capsys, cfg, "research 25")
+    assert [r["arg"] for r in rows] == ["research 25 --commit"]
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "commit res")] == [
+        f"research {ct.ALFRED_COMMIT_MIN} --commit"
+    ]
+
+
+def test_alfred_commit_rows_while_one_runs(cfg, capsys, monkeypatch):
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    ct.write_commit(
+        {"mode": "research", "until": 2_000_000_000, "locked_to": 0, "pending": []}
+    )
+    rows = alfred_rows(capsys, cfg, "commit")
+    assert rows[0]["uid"] == "commit-running" and rows[0]["valid"] is False
+    assert all(r["valid"] is False for r in rows if r["uid"] != "commit-running")
+
+
+@pytest.fixture
+def default_cfg(tmp_path, monkeypatch):
+    cfg = ct.load_config(note_with(tmp_path, "default_mode: {mode: research}"))
+    started = []
+    monkeypatch.setattr(ct, "cmd_start", lambda cfg, mode: started.append(mode))
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: [])
+    return cfg, started
+
+
+MON_0901 = dt.datetime(2026, 11, 16, 9, 1)  # a Monday
+
+
+def test_default_mode_starts_once_a_weekday_morning(default_cfg):
+    cfg, started = default_cfg
+    assert ct.default_start(cfg, MON_0901) == "research"
+    assert ct.default_start(cfg, MON_0901 + dt.timedelta(minutes=5)) is None
+    assert started == ["research"]
+    # the next weekday fires again
+    assert ct.default_start(cfg, MON_0901 + dt.timedelta(days=1)) == "research"
+
+
+@pytest.mark.parametrize(
+    "when",
+    [
+        dt.datetime(2026, 11, 21, 9, 1),  # Saturday
+        dt.datetime(2026, 11, 16, 8, 59),  # before start
+        dt.datetime(2026, 11, 16, 12, 0),  # at 'until'
+    ],
+)
+def test_default_mode_stays_out_of_its_hours(default_cfg, when):
+    cfg, started = default_cfg
+    assert ct.default_start(cfg, when) is None and started == []
+
+
+def test_default_mode_marks_the_day_when_something_runs(default_cfg, monkeypatch):
+    cfg, started = default_cfg
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: ["writing"])
+    assert ct.default_start(cfg, MON_0901) is None
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: [])
+    # stopped by hand later that morning: not started again the same day
+    assert ct.default_start(cfg, MON_0901 + dt.timedelta(hours=1)) is None
+    assert started == []
+
+
+def test_default_mode_config_is_checked(tmp_path):
+    for bad in (
+        "default_mode: {mode: nosuch}",
+        "default_mode: {mode: research, start: '9am'}",
+        "default_mode: {mode: research, days: [monday]}",
+        "default_mode: {mode: research, when: x}",
+    ):
+        with pytest.raises(SystemExit, match="default_mode"):
+            ct.load_config(note_with(tmp_path, bad))

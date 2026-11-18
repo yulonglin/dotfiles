@@ -171,8 +171,8 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-fable-5-1",
-        "label": "Fable 5.1",
+        "model": "claude-fable-5-2",
+        "label": "Fable 5.2",
         "description": "Claude subscription"
       },
       {
@@ -187,7 +187,7 @@
       },
       {
         "model": "gemini",
-        "label": "Gemini 4 Argon",
+        "label": "Gemini 4 Carbon",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -225,8 +225,7 @@
         "label": "DeepSeek V4.1 Flash",
         "description": "OpenRouter, pay per token"
       }
-    ],
-    "replaceBuiltInOptions": true
+    ]
   },
   "skillOverrides": {
     "claude-api": "off",
@@ -690,7 +689,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh -c 'rex __internal session-start --agent claude 2>/dev/null || true'",
+            "command": "/bin/sh -c 'rex __internal session-start --agent claude --feature-session-naming=false 2>/dev/null || true'",
             "timeout": 5
           }
         ]
@@ -995,43 +994,82 @@
     "gpt-6-astra": {
       "autoCompactWindow": 258400
     },
+    "gpt-6-astra-fast": {
+      "autoCompactWindow": 258400
+    },
     "astra": {
       "autoCompactWindow": 258400
     },
-    "gemini-4-argon": {
+    "astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gemini-4-carbon": {
       "autoCompactWindow": 1000000
     },
     "gemini": {
       "autoCompactWindow": 1000000
     },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
     "gpt-6.1-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol": {
       "autoCompactWindow": 258400
     },
+    "sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6.1-terra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-terra-fast": {
       "autoCompactWindow": 258400
     },
     "terra": {
       "autoCompactWindow": 258400
     },
+    "terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol6": {
       "autoCompactWindow": 258400
     },
+    "sol6-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-terra": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-5.6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "kimi-k3.1-pro": {

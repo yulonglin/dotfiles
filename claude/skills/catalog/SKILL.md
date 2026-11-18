@@ -111,6 +111,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `deslop` | Before committing agent-written code — narrating comments, defensive guards, needless abstraction |
 | `mv-repo` | Moving a repo to a new directory (venv, project state, symlinks, tmux sessions) |
 | `wrap-up` (user-invoked only) | A stalled session needs a terminal state — land it, state the blocker, or take one step |
+| `session-sweep` | "clean up the sessions", "clear agent view", "finish up open sessions" — every session checked for really done, stranded work landed, decisions bundled, only finished sessions removed |
 | `done` | "done", "finished", "ship it" — titles the finished session and hands back the `/rename` line |
 
 ## Permission gates and auto mode
