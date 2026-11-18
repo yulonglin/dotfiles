@@ -39,6 +39,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
     monkeypatch.setattr(ct, "COMMIT_FILE", tmp_path / "commit.json")
     monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
+    monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
@@ -2147,6 +2148,47 @@ def test_an_agent_switching_into_a_capped_mode_waits(capped_env, monkeypatch):
     assert ct.read_capped() is None
 
 
+def contended(monkeypatch, name: str, meanwhile):
+    """Make the lock `name` contended: before this process gets it, another process
+    finishes its own change (meanwhile()), as when two workers race."""
+    real = getattr(ct, name)
+
+    @ct.contextmanager
+    def lock():
+        meanwhile()
+        with real():
+            yield
+
+    monkeypatch.setattr(ct, name, lock)
+
+
+def test_an_expiry_that_waited_for_the_lock_spares_a_renewed_stretch(
+    capped_env, monkeypatch
+):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)  # over: the waiter and the tick both see the old record
+    renewed = {**ct.read_capped(), "until": clock.now + 30 * 60}
+    contended(
+        monkeypatch, "capped_lock", lambda: ct.write_state(ct.CAPPED_FILE, renewed)
+    )
+    assert not ct.end_capped(cfg)
+    assert on(blocks) == ["mode: writing"]
+    assert ct.read_capped()["until"] == renewed["until"]
+
+
+def test_the_state_locks_exclude_other_processes_and_nest_in_one(tmp_path):
+    path = tmp_path / "x.lock"
+    with ct.file_lock(path):
+        with ct.file_lock(path):  # a helper called by a holder does not deadlock
+            pass
+        with path.open("w") as other:  # another open file, as another process has
+            with pytest.raises(BlockingIOError):
+                ct.fcntl.flock(other, ct.fcntl.LOCK_EX | ct.fcntl.LOCK_NB)
+    with path.open("w") as other:
+        ct.fcntl.flock(other, ct.fcntl.LOCK_EX | ct.fcntl.LOCK_NB)  # free again
+
+
 def test_status_names_the_end_of_a_capped_stretch(capped_env):
     cfg, blocks, clock, *_ = capped_env
     ct.cmd_capped(cfg, "writing", [])
@@ -2346,6 +2388,17 @@ def test_any_focus_command_first_keeps_the_commitment(commit_env):
     assert ct.read_commit() is None
     ct.cmd_break(cfg, ["10"])  # no longer refused
     assert blocks["mode: research"]["enabled"] == "false"
+
+
+def test_a_tick_that_waited_for_the_lock_does_not_restart_an_ended_commitment(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, calls = committed(commit_env)
+    clock.advance(10)
+    run_out(blocks)  # stopped: a restart is due, unless the end was applied meanwhile
+    contended(monkeypatch, "commit_lock", lambda: ct.COMMIT_FILE.unlink())
+    ct.commit_tick(cfg)
+    assert calls == [] and blocks["mode: research"]["enabled"] == "false"
 
 
 def test_a_capped_mode_cannot_be_committed(commit_env):

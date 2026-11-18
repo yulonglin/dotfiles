@@ -54,6 +54,7 @@ The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fall
 - **Renewal:** allowed at once, with no cooldown. Every start of the mode after the first of the local day asks for a one-line reason at the terminal and refuses without a terminal. Each reason goes to `~/.local/state/focus/commit-log.jsonl` with the time and the command.
 - **Day budget:** `--day [MINUTES]` runs one longer stretch from `day_minutes`, asking the reason once. A day stretch left early gives its unused minutes back; later starts that day are normal stretches.
 - **The mode before is kept:** a renewal keeps it, and a break or only session started during a stretch returns to it, never to the capped mode without its cap. A switch to another mode by hand ends the stretch.
+- **One worker at a time:** a start, a renewal and an expiry each hold `~/.local/state/focus/capped.lock` from reading the record to the last switch and write, and re-read it once they hold it, so an expiry never ends a stretch renewed meanwhile. The committed block does the same with `commit.lock`. A reason prompt holds the lock while Yulong types.
 - **The agent delay still applies:** switching into a capped mode from another mode, and renewing one, wait like any loosening.
 
 ## Committed blocks hold a person too

@@ -727,6 +727,7 @@ ONLY_FILE = PENDING.parent / "only.json"
 DEFAULT_ONLY_MIN = 45
 CAPPED_FILE = PENDING.parent / "capped.json"  # the capped stretch that runs now
 CAPPED_DAY_FILE = PENDING.parent / "capped-day.json"  # today's starts and day budget
+CAPPED_LOCK = PENDING.parent / "capped.lock"  # start, renewal and expiry take turns
 COMMIT_LOG = PENDING.parent / "commit-log.jsonl"  # every reason asked for, one per line
 DEFAULT_CAPPED_MIN = 30
 DEFAULT_CAPPED_DAY_MIN = 180
@@ -736,6 +737,37 @@ DEFAULT_COMMIT_MIN = 60
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
+
+
+_LOCKS_HELD: dict[str, int] = {}
+
+
+@contextmanager
+def file_lock(path: Path):
+    """Hold an exclusive flock on path, waiting for it. Re-entrant within one process,
+    so a helper that takes the lock can be called by a caller that already holds it."""
+    key = str(path)
+    if _LOCKS_HELD.get(key):
+        _LOCKS_HELD[key] += 1
+        try:
+            yield
+        finally:
+            _LOCKS_HELD[key] -= 1
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        _LOCKS_HELD[key] = 1
+        try:
+            yield
+        finally:
+            _LOCKS_HELD[key] = 0  # closing the file releases the flock
+
+
+def capped_lock():
+    """One process at a time starts, renews or ends a capped stretch: the waiter, the
+    launchd tick and a foreground command race. Whoever holds it re-reads the record."""
+    return file_lock(CAPPED_LOCK)
 
 
 def read_state(path: Path) -> dict | None:
@@ -1006,14 +1038,15 @@ def capped_day(now: float | None = None) -> dict:
 def clear_capped(now: float | None = None) -> None:
     """Drop the record of a capped stretch. A day stretch that ends early gives the whole
     minutes it did not use back to the day budget."""
-    c = read_capped()
-    now = now or time.time()
-    if c and c["day"] and c["until"] > now:
-        d = capped_day(now)
-        unused = min(c["day"], int((c["until"] - now) // 60))
-        d["used"][c["mode"]] = max(0, d["used"].get(c["mode"], 0) - unused)
-        write_state(CAPPED_DAY_FILE, d)
-    CAPPED_FILE.unlink(missing_ok=True)
+    with capped_lock():
+        c = read_capped()
+        now = now or time.time()
+        if c and c["day"] and c["until"] > now:
+            d = capped_day(now)
+            unused = min(c["day"], int((c["until"] - now) // 60))
+            d["used"][c["mode"]] = max(0, d["used"].get(c["mode"], 0) - unused)
+            write_state(CAPPED_DAY_FILE, d)
+        CAPPED_FILE.unlink(missing_ok=True)
 
 
 def restore_point(cfg: dict, leaving: str) -> list[str]:
@@ -1053,6 +1086,16 @@ def end_capped(cfg: dict) -> bool:
     command and the once-a-minute launchd job all call this, as for a break. A stretch
     whose mode was switched away from by hand is only forgotten; one stopped by a break
     ends once the break brings it back."""
+    c = read_capped()
+    if c is None or time.time() < c["until"]:
+        return False  # the common case, decided without waiting for the lock
+    with capped_lock():
+        return finish_capped(cfg)
+
+
+def finish_capped(cfg: dict) -> bool:
+    """end_capped's work, holding capped_lock() through the switch and the removal. It
+    reads the record again: one renewed while this process waited is not over."""
     c = read_capped()
     if c is None or time.time() < c["until"]:
         return False
@@ -1098,7 +1141,35 @@ def cmd_capped(cfg: dict, mode: str, args: list[str], day: bool = False) -> None
     if len(args) > 1 or (args and (not args[0].isdigit() or int(args[0]) < 1)):
         sys.exit(f"focus: usage: focus {mode} [MINUTES] [--day]")
     want = int(args[0]) if args else None
+    # One lock from the first read of the record to the last write, so a waiter or the
+    # tick holding a stale record cannot end this stretch in between.
+    with capped_lock():
+        until, back, minutes, left = start_capped(cfg, mode, want, day, cap, budget)
+    try:
+        spawn_self("capped-wait")
+    except OSError as e:
+        print(
+            f"focus: could not start the stretch timer ({e}); the launchd job ends it"
+        )
+    target = capped_target(cfg, {"mode": mode, "back": back})
+    end = dt.datetime.fromtimestamp(until)
+    print(f"{mode} until {end:%H:%M}, then {target or 'no mode'}")
+    if day:
+        print(f"day budget: {left - minutes} of {budget} min left today")
+    if not AGENT_PLIST.exists():
+        print(
+            "tip: 'focus install-agent' makes sure a stretch ends even after a restart"
+        )
+
+
+def start_capped(
+    cfg: dict, mode: str, want: int | None, day: bool, cap: int, budget: int
+) -> tuple[float, list[str], int, int]:
+    """The part of a capped start that runs holding capped_lock(): read the record,
+    ask, write the record and switch. Returns (until, back, minutes, day minutes left
+    before this stretch)."""
     now = time.time()
+    left = 0
     today = capped_day(now)
     current = read_capped()
     renewing = current is not None and current["mode"] == mode
@@ -1145,21 +1216,7 @@ def cmd_capped(cfg: dict, mode: str, args: list[str], day: bool = False) -> None
         )
 
     cmd_start(cfg, mode, prepare=prepare)
-    try:
-        spawn_self("capped-wait")
-    except OSError as e:
-        print(
-            f"focus: could not start the stretch timer ({e}); the launchd job ends it"
-        )
-    target = capped_target(cfg, {"mode": mode, "back": back})
-    end = dt.datetime.fromtimestamp(until)
-    print(f"{mode} until {end:%H:%M}, then {target or 'no mode'}")
-    if day:
-        print(f"day budget: {left - minutes} of {budget} min left today")
-    if not AGENT_PLIST.exists():
-        print(
-            "tip: 'focus install-agent' makes sure a stretch ends even after a restart"
-        )
+    return until, back, minutes, left
 
 
 def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
@@ -1206,8 +1263,9 @@ def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
     # A mode started by hand ends any break, but only once it is confirmed running, so a
     # failed start leaves the break to be restored. It ends another mode's capped stretch.
     BREAK_FILE.unlink(missing_ok=True)
-    if (c := read_capped()) and c["mode"] != mode:
-        clear_capped()
+    with capped_lock():  # checked and cleared as one step
+        if (c := read_capped()) and c["mode"] != mode:
+            clear_capped()
     for name in running:
         switch(name, on=False)
     if session:  # any mode ends a session, which the gate above approved
@@ -1329,8 +1387,9 @@ def cmd_off(cfg: dict) -> None:
     BREAK_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
-    if (c := read_capped()) and PREFIX + c["mode"] in running:
-        clear_capped()
+    with capped_lock():  # checked and cleared as one step
+        if (c := read_capped()) and PREFIX + c["mode"] in running:
+            clear_capped()
     # Back to the no-mode list, or a locked mode's; the gate above approved that state.
     sz_follow(cfg, running_modes(cfg), switched=True)
     print(f"stopped {', '.join(running)}")
@@ -2683,13 +2742,10 @@ def write_commit(s: dict) -> None:
     write_state(COMMIT_FILE, {k: s[k] for k in keys})
 
 
-@contextmanager
 def commit_lock():
-    """One process at a time changes the committed block: the tick and the waiter race."""
-    COMMIT_LOCK.parent.mkdir(parents=True, exist_ok=True)
-    with COMMIT_LOCK.open("w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        yield
+    """One process at a time changes the committed block: the tick, the keeper, the
+    waiter and a foreground command race."""
+    return file_lock(COMMIT_LOCK)
 
 
 def refuse_if_committed(what: str, mode: str | None = None) -> None:
