@@ -45,6 +45,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
     monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
     monkeypatch.setattr(ct, "DEFAULT_FILE", tmp_path / "default.json")
+    monkeypatch.setattr(ct, "SCHEDULED_FILE", tmp_path / "scheduled.json")
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
@@ -2017,6 +2018,46 @@ def capped_env(tmp_path, monkeypatch):
 
 def on(blocks):
     return sorted(n for n, b in blocks.items() if b["enabled"] == "true")
+
+
+SCHEDULED = 'scheduled_mode: {mode: writing, start: "21:30", until: "22:00"}'
+
+
+def test_the_scheduled_mode_runs_until_its_end_then_leaves_no_mode(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, notes = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + SCHEDULED))
+    at = dt.datetime(2026, 11, 17, 21, 31)
+    clock.now = at.timestamp()
+    assert ct.scheduled_start(cfg, at) == "writing"
+    assert on(blocks) == ["mode: writing"] and "then no mode" in notes[-1]
+    # once a day: a later tick in the span, after a manual switch, does nothing
+    assert ct.scheduled_start(cfg, at + dt.timedelta(minutes=5)) is None
+    assert ct.capped_day()["starts"].get("writing", 0) == 0  # no daily start taken
+    clock.now = dt.datetime(2026, 11, 17, 22, 0).timestamp()
+    ct.end_capped(cfg)
+    assert on(blocks) == []  # not back to research, not the fallback
+
+
+def test_the_scheduled_mode_waits_for_its_span_and_a_commitment(capped_env, tmp_path):
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + SCHEDULED))
+    assert ct.scheduled_start(cfg, dt.datetime(2026, 11, 17, 21, 29)) is None
+    assert ct.scheduled_start(cfg, dt.datetime(2026, 11, 17, 22, 0)) is None
+    ct.write_commit(
+        {"mode": "research", "until": 2_000_000_000, "locked_to": 0, "pending": []}
+    )
+    assert ct.scheduled_start(cfg, dt.datetime(2026, 11, 17, 21, 45)) is None
+
+
+def test_a_scheduled_note_is_checked(tmp_path):
+    for bad in (
+        'scheduled_mode: {mode: research, start: "21:30", until: "22:00"}',
+        'scheduled_mode: {mode: writing, start: "22:00", until: "21:30"}',
+        'scheduled_mode: {mode: writing, start: "9pm", until: "22:00"}',
+    ):
+        with pytest.raises(SystemExit, match="scheduled_mode"):
+            ct.load_config(note_with(tmp_path, CAPPED + "\n" + bad))
 
 
 def test_a_capped_note_is_checked(tmp_path):

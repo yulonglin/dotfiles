@@ -89,6 +89,13 @@ runs: no mode, break, only session, capped stretch or commitment, and not in
 off_hours. That first tick marks the day either way, so a mode stopped by hand is not
 started again until the next day. Only the job does this, never a command.
 
+A scheduled mode (`scheduled_mode: {mode: admin, start: "21:30", until: "22:00",
+days: [...]}`, every day by default) must be a capped mode. The launchd job starts it
+once a day on its first tick in that span, as a stretch that ends at `until` and then
+leaves no mode running, not the mode before it: admin, then the evening social hour
+(Yulong, 2026-11-18). It asks no reason and takes no daily start. A committed block or
+an only session skips it for the day.
+
 An agent (CLAUDECODE=1) loosens only after a delay (`agent_loosen_delay_minutes`,
 default 10): stopping a mode, switching modes, a sync that allows new sites, or
 a ScreenZen write that allows more or blocks less. The first call queues that
@@ -403,6 +410,7 @@ def load_config(path: Path) -> dict:
         "commit_wait_minutes",
         "commit_text_chars",
         "default_mode",
+        "scheduled_mode",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
@@ -470,6 +478,21 @@ def load_config(path: Path) -> dict:
             problems.append("default_mode 'start' and 'until' must look like '09:00'")
         elif set(dm.get("days") or WEEKDAYS) - set(DAY_NAMES):
             problems.append(f"default_mode 'days' must be among {DAY_NAMES}")
+    sm = cfg.get("scheduled_mode")
+    if sm is not None:
+        hhmm = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+        if not isinstance(sm, dict) or set(sm) - {"mode", "start", "until", "days"}:
+            problems.append(
+                "'scheduled_mode' may only have 'mode', 'start', 'until' and 'days'"
+            )
+        elif sm.get("mode") not in (cfg.get("capped_modes") or {}):
+            problems.append("scheduled_mode 'mode' must be a capped mode")
+        elif not all(hhmm.match(str(sm.get(k, ""))) for k in ("start", "until")):
+            problems.append("scheduled_mode 'start' and 'until' must look like '21:30'")
+        elif not str(sm["start"]) < str(sm["until"]):
+            problems.append("scheduled_mode 'start' must come before 'until'")
+        elif set(sm.get("days") or DAY_NAMES) - set(DAY_NAMES):
+            problems.append(f"scheduled_mode 'days' must be among {DAY_NAMES}")
     capped = cfg.get("capped_modes")
     if capped is not None and not isinstance(capped, dict):
         problems.append("'capped_modes' must map a mode to its limits")
@@ -767,6 +790,7 @@ DEFAULT_FILE = PENDING.parent / "default.json"  # the day the default mode last 
 DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 WEEKDAYS = DAY_NAMES[:5]
 DEFAULT_MODE_TIMES = (("start", "09:00"), ("until", "12:00"))
+SCHEDULED_FILE = PENDING.parent / "scheduled.json"  # the day the scheduled mode fired
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
@@ -1104,6 +1128,7 @@ def read_capped() -> dict | None:
         "until": until if isinstance(until, (int, float)) else 0,
         "back": [m for m in s.get("back") or [] if isinstance(m, str)],
         "day": day if isinstance(day, int) else 0,
+        "off_after": s.get("off_after") is True,
     }
 
 
@@ -1158,7 +1183,9 @@ def restore_point(cfg: dict, leaving: str) -> list[str]:
 
 def capped_target(cfg: dict, c: dict) -> str | None:
     """Where a capped stretch goes when it ends: the mode before it, else its fallback,
-    else no mode."""
+    else no mode. A scheduled stretch always ends in no mode."""
+    if c.get("off_after"):
+        return None
     for m in c["back"]:
         if m in cfg["modes"] and m not in (cfg.get("capped_modes") or {}):
             return m
@@ -3611,6 +3638,7 @@ def main() -> None:
         case "tick":  # internal: the launchd job; ends what is overdue, else silent
             catch_up(cfg)
             default_start(cfg)
+            scheduled_start(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
         case "allow":
@@ -3716,6 +3744,38 @@ def default_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     cmd_start(cfg, d["mode"])
     notify(f"focus: {d['mode']} started, the default from {start}")
     return d["mode"]
+
+
+def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
+    """Start the note's scheduled_mode once a day, on the first tick between its start
+    and 'until', as a capped stretch that ends at 'until' in no mode; return the mode
+    started, else None. Like default_start, only the launchd tick calls it, and the
+    first tick in the span marks the day whatever happens."""
+    d = cfg.get("scheduled_mode")
+    if not d:
+        return None
+    now = now or dt.datetime.now()
+    if DAY_NAMES[now.weekday()] not in (d.get("days") or DAY_NAMES):
+        return None
+    if not str(d["start"]) <= now.strftime("%H:%M") < str(d["until"]):
+        return None
+    today = now.strftime("%Y-%m-%d")
+    if (read_state(SCHEDULED_FILE) or {}).get("date") == today:
+        return None
+    write_state(SCHEDULED_FILE, {"date": today})
+    if read_commit() or read_only():
+        return None
+    mode = d["mode"]
+    hh, mm = (int(x) for x in str(d["until"]).split(":"))
+    until = now.replace(hour=hh, minute=mm, second=0, microsecond=0).timestamp()
+    cmd_start(cfg, mode)  # clears a break and any other mode's stretch
+    with capped_lock():
+        write_state(
+            CAPPED_FILE,
+            {"mode": mode, "until": until, "back": [], "day": 0, "off_after": True},
+        )
+    notify(f"focus: {mode} until {d['until']}, then no mode")
+    return mode
 
 
 if __name__ == "__main__":
