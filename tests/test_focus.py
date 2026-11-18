@@ -40,6 +40,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "COMMIT_FILE", tmp_path / "commit.json")
     monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
     monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
+    monkeypatch.setattr(ct, "DEFAULT_FILE", tmp_path / "default.json")
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
@@ -2638,3 +2639,58 @@ def test_alfred_commit_rows_while_one_runs(cfg, capsys, monkeypatch):
     rows = alfred_rows(capsys, cfg, "commit")
     assert rows[0]["uid"] == "commit-running" and rows[0]["valid"] is False
     assert all(r["valid"] is False for r in rows if r["uid"] != "commit-running")
+
+
+@pytest.fixture
+def default_cfg(tmp_path, monkeypatch):
+    cfg = ct.load_config(note_with(tmp_path, "default_mode: {mode: research}"))
+    started = []
+    monkeypatch.setattr(ct, "cmd_start", lambda cfg, mode: started.append(mode))
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: [])
+    return cfg, started
+
+
+MON_0901 = dt.datetime(2026, 11, 16, 9, 1)  # a Monday
+
+
+def test_default_mode_starts_once_a_weekday_morning(default_cfg):
+    cfg, started = default_cfg
+    assert ct.default_start(cfg, MON_0901) == "research"
+    assert ct.default_start(cfg, MON_0901 + dt.timedelta(minutes=5)) is None
+    assert started == ["research"]
+    # the next weekday fires again
+    assert ct.default_start(cfg, MON_0901 + dt.timedelta(days=1)) == "research"
+
+
+@pytest.mark.parametrize(
+    "when",
+    [
+        dt.datetime(2026, 11, 21, 9, 1),  # Saturday
+        dt.datetime(2026, 11, 16, 8, 59),  # before start
+        dt.datetime(2026, 11, 16, 12, 0),  # at 'until'
+    ],
+)
+def test_default_mode_stays_out_of_its_hours(default_cfg, when):
+    cfg, started = default_cfg
+    assert ct.default_start(cfg, when) is None and started == []
+
+
+def test_default_mode_marks_the_day_when_something_runs(default_cfg, monkeypatch):
+    cfg, started = default_cfg
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: ["writing"])
+    assert ct.default_start(cfg, MON_0901) is None
+    monkeypatch.setattr(ct, "running_modes", lambda cfg: [])
+    # stopped by hand later that morning: not started again the same day
+    assert ct.default_start(cfg, MON_0901 + dt.timedelta(hours=1)) is None
+    assert started == []
+
+
+def test_default_mode_config_is_checked(tmp_path):
+    for bad in (
+        "default_mode: {mode: nosuch}",
+        "default_mode: {mode: research, start: '9am'}",
+        "default_mode: {mode: research, days: [monday]}",
+        "default_mode: {mode: research, when: x}",
+    ):
+        with pytest.raises(SystemExit, match="default_mode"):
+            ct.load_config(note_with(tmp_path, bad))
