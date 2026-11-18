@@ -82,6 +82,13 @@ longer stretch from the daily budget `day_minutes`, asking the reason once; a da
 stretch left early gives back its unused minutes. A capped mode is never brought
 back without its cap: a break or only session returns to the mode before it.
 
+A default mode (`default_mode: {mode: <mode>, start: "09:00", until: "12:00", days:
+[mon, tue, wed, thu, fri]}`, those being the defaults) is started by the launchd job
+once a day, on its first tick between `start` and `until` on those days, if nothing
+runs: no mode, break, only session, capped stretch or commitment, and not in
+off_hours. That first tick marks the day either way, so a mode stopped by hand is not
+started again until the next day. Only the job does this, never a command.
+
 An agent (CLAUDECODE=1) loosens only after a delay (`agent_loosen_delay_minutes`,
 default 10): stopping a mode, switching modes, a sync that allows new sites, or
 a ScreenZen write that allows more or blocks less. The first call queues that
@@ -394,6 +401,7 @@ def load_config(path: Path) -> dict:
         "capped_modes",
         "commit_wait_minutes",
         "commit_text_chars",
+        "default_mode",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
@@ -446,6 +454,21 @@ def load_config(path: Path) -> dict:
             refs += [
                 (f"{app} {name}", (bl.get("block") or []) + (bl.get("allow") or []))
             ]
+    dm = cfg.get("default_mode")
+    if dm is not None:
+        hhmm = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+        if not isinstance(dm, dict) or set(dm) - {"mode", "start", "until", "days"}:
+            problems.append(
+                "'default_mode' may only have 'mode', 'start', 'until' and 'days'"
+            )
+        elif dm.get("mode") not in (cfg.get("modes") or {}) or dm.get("mode") in (
+            cfg.get("capped_modes") or {}
+        ):
+            problems.append("default_mode 'mode' must be a mode with no cap")
+        elif not all(hhmm.match(str(dm.get(k, d))) for k, d in DEFAULT_MODE_TIMES):
+            problems.append("default_mode 'start' and 'until' must look like '09:00'")
+        elif set(dm.get("days") or WEEKDAYS) - set(DAY_NAMES):
+            problems.append(f"default_mode 'days' must be among {DAY_NAMES}")
     capped = cfg.get("capped_modes")
     if capped is not None and not isinstance(capped, dict):
         problems.append("'capped_modes' must map a mode to its limits")
@@ -735,6 +758,11 @@ COMMIT_FILE = PENDING.parent / "commit.json"  # the committed block that runs no
 COMMIT_LOCK = PENDING.parent / "commit.lock"  # the tick and the waiter take turns
 DEFAULT_COMMIT_MIN = 60
 ALFRED_COMMIT_MIN = 50  # what Alfred offers before minutes are typed: one work block
+# default_mode: the tick starts this mode once a day, from start until 'until', on 'days'
+DEFAULT_FILE = PENDING.parent / "default.json"  # the day the default mode last fired
+DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+WEEKDAYS = DAY_NAMES[:5]
+DEFAULT_MODE_TIMES = (("start", "09:00"), ("until", "12:00"))
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
@@ -3480,6 +3508,7 @@ def main() -> None:
             cmd_resume(cfg)
         case "tick":  # internal: the launchd job; ends what is overdue, else silent
             catch_up(cfg)
+            default_start(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
         case "allow":
@@ -3548,6 +3577,43 @@ def catch_up(cfg: dict) -> None:
             step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
             print(f"focus: {step.__name__} could not finish: {e}")
+
+
+def default_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
+    """Start the note's default_mode once a day, on the first tick between its start and
+    'until' on its days, when nothing else runs; return the mode started, else None.
+
+    The day is marked on that first tick whatever happens, so a mode stopped by hand at
+    09:05 is not started again at 09:06, and a day that began in another mode keeps it.
+    Only the launchd tick calls this, never a command, so a person's own command is
+    never preceded by a mode it did not ask for. Starting from no mode only tightens.
+    """
+    d = cfg.get("default_mode")
+    if not d:
+        return None
+    now = now or dt.datetime.now()
+    start, until = (str(d.get(k, v)) for k, v in DEFAULT_MODE_TIMES)
+    if DAY_NAMES[now.weekday()] not in (d.get("days") or WEEKDAYS):
+        return None
+    if not start <= now.strftime("%H:%M") < until:
+        return None
+    today = now.strftime("%Y-%m-%d")
+    if (read_state(DEFAULT_FILE) or {}).get("date") == today:
+        return None
+    write_state(DEFAULT_FILE, {"date": today})
+    busy = (
+        running_modes(cfg)
+        or read_break()
+        or read_only()
+        or read_capped()
+        or read_commit()
+        or in_off_hours(cfg, now)
+    )
+    if busy:
+        return None
+    cmd_start(cfg, d["mode"])
+    notify(f"focus: {d['mode']} started, the default from {start}")
+    return d["mode"]
 
 
 if __name__ == "__main__":

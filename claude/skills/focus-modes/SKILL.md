@@ -20,6 +20,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | Ask | Run |
 |---|---|
 | "switch to / start writing" | `focus writing` |
+| "start research by itself in the morning", "what runs by default" | the note's `default_mode`: the launchd job starts it once a day between its `start` and `until` (09:00–12:00 on weekdays unless set) when nothing runs; a mode stopped by hand stays stopped that day |
 | "take a break", "pause for 15 minutes" | `focus break 15`: stops the mode, which starts again by itself after the break (at most `break_max_minutes`). `focus install-agent` adds a once-a-minute launchd job so a break ends even after a restart |
 | "turn blocking off" | `focus off`, which works only in the note's `off_hours`; at any other time offer a break or another mode instead. Never route around this |
 | "deep focus for 90 minutes", "block AI chat for a bit" | `focus deep 90`: the `timer: deep` block, locked until it ends, on top of any mode. Starting it only tightens, so it runs at once; nobody can end it early |
