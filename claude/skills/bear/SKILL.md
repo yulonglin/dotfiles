@@ -276,6 +276,8 @@ Bear's own FAQ omits the colour encoding, so Yulong's copied-from-Bear examples 
 
 Use them sparingly, for the one line a reader must not miss, not as a substitute for a highlight on a single phrase.
 
+**Bear renders a ```` ```mermaid ```` fenced block as a diagram** (Yulong, 2026-11-18), on the Mac and the phone. So a flow, a state machine or a decision tree in a note is a Mermaid block, not ASCII art: the layout is automatic, a one-line edit redraws it, and box-drawing characters and emoji no longer drift out of line on a narrow screen. ASCII in a plain code block is still right where position carries the meaning (a timeline across the day, two columns side by side), which Mermaid lays out poorly. Keep Mermaid labels short and prefer `flowchart TD`, because the phone is narrow; the label and layout rules in `artifact-writing` (Mermaid layout) apply here too.
+
 **Wikilinks are how the vault cross-references itself.** A link to another note is `[[Note Title]]`, and it resolves by **title**, not by ID — the same title lookup the rest of this skill uses, so it is case-insensitive and matches the note's first `# Heading` (Bear derives the title from that line). `search_notes(query="@wikilinks", limit=10)` finds notes that contain one and `@backlinks` finds notes that are linked to, so both are searchable state, not decoration.
 
 Two consequences for editing:
