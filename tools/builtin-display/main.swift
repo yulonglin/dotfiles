@@ -128,23 +128,30 @@ func describe(_ id: CGDirectDisplayID) -> String {
 
 // MARK: actions
 
-func setEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) {
+// Returns nil on success, else what went wrong. The watcher logs the error and
+// keeps running; the one-shot commands exit on it.
+func trySetEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) -> String? {
     guard let configure = loadConfigureEnabled() else {
-        fail("this macOS no longer exports CGSConfigureDisplayEnabled; the private API is gone")
+        return "this macOS no longer exports CGSConfigureDisplayEnabled; the private API is gone"
     }
     var config: CGDisplayConfigRef?
     guard CGBeginDisplayConfiguration(&config) == .success, let config else {
-        fail("could not begin a display configuration")
+        return "could not begin a display configuration"
     }
     let err = configure(config, id, enabled)
     guard err == .success else {
         CGCancelDisplayConfiguration(config)
-        fail("CGSConfigureDisplayEnabled(\(id), \(enabled)) returned CGError \(err.rawValue)")
+        return "CGSConfigureDisplayEnabled(\(id), \(enabled)) returned CGError \(err.rawValue)"
     }
     let done = CGCompleteDisplayConfiguration(config, .forSession)
     guard done == .success else {
-        fail("could not apply the display configuration (CGError \(done.rawValue))")
+        return "could not apply the display configuration (CGError \(done.rawValue))"
     }
+    return nil
+}
+
+func setEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) {
+    if let error = trySetEnabled(id, enabled) { fail(error) }
 }
 
 func waitFor(_ condition: () -> Bool, seconds: Double = 5) -> Bool {
@@ -226,6 +233,67 @@ func trial(seconds: UInt32) {
     turnOn()
 }
 
+// MARK: watcher
+
+// Run by the login agent (`builtin-display auto on`). It acts only on two
+// transitions, so a manual choice sticks until the next plug event:
+//   - an external display that was not connected before appears -> screen off
+//   - the last external display goes away -> screen back on, so you are never
+//     left with no visible screen
+// `builtin-display on` while the Studio Display stays connected is therefore
+// left alone. Reconfiguration events arrive in bursts, so each burst is handled
+// once, 2 s after it settles.
+
+var knownExternals: Set<CGDirectDisplayID> = []
+var pendingCheck: DispatchWorkItem?
+
+func log(_ message: String) {
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    print("\(stamp) \(message)")
+    fflush(stdout)
+}
+
+func reconcile() {
+    let now = Set(externals())
+    let added = now.subtracting(knownExternals)
+    defer { knownExternals = now }
+
+    if !added.isEmpty, let id = onlineBuiltinID(), !lidClosed() {
+        saveBuiltinID(id)
+        if let error = trySetEnabled(id, false) {
+            log("external display \(added.sorted()) connected; turning built-in off FAILED: \(error)")
+        } else {
+            log("external display \(added.sorted()) connected; built-in screen off")
+        }
+    } else if now.isEmpty, !knownExternals.isEmpty, !builtinIsOn(), !lidClosed(), let id = savedBuiltinID() {
+        if let error = trySetEnabled(id, true) {
+            log("last external display gone; turning built-in on FAILED: \(error)")
+        } else {
+            log("last external display gone; built-in screen on")
+        }
+    }
+}
+
+func scheduleReconcile() {
+    pendingCheck?.cancel()
+    let item = DispatchWorkItem { reconcile() }
+    pendingCheck = item
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: item)
+}
+
+func watch() {
+    // At login the Studio Display may already be connected: knownExternals
+    // starts empty, so the first reconcile treats it as newly connected.
+    log("watching for display changes")
+    let callback: CGDisplayReconfigurationCallBack = { _, flags, _ in
+        if flags.contains(.beginConfigurationFlag) { return }
+        DispatchQueue.main.async { scheduleReconcile() }
+    }
+    CGDisplayRegisterReconfigurationCallback(callback, nil)
+    scheduleReconcile()
+    dispatchMain()
+}
+
 let usage = """
 usage: builtin-display <command>
 
@@ -238,9 +306,16 @@ commands:
   on              turn the built-in screen back on
   toggle          off if on, on if off (bind this to a hotkey)
   try [SECONDS]   turn off, then back on after SECONDS (default 10) — a safe first test
+  auto on|off|status
+                  login agent that turns the screen off whenever an external display
+                  connects, and back on when the last one is unplugged. `on` or
+                  `toggle` still work while it runs; your choice holds until the
+                  next plug event
+  watch           what the agent runs (foreground; logs each action)
 
 Uses a private macOS API, so an update can break it. The change lasts for the
 login session: logging out or rebooting always restores the screen.
+Agent log: ~/Library/Logs/builtin-display.log
 exit codes: 0 ok, 1 failed, 2 usage error
 """
 
@@ -254,6 +329,7 @@ case "try":
     let seconds = args.count > 1 ? UInt32(args[1]) : 10
     guard let seconds, seconds > 0 else { fail("try takes a positive number of seconds", code: 2) }
     trial(seconds: seconds)
+case "watch": watch()
 case "-h", "--help", "help": print(usage)
 case nil: print(usage); exit(2)
 default: fail("unknown command '\(args[0])'\n\(usage)", code: 2)
