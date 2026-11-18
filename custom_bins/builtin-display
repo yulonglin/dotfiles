@@ -1,0 +1,25 @@
+#!/usr/bin/env zsh
+# builtin-display — turn the MacBook's built-in screen off and on while the lid
+# stays open, so the built-in keyboard and trackpad keep working with an
+# external display. Free stand-in for BetterDisplay's "disconnect" and Lunar's
+# BlackOut, both paid. Logic lives in tools/builtin-display/main.swift; this
+# wrapper compiles it on first run (or when the source is newer) and execs it.
+#
+#   builtin-display status | off | on | toggle | try [SECONDS] | --help
+set -euo pipefail
+
+if [[ $OSTYPE != darwin* ]]; then
+    print -u2 "builtin-display: macOS only"
+    exit 1
+fi
+
+DOT_DIR="${0:A:h:h}"
+SRC="${DOT_DIR}/tools/builtin-display/main.swift"
+BIN="${DOT_DIR}/tools/builtin-display/builtin-display"
+
+if [[ ! -x $BIN || $SRC -nt $BIN ]]; then
+    command -v swiftc >/dev/null 2>&1 || { print -u2 "builtin-display: swiftc not found (xcode-select --install)"; exit 1; }
+    swiftc -O -o "$BIN" "$SRC" || { print -u2 "builtin-display: compile failed"; exit 1; }
+fi
+
+exec "$BIN" "$@"
