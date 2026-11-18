@@ -26,6 +26,8 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | "only Bear and ChatGPT for 45 minutes", "let me pick what's allowed", "something like Micromanager" | `focus only` opens the search (a terminal and fzf, so Yulong runs it himself); `focus only bear chatgpt 45` names the picks, as a group, a word in one group, or an installed app. See "Only sessions" below |
 | "a stretch of a capped mode", "another half hour of it" | `focus <capped mode> [MINUTES]`: at most the mode's `minutes`, then back to the mode before it. A later start the same day asks Yulong for a reason at the terminal, so an agent can make only the first. See "Capped modes" below |
 | "a long day in a capped mode" | `focus <capped mode> --day [MINUTES]`: one stretch from the daily budget, with a reason; Yulong runs it himself |
+| "lock me into research for two hours", "commit to writing" | `focus research 120 --commit`: starts the mode and keeps its block locked until the end. Needs `focus install-agent`. See "Committed blocks" below |
+| "allow X" or "end it" during a committed block | `focus allow X` or `focus end`: a typed text and a reason at the terminal, so Yulong runs these himself; the change lands when Cold Turkey's lock runs out |
 | "what's running", "is it in sync" | `focus status` |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
 | "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
@@ -49,6 +51,18 @@ The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fall
 - **Day budget:** `--day [MINUTES]` runs one longer stretch from `day_minutes`, asking the reason once. A day stretch left early gives its unused minutes back; later starts that day are normal stretches.
 - **The mode before is kept:** a renewal keeps it, and a break or only session started during a stretch returns to it, never to the capped mode without its cap. A switch to another mode by hand ends the stretch.
 - **The agent delay still applies:** switching into a capped mode from another mode, and renewing one, wait like any loosening.
+
+## Committed blocks hold a person too
+
+`focus <mode> [MINUTES] --commit` (default 60) starts the mode and keeps its Cold Turkey block locked until the end time. This reverses "people are never delayed" for that time (2026-11-18). The lock rolls: the launchd tick keeps it about `commit_wait_minutes` (default 5) ahead with `-start <block> -lock N`, extending it once less than about 2.5 minutes remain. State is in `~/.local/state/focus/commit.json`.
+
+- **What refuses:** `focus break`, `focus off`, `focus only` and starting any other mode, capped or not, each naming `focus allow` and `focus end`. `focus deep` still runs, since it only tightens. `focus status` and the overview show the committed block and its end time.
+- **Allow and end:** each shows a random text of `commit_text_chars` (default 300) characters to type back exactly, then asks for a reason, logged to `~/.local/state/focus/commit-log.jsonl`. Both need a terminal, so an agent cannot finish them, and an agent also meets the usual delay first. focus then stops extending the lock and prints when it runs out. Cold Turkey then stops the block, and a waiter applies the request within a few seconds.
+- **Allow, applied:** the sites go into the note group `added-<mode>`, which the mode's `allow` list names, and into the block as exceptions; then the block starts and locks again. Only sites, not apps.
+- **End, applied:** the block stops and the commitment is cleared; ScreenZen follows as for `focus off`.
+- **A stopped block is put back:** if the tick finds the block stopped before the end with nothing pending (a missed tick, sleep, a locked screen), it starts and locks it again and logs that. Commands cannot land while the screen is locked.
+- **At the end time:** the last lock runs out and the mode stays on, unlocked.
+- **Accepted limitation:** unloading the launchd job, or deleting the state file, lets the lock lapse within one wait. Never do either to get past a commitment, and never edit the state or the log.
 
 ## Loosening waits; do not work around it
 

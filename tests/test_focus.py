@@ -37,6 +37,9 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "CAPPED_DAY_FILE", tmp_path / "capped-day.json")
     monkeypatch.setattr(ct, "COMMIT_LOG", tmp_path / "commit-log.jsonl")
     monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
+    monkeypatch.setattr(ct, "COMMIT_FILE", tmp_path / "commit.json")
+    monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
+    monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
@@ -2151,3 +2154,302 @@ def test_status_names_the_end_of_a_capped_stretch(capped_env):
     assert ct.status_headline(cfg, blocks) == (
         f"now: writing mode until {end:%H:%M}, then research"
     )
+
+
+def stamp(t: float) -> str:
+    """A timed lock's end as Cold Turkey stores it: 'Y,M,D,H,M'."""
+    d = dt.datetime.fromtimestamp(t)
+    return f"{d.year},{d.month},{d.day},{d.hour},{d.minute}"
+
+
+def locking_cold_turkey(monkeypatch, blocks, clock):
+    """Cold Turkey with locks: '-start B -lock N' starts B and locks it until N minutes
+    from now (never shorter); '-stop' and '-add' do nothing to a locked block."""
+    calls = []
+
+    def ct_call(*args):
+        calls.append(args)
+        op, name = args[0], args[1]
+        b = blocks[name]
+        locked = b["lock"] != "none"
+        if op == "-start":
+            b["enabled"] = "true"
+            if "-lock" in args:
+                new = stamp(clock.now + int(args[3]) * 60)
+                old = ct.lock_end(b)
+                if old is None or ct.lock_end({"lock": new}) > old:
+                    b["lock"] = new
+        elif op == "-stop" and not locked:
+            b["enabled"] = "false"
+        elif op == "-add" and not locked:
+            b["exceptions" if args[2] == "-exception" else "web"].append(args[3])
+
+    monkeypatch.setattr(ct, "ct_send", ct_call)
+    monkeypatch.setattr(ct, "read_blocks", lambda: blocks)
+    monkeypatch.setattr(ct.time, "sleep", lambda s: None)
+    return calls
+
+
+def run_out(blocks, name="mode: research"):
+    """Cold Turkey's lock runs out: it stops the block."""
+    blocks[name].update(enabled="false", lock="none")
+
+
+TIMER = "timers: {deep: {block: [feeds], minutes: 30}}"
+
+
+@pytest.fixture
+def commit_env(tmp_path, monkeypatch):
+    """Both modes off, the launchd job installed, the clock at 10:00."""
+    note = note_with(tmp_path, TIMER + "\n" + CAPPED.replace("fallback: research", ""))
+    monkeypatch.setattr(ct, "CONFIG_PATH", note)
+    cfg = ct.load_config(note)
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+        "timer: deep": {**mode_block(cfg, "writing", "false"), "web": []},
+    }
+    clock = Clock(dt.datetime(2026, 11, 17, 10, 0).timestamp())
+    monkeypatch.setattr(ct.time, "time", clock)
+    calls = locking_cold_turkey(monkeypatch, blocks, clock)
+    ct.AGENT_PLIST.write_text("")
+    spawned, followed = [], []
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
+    monkeypatch.setattr(
+        ct, "sz_follow", lambda cfg, modes, switched=False: followed.append(modes)
+    )
+    monkeypatch.setattr(ct, "random_text", lambda n: "x" * 3)
+    no_terminal(monkeypatch)
+    return cfg, blocks, clock, calls, spawned, followed
+
+
+def committed(commit_env, minutes="60"):
+    cfg, blocks, clock, calls, *_ = commit_env
+    ct.cmd_commit(cfg, "research", [minutes])
+    calls.clear()
+    return cfg, blocks, clock, calls
+
+
+def test_a_commitment_needs_the_launchd_job(commit_env):
+    cfg, *_ = commit_env
+    ct.AGENT_PLIST.unlink()
+    with pytest.raises(SystemExit, match="install-agent"):
+        ct.cmd_commit(cfg, "research", ["60"])
+    assert ct.read_commit() is None
+
+
+def test_a_commitment_starts_the_mode_and_locks_it_one_wait_ahead(commit_env):
+    cfg, blocks, clock, calls, *_ = commit_env
+    ct.cmd_commit(cfg, "research", ["60"])
+    assert ("-start", "mode: research", "-lock", "5") in calls
+    assert blocks["mode: research"]["enabled"] == "true"
+    assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
+    s = ct.read_commit()
+    assert s["until"] == clock.now + 3600 and s["pending"] == []
+
+
+def test_a_capped_mode_cannot_be_committed(commit_env):
+    cfg, *_ = commit_env
+    with pytest.raises(SystemExit, match="capped"):
+        ct.cmd_commit(cfg, "writing", ["60"])
+
+
+@pytest.mark.parametrize(
+    "lock_left, until_left, want",
+    [
+        (None, 3600, 5),  # unlocked or stopped: lock at once
+        (240, 3600, None),  # four minutes left: not yet
+        (120, 3600, 5),  # two minutes left: extend a full wait
+        (120, 150, 3),  # near the end: just past the end, rounded up
+        (120, 100, None),  # the lock already reaches the end
+        (30, -10, None),  # past the end: let the last lock run out
+        (None, 50, 1),
+    ],
+)
+def test_when_and_how_far_the_rolling_lock_is_extended(lock_left, until_left, want):
+    now = 1_000_000.0
+    lock_to = None if lock_left is None else now + lock_left
+    assert ct.lock_minutes(now, lock_to, now + until_left, 5) == want
+
+
+def test_an_extension_never_asks_for_a_shorter_lock():
+    now = 1_000_000.0
+    # five minutes of lock left and a five-minute wait: nothing to gain
+    assert ct.lock_minutes(now, now + 300, now + 3600, 5, ahead=ct.math.inf) is None
+
+
+def test_the_tick_extends_the_lock_shortly_before_it_runs_out(commit_env):
+    cfg, blocks, clock, calls = committed(commit_env)
+    clock.advance(2)
+    ct.cmd_tick(cfg)
+    assert calls == []  # three minutes of lock left
+    clock.advance(1)
+    ct.cmd_tick(cfg)
+    assert calls == [("-start", "mode: research", "-lock", "5")]
+    assert blocks["mode: research"]["lock"] == stamp(clock.now + 300)
+
+
+def refused(fn, *args):
+    with pytest.raises(SystemExit) as e:
+        fn(*args)
+    msg = str(e.value)
+    assert "committed block" in msg and "focus allow" in msg and "focus end" in msg
+
+
+def test_a_commitment_refuses_break_off_only_and_other_modes(
+    commit_env, only_cfg, monkeypatch
+):
+    cfg, blocks, _, calls = committed(commit_env)
+    refused(ct.cmd_break, cfg, ["10"])
+    refused(ct.cmd_off, cfg)
+    refused(ct.cmd_start, cfg, "writing")
+    refused(ct.cmd_capped, cfg, "writing", [])
+    refused(ct.cmd_commit, cfg, "writing", ["30"])
+    refused(ct.cmd_only, only_cfg, ["bear", "5"])
+    assert calls == [] and blocks["mode: research"]["enabled"] == "true"
+    ct.cmd_start(cfg, "research")  # its own mode: nothing to refuse
+    ct.cmd_timer(cfg, "deep", ["30"])  # a timer only tightens
+    assert blocks["timer: deep"]["enabled"] == "true"
+
+
+def test_allow_and_end_refuse_without_a_terminal(commit_env):
+    committed(commit_env)
+    for fn, args in ((ct.cmd_allow, (["docs.example.org"], False)), (ct.cmd_end, ())):
+        with pytest.raises(SystemExit, match="only in a terminal"):
+            fn(commit_env[0], *args)
+    assert ct.read_commit()["pending"] == [] and log_lines() == []
+
+
+def test_allow_needs_the_text_typed_back_exactly(commit_env, monkeypatch):
+    cfg, *_ = committed(commit_env)
+    at_terminal(monkeypatch, ["xx"])
+    with pytest.raises(SystemExit, match="did not match"):
+        ct.cmd_allow(cfg, ["docs.example.org"], False)
+    assert ct.read_commit()["pending"] == []
+
+
+def test_only_sites_can_be_allowed_and_only_during_a_commitment(commit_env):
+    cfg, *_ = commit_env
+    with pytest.raises(SystemExit, match="focus add"):
+        ct.cmd_allow(cfg, ["docs.example.org"], False)
+    committed(commit_env)
+    with pytest.raises(SystemExit, match="not apps"):
+        ct.cmd_allow(cfg, ["Some App"], True)
+
+
+def test_an_agent_allow_waits_before_any_prompt(commit_env, monkeypatch):
+    cfg, *_ = committed(commit_env)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_allow(cfg, ["docs.example.org"], False)
+    assert e.value.code == 3 and ct.read_commit()["pending"] == []
+
+
+def request(commit_env, monkeypatch, fn, *args):
+    at_terminal(monkeypatch, ["xxx", "need the reference docs"])
+    fn(commit_env[0], *args)
+
+
+def test_an_allow_waits_for_the_lock_then_lands_in_the_note_and_the_block(
+    commit_env, monkeypatch
+):
+    cfg, blocks, clock, calls = committed(commit_env)
+    spawned = commit_env[4]
+    request(commit_env, monkeypatch, ct.cmd_allow, ["docs.example.org"], False)
+    (entry,) = log_lines()
+    assert entry["command"] == "focus allow docs.example.org"
+    assert entry["reason"] == "need the reference docs"
+    assert ("commit-wait",) in spawned
+    # While the request waits, the tick stops extending the lock.
+    clock.advance(4)
+    ct.cmd_tick(cfg)
+    assert calls == []
+    # The waiter polls until Cold Turkey's lock runs out and the block stops.
+    ran_out = []
+
+    def sleep(s):
+        if not ran_out:
+            ran_out.append(s)
+            run_out(blocks)
+
+    monkeypatch.setattr(ct.time, "sleep", sleep)
+    ct.cmd_commit_wait(cfg)
+    assert ran_out
+    assert [c[0] for c in calls] == ["-add", "-start"]  # the exception first
+    b = blocks["mode: research"]
+    assert "docs.example.org" in b["exceptions"]
+    assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
+    assert ct.read_commit()["pending"] == []
+    note = ct.load_config(ct.CONFIG_PATH)
+    assert note["groups"]["added-research"] == {"sites": ["docs.example.org"]}
+    assert "added-research" in note["modes"]["research"]["allow"]
+    assert "docs.example.org" in ct.desired_exceptions(note, "research")
+
+
+def test_an_end_waits_for_the_lock_then_leaves_no_mode(commit_env, monkeypatch):
+    cfg, blocks, _, calls = committed(commit_env)
+    followed = commit_env[5]
+    request(commit_env, monkeypatch, ct.cmd_end)
+    assert ct.status_headline(cfg, blocks).endswith(", end requested)")
+    run_out(blocks)
+    ct.cmd_commit_wait(cfg)
+    assert ("-stop", "mode: research") in calls  # sent even though it shows stopped
+    assert blocks["mode: research"]["enabled"] == "false"
+    assert ct.read_commit() is None and followed[-1] == []
+
+
+def test_a_dead_waiter_is_covered_by_the_tick(commit_env, monkeypatch):
+    cfg, blocks, *_ = committed(commit_env)
+    request(commit_env, monkeypatch, ct.cmd_end)
+    run_out(blocks)
+    ct.cmd_tick(cfg)
+    assert ct.read_commit() is None
+
+
+def test_a_block_found_stopped_before_the_end_is_locked_again_and_logged(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env)
+    clock.advance(20)  # the Mac slept through the extensions
+    run_out(blocks)
+    ct.cmd_tick(cfg)
+    b = blocks["mode: research"]
+    assert b["enabled"] == "true" and b["lock"] == stamp(clock.now + 300)
+    (entry,) = log_lines()
+    assert entry["command"] == "focus tick" and "again" in entry["reason"]
+
+
+def test_a_restart_that_does_not_land_is_not_logged(commit_env, monkeypatch):
+    cfg, blocks, _, _ = committed(commit_env)
+    run_out(blocks)
+    monkeypatch.setattr(ct, "ct_send", lambda *a: None)  # the screen is locked
+    ct.cmd_tick(cfg)
+    assert log_lines() == [] and ct.read_commit() is not None
+
+
+def test_after_the_end_the_mode_stays_on_unlocked(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env, "10")
+    for _ in range(10):  # the tick keeps the lock ahead until the end
+        clock.advance(1)
+        ct.cmd_tick(cfg)
+    assert ct.read_commit() is not None  # the last lock reaches the end
+    clock.advance(1)
+    run_out(blocks)
+    ct.cmd_tick(cfg)
+    b = blocks["mode: research"]
+    assert ct.read_commit() is None and b["enabled"] == "true" and b["lock"] == "none"
+
+
+def test_status_shows_the_commitment(commit_env):
+    cfg, blocks, clock, _ = committed(commit_env)
+    end = dt.datetime.fromtimestamp(clock.now + 3600)
+    assert ct.status_headline(cfg, blocks) == (
+        f"now: research mode (committed until {end:%H:%M})"
+    )
+
+
+def test_commit_note_keys_and_reserved_names_are_checked(tmp_path):
+    with pytest.raises(SystemExit, match="commit_wait_minutes"):
+        ct.load_config(note_with(tmp_path, "commit_wait_minutes: soon"))
+    p = tmp_path / "n.md"
+    p.write_text(NOTE.replace("writing:", "end:", 1))
+    with pytest.raises(SystemExit, match="taken by the command"):
+        ct.load_config(p)

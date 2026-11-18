@@ -17,8 +17,11 @@
     focus only [GROUP…] [MINUTES]  # pick what to allow; everything else gets a pause screen
     focus CAPPED [MINUTES]    # a capped mode: at most its minutes, then back to the mode before
     focus CAPPED --day [MIN]  # one longer stretch from its daily budget
+    focus research 90 --commit  # keep the mode's block locked for 90 minutes
+    focus allow SITE…         # during a commitment: allow sites once the lock runs out
+    focus end                 # during a commitment: end it once the lock runs out
     focus alfred [QUERY]      # Alfred script-filter JSON (config/alfred/workflows/focus)
-    focus install-agent       # launchd job that ends overdue breaks and stretches every minute
+    focus install-agent       # launchd job, every minute: rolls the lock, ends what is due
     focus uninstall-agent     # remove that job (deploy.sh --no-focus)
 
 Every site and app is defined once, in a named group. Modes and the always-on
@@ -84,7 +87,28 @@ default 10): stopping a mode, switching modes, a sync that allows new sites, or
 a ScreenZen write that allows more or blocks less. The first call queues that
 exact request and exits 3; the same call after the delay runs it. Starting a
 mode from none, and any change that only tightens, run at once. People are
-never delayed.
+not delayed by this, with one exception: a committed block delays a person too
+(2026-11-18).
+
+'focus <mode> [MINUTES] --commit' (default 60 min) starts the mode and keeps its
+block locked until the end time with a rolling lock: the launchd tick keeps the
+lock about `commit_wait_minutes` (default 5) ahead with '-start <block> -lock N',
+and starts and locks the block again if it finds it stopped before the end with
+nothing pending (a missed tick, sleep, a locked screen), logging that. It needs the
+launchd job, and refuses without it. While it runs, 'break', 'off', 'only' and
+starting another mode refuse; 'focus deep' still runs. Only two commands change it,
+and only at a terminal: 'focus allow SITE…' and 'focus end'. Each shows a random
+text of `commit_text_chars` (default 300) characters to type back exactly, asks for
+a one-line reason (logged to ~/.local/state/focus/commit-log.jsonl), then stops
+extending the lock and leaves a waiter. When Cold Turkey's lock runs out and it
+stops the block, the waiter applies the request within a few seconds: for allow,
+it adds the sites to the note group 'added-<mode>' (named in the mode's allow
+list), adds them to the block as exceptions, then starts and locks the block again;
+for end, it stops the block and clears the commitment, and ScreenZen follows as for
+'off'. Only sites can be allowed this way, not apps. At the end time the last lock
+runs out and the mode stays on, unlocked. The state is ~/.local/state/focus/
+commit.json. Accepted limitation: unloading the launchd job, or deleting the state
+file, lets the lock lapse within one wait.
 
 The config is a Markdown note with one fenced ```yaml block, kept in the vault so
 personal entries stay out of this public repo. Override its path with
@@ -103,16 +127,20 @@ import copy
 import datetime as dt
 import fcntl
 import json
+import math
 import os
 import plistlib
 import re
+import secrets
 import shutil
 import sqlite3
+import string
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
@@ -360,6 +388,8 @@ def load_config(path: Path) -> dict:
         "overlaps",
         "strong_lock_blocks",
         "capped_modes",
+        "commit_wait_minutes",
+        "commit_text_chars",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
@@ -368,6 +398,12 @@ def load_config(path: Path) -> dict:
         isinstance(ov, dict) and all(isinstance(v, str) and v for v in ov.values())
     ):
         problems.append("'overlaps' must map each site to a one-line reason")
+    for key in ("commit_wait_minutes", "commit_text_chars"):
+        if key in cfg and not (isinstance(cfg[key], int) and cfg[key] >= 1):
+            problems.append(f"'{key}' must be a whole number >= 1")
+    for name in [*(cfg.get("modes") or {}), *(cfg.get("timers") or {})]:
+        if name in ("allow", "end"):
+            problems.append(f"{name!r} is taken by the command 'focus {name}'")
     strong = cfg.get("strong_lock_blocks")
     if strong is not None and not (
         isinstance(strong, list) and all(isinstance(n, str) and n for n in strong)
@@ -689,6 +725,12 @@ CAPPED_DAY_FILE = PENDING.parent / "capped-day.json"  # today's starts and day b
 COMMIT_LOG = PENDING.parent / "commit-log.jsonl"  # every reason asked for, one per line
 DEFAULT_CAPPED_MIN = 30
 DEFAULT_CAPPED_DAY_MIN = 180
+COMMIT_FILE = PENDING.parent / "commit.json"  # the committed block that runs now
+COMMIT_LOCK = PENDING.parent / "commit.lock"  # the tick and the waiter take turns
+DEFAULT_COMMIT_MIN = 60
+DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
+DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
+EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
 
 
 def read_state(path: Path) -> dict | None:
@@ -799,6 +841,7 @@ def spawn_self(*args: str) -> None:
 
 def cmd_break(cfg: dict, args: list[str]) -> None:
     """Stop the running modes for N minutes; they start again when the break ends."""
+    refuse_if_committed("a break")
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
     minutes = args[0] if args else "15"
     if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
@@ -840,9 +883,10 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
 
 
 def cmd_install_agent() -> None:
-    """Install the once-a-minute launchd job ('focus tick') that ends overdue breaks, only
-    sessions and capped stretches, so each ends even if its waiter dies, the Mac
-    restarts, or focus is never run again."""
+    """Install the once-a-minute launchd job ('focus tick'). It extends a committed
+    block's rolling lock, and ends overdue breaks, only sessions and capped stretches,
+    so each ends even if its waiter dies, the Mac restarts, or focus is never run again.
+    Unloading it lets a committed block's lock lapse within one wait."""
     path = os.environ.get("PATH", "")
     extra = ["/opt/homebrew/bin", str(Path.home() / ".local/bin"), "/usr/bin", "/bin"]
     plist = {
@@ -875,8 +919,8 @@ def cmd_install_agent() -> None:
             f"focus: wrote {AGENT_PLIST} but launchctl refused it: {r.stderr.strip()}"
         )
     print(
-        f"installed {AGENT_LABEL}: checks every minute for a break, only session or "
-        "capped stretch that is over"
+        f"installed {AGENT_LABEL}: every minute it keeps a committed block locked and "
+        "ends a break, only session or capped stretch that is over"
     )
 
 
@@ -1016,6 +1060,7 @@ def cmd_capped(cfg: dict, mode: str, args: list[str], day: bool = False) -> None
     The first start of the local day is free; every later one, and every --day stretch,
     asks for a one-line reason, logged to COMMIT_LOG. --day runs one longer stretch from
     the day budget `day_minutes`. Renewing straight away is allowed."""
+    refuse_if_committed(f"starting {mode!r}")  # before any prompt
     spec = cfg["capped_modes"][mode]
     cap = int(spec.get("minutes", DEFAULT_CAPPED_MIN))
     budget = int(spec.get("day_minutes", DEFAULT_CAPPED_DAY_MIN))
@@ -1091,6 +1136,7 @@ def cmd_start(cfg: dict, mode: str, prepare=None) -> None:
     has passed and before anything is switched: the place for prompts and state."""
     if mode not in cfg["modes"]:
         sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
+    refuse_if_committed(f"starting {mode!r}", mode)
     blocks = read_blocks()
     target = PREFIX + mode
     if target not in blocks:
@@ -1215,6 +1261,7 @@ def cmd_sz_apply(cfg: dict) -> None:
 
 
 def cmd_off(cfg: dict) -> None:
+    refuse_if_committed("'off'")
     if read_only():
         print("an only session is running; 'focus only end' ends it")
         return
@@ -1392,6 +1439,16 @@ def status_headline(cfg: dict, blocks: dict) -> str:
         now = paint(f"break until {end:%H:%M}", "1;33") + back
     else:
         now = paint("no mode", "1;33")
+    if commit := read_commit():
+        end = dt.datetime.fromtimestamp(commit["until"])
+        note = f"committed until {end:%H:%M}"
+        if any(p["kind"] == "end" for p in commit["pending"]):
+            note += ", end requested"
+        elif commit["pending"]:
+            note += (
+                f", allow requested: {', '.join(p['site'] for p in commit['pending'])}"
+            )
+        now += " " + paint(f"({note})", "1;31")
     for name, b in blocks.items():
         if name.startswith(TIMER_PREFIX) and on(b):
             end = lock_end(b)
@@ -2484,6 +2541,7 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
     """Start a session of picked groups, or add to and retime the one that runs."""
     if "only" not in cfg:
         sys.exit(f"focus: {CONFIG_PATH} has no 'only:' section")
+    refuse_if_committed("an only session")
     session = read_only()
     if args == ["end"]:
         if not session:
@@ -2561,6 +2619,386 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
         print(
             "tip: 'focus install-agent' makes sure a session ends even after a restart"
         )
+
+
+def read_commit() -> dict | None:
+    """The committed block, {'mode', 'block', 'until', 'locked_to', 'pending'}, or None.
+    'locked_to' is when the lock last asked for ends, a fallback for when the database's
+    lock field does not parse; 'pending' holds the allow and end requests that wait
+    for Cold Turkey's lock to run out."""
+    s = read_state(COMMIT_FILE)
+    if not s or not isinstance(s.get("mode"), str):
+        return None
+
+    def num(v):
+        return v if isinstance(v, (int, float)) else 0
+
+    return {
+        "mode": s["mode"],
+        "block": PREFIX + s["mode"],
+        "until": num(s.get("until")),
+        "locked_to": num(s.get("locked_to")),
+        "pending": [
+            p
+            for p in s.get("pending") or []
+            if isinstance(p, dict) and p.get("kind") in ("allow", "end")
+        ],
+    }
+
+
+def write_commit(s: dict) -> None:
+    keys = ("mode", "until", "locked_to", "pending")
+    write_state(COMMIT_FILE, {k: s[k] for k in keys})
+
+
+@contextmanager
+def commit_lock():
+    """One process at a time changes the committed block: the tick and the waiter race."""
+    COMMIT_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with COMMIT_LOCK.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+
+
+def refuse_if_committed(what: str, mode: str | None = None) -> None:
+    """Exit while a committed block runs, unless it is `mode`'s own."""
+    s = read_commit()
+    if s and s["mode"] != mode:
+        end = dt.datetime.fromtimestamp(s["until"])
+        sys.exit(
+            f"focus: a committed block runs ({s['block']!r} until {end:%H:%M}), so "
+            f"{what} is refused. 'focus allow SITE' allows a site and 'focus end' ends "
+            "it, each once Cold Turkey's lock runs out."
+        )
+
+
+def lock_ran_out(block: dict) -> bool:
+    """Cold Turkey stops a block when its lock runs out; a block that runs unlocked has
+    no lock left either."""
+    return block.get("enabled") != "true" or not is_locked(block)
+
+
+def current_lock_to(block: dict, s: dict) -> float | None:
+    """When the committed block's lock ends (epoch), or None when it has none. The
+    database stores a timed lock as 'Y,M,D,H,M'; another form falls back to what focus
+    last asked for."""
+    if lock_ran_out(block):
+        return None
+    end = lock_end(block)
+    return end.timestamp() if end else (s["locked_to"] or None)
+
+
+def lock_minutes(
+    now: float,
+    lock_to: float | None,
+    until: float,
+    wait: int,
+    ahead: float = EXTEND_AHEAD_S,
+) -> int | None:
+    """N for '-start BLOCK -lock N' that keeps the rolling lock ahead, or None to leave
+    the lock alone.
+
+    Extend only once less than `ahead` seconds of lock remain and the lock does not
+    already reach the end. N is the wait, or less near the end, rounded up so the lock
+    covers the end; it is never shorter than what remains, since Cold Turkey cannot
+    shorten a lock."""
+    left = until - now
+    if left <= 0:
+        return None
+    have = max(0.0, lock_to - now) if lock_to else 0.0
+    if lock_to and (lock_to >= until or have > ahead):
+        return None
+    n = min(wait, math.ceil(left / 60))
+    return n if n * 60 > have else None
+
+
+def roll_lock(s: dict, n: int, before: float | None) -> bool:
+    """Lock the committed block for n minutes from now. '-start' starts it if it has
+    stopped and extends the lock if it runs. Done once the database shows a lock that
+    reaches further than `before` (any lock, when there was none)."""
+    block = s["block"]
+
+    def done() -> bool:
+        b = read_blocks().get(block, {})
+        if lock_ran_out(b):
+            return False
+        end = lock_end(b)
+        return before is None or end is None or end.timestamp() > before
+
+    landed = ct_apply(("-start", block, "-lock", str(n)), done)
+    if landed:
+        s["locked_to"] = time.time() + n * 60
+    return landed
+
+
+def commit_wait(cfg: dict) -> int:
+    return int(cfg.get("commit_wait_minutes", DEFAULT_COMMIT_WAIT))
+
+
+def random_text(n: int) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(n))
+
+
+def allow_in_note(path: Path, mode: str, sites: list[str]) -> None:
+    """Add sites to the group 'added-<mode>', creating it and naming it in the mode's
+    allow list as needed, keeping the note's comments and layout."""
+    group = f"added-{mode}"
+
+    def change(doc):
+        from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+        groups = doc["groups"]
+        if groups.get(group) is None:
+            groups[group] = CommentedMap()
+        seq = groups[group].setdefault("sites", CommentedSeq())
+        seq.extend([x for x in dict.fromkeys(sites) if x not in seq])
+        if doc["modes"][mode] is None:
+            doc["modes"][mode] = CommentedMap()
+        allow = doc["modes"][mode].setdefault("allow", CommentedSeq())
+        if group not in allow:
+            allow.append(group)
+        return True
+
+    edit_note(path, change)
+    load_config(path)  # validates the edited note
+
+
+def cmd_commit(cfg: dict, mode: str, args: list[str]) -> None:
+    """Start a mode and keep its block locked until the end time with a rolling lock:
+    the launchd tick keeps the lock about `commit_wait_minutes` ahead."""
+    if mode not in cfg["modes"]:
+        sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
+    refuse_if_committed(f"starting {mode!r}", mode)
+    if mode in (cfg.get("capped_modes") or {}):
+        sys.exit(f"focus: {mode!r} is a capped mode, which cannot be committed")
+    if len(args) > 1 or (args and (not args[0].isdigit() or int(args[0]) < 1)):
+        sys.exit(f"focus: usage: focus {mode} [MINUTES] --commit")
+    minutes = int(args[0]) if args else DEFAULT_COMMIT_MIN
+    if (s := read_commit()) and s["pending"]:
+        sys.exit(
+            "focus: a request waits for the lock to run out; commit again after it"
+        )
+    if not AGENT_PLIST.exists():
+        sys.exit(
+            "focus: the launchd job keeps a committed block locked, and it is not "
+            "installed; run 'focus install-agent' first"
+        )
+    cmd_start(cfg, mode)  # a switch from another mode passes the agent gate here
+    wait = commit_wait(cfg)
+    with commit_lock():
+        now = time.time()
+        s = read_commit() or {"mode": mode, "block": PREFIX + mode, "until": 0}
+        s.setdefault("locked_to", 0)
+        s.setdefault("pending", [])
+        s["until"] = max(s["until"], now + minutes * 60)  # a commitment only grows
+        write_commit(s)
+        lock_to = current_lock_to(read_blocks().get(s["block"], {}), s)
+        n = lock_minutes(now, lock_to, s["until"], wait, ahead=math.inf)
+        locked = n is None or roll_lock(s, n, lock_to)
+        write_commit(s)
+    end = dt.datetime.fromtimestamp(s["until"])
+    print(
+        f"committed: {s['block']!r} stays locked until {end:%H:%M}, with the lock kept "
+        f"about {wait} min ahead"
+    )
+    if not locked:
+        print(
+            "Cold Turkey has not taken the lock yet; the launchd job tries every minute"
+        )
+    print(
+        "'focus allow SITE' and 'focus end' ask for a typed text and a reason, then wait "
+        "for the lock to run out"
+    )
+
+
+def commit_request(cfg: dict, kind: str, sites: list[str]) -> None:
+    """Queue an allow or an end for the committed block: type back a random text, give
+    a reason, then stop extending the lock and leave a waiter for it to run out."""
+    s = read_commit()
+    if any(p["kind"] == "end" for p in s["pending"]):
+        sys.exit("focus: 'focus end' already waits for Cold Turkey's lock to run out")
+    mode = s["mode"]
+    what = (
+        f"allowing {', '.join(sites)} in {mode}"
+        if kind == "allow"
+        else f"ending the committed {mode} block"
+    )
+    gate(cfg, f"commit-{kind}:{mode}:{','.join(sites)}", what)
+    need_terminal(what)
+    text = random_text(int(cfg.get("commit_text_chars", DEFAULT_COMMIT_TEXT)))
+    print(f"To go on with {what}, type this text exactly:\n\n{text}\n")
+    if input("> ") != text:
+        sys.exit("focus: the text did not match; nothing changed")
+    reason = ask_reason(what)
+    command = "focus " + (f"allow {' '.join(sites)}" if kind == "allow" else "end")
+    log_reason(command, reason, mode=mode)
+    with commit_lock():
+        s = read_commit()
+        if s is None:
+            sys.exit("focus: the committed block ended meanwhile; nothing to do")
+        since = time.time()
+        if kind == "allow":
+            s["pending"] += [
+                {"kind": "allow", "site": x, "since": since} for x in sites
+            ]
+        else:
+            s["pending"].append({"kind": "end", "since": since})
+        write_commit(s)
+    try:
+        spawn_self("commit-wait")
+    except OSError as e:
+        print(f"focus: could not start the waiter ({e}); the launchd job applies it")
+    lock_to = current_lock_to(read_blocks().get(s["block"], {}), s)
+    when = (
+        f"about {dt.datetime.fromtimestamp(lock_to):%H:%M}" if lock_to else "any moment"
+    )
+    effect = f"{', '.join(sites)} is allowed" if kind == "allow" else f"{mode} stops"
+    print(
+        f"queued; the lock is no longer extended. It runs out at {when}, and {effect} "
+        "within a few seconds after."
+    )
+
+
+def cmd_allow(cfg: dict, sites: list[str], app: bool) -> None:
+    if read_commit() is None:
+        sys.exit(
+            "focus: no committed block runs; 'focus add GROUP SITE' adds a site to a group"
+        )
+    if app or not sites:
+        sys.exit(
+            "focus: usage: focus allow SITE [SITE…]; only sites can be allowed during a "
+            "committed block, not apps"
+        )
+    commit_request(cfg, "allow", sites)
+
+
+def cmd_end(cfg: dict) -> None:
+    if read_commit() is None:
+        print("no committed block runs")
+        return
+    commit_request(cfg, "end", [])
+
+
+def apply_pending(cfg: dict, s: dict, block: dict) -> None:
+    """Apply what waited for the committed block's lock to run out. Call it holding
+    commit_lock(), with the lock run out.
+
+    End: stop the block and clear the commitment; ScreenZen follows as for 'off'.
+    Allow: put the sites in the note's 'added-<mode>' group, add them to the block as
+    exceptions (it is unlocked now), then start it and lock it to the rolling horizon
+    again. Each command lands before the next is sent: the command slot holds one."""
+    name, mode = s["block"], s["mode"]
+    if any(p["kind"] == "end" for p in s["pending"]):
+        # Stop it even when it shows stopped, so a stale '-start … -lock' still waiting
+        # in the command slot cannot start it again.
+        switch(name, on=False)
+        COMMIT_FILE.unlink(missing_ok=True)
+        log_reason("focus end (applied)", "Cold Turkey's lock ran out", mode=mode)
+        sz_follow(cfg, running_modes(cfg), switched=True)
+        notify(f"Committed block over: {mode} is off.")
+        print(f"committed block over; {mode} is off")
+        return
+    sites = list(dict.fromkeys(p["site"] for p in s["pending"]))
+    allow_in_note(CONFIG_PATH, mode, sites)
+    cfg = load_config(CONFIG_PATH)
+    have = block.get("exceptions", [])
+    sent = [
+        add_site(name, "-exception", "exceptions", x) for x in sites if x not in have
+    ]
+    missing = [x[2] for x in unconfirmed(sent)]
+    s["pending"] = []
+    now = time.time()
+    if now < s["until"]:
+        locked = roll_lock(
+            s, lock_minutes(now, None, s["until"], commit_wait(cfg)), None
+        )
+        write_commit(s)
+    else:  # the commitment ended while the request waited
+        switch(name, on=True)
+        COMMIT_FILE.unlink(missing_ok=True)
+        locked = True
+    log_reason("focus allow (applied)", ", ".join(sites), mode=mode, missing=missing)
+    sz_follow(cfg, running_modes(cfg))
+    text = f"Allowed {', '.join(sites)} in {mode}"
+    if missing:
+        text += (
+            f"; Cold Turkey did not take {', '.join(missing)}, which the note now has, "
+            "so 'focus sync' adds it once the block is unlocked"
+        )
+    if now < s["until"]:
+        text += (
+            "; locked again" if locked else "; the lock did not land, the tick retries"
+        )
+    notify(text + ".")
+    print(text)
+
+
+def cmd_commit_wait(cfg: dict) -> None:
+    """Wait for Cold Turkey's lock on the committed block to run out, then apply what
+    is pending (run detached by 'allow' and 'end'). It polls every 2 s near the end."""
+    while (s := read_commit()) and s["pending"]:
+        b = read_blocks().get(s["block"], {})
+        if lock_ran_out(b):
+            with commit_lock():
+                s = read_commit()
+                b = read_blocks().get(s["block"], {}) if s else {}
+                if s and s["pending"] and lock_ran_out(b):
+                    apply_pending(cfg, s, b)
+            return
+        lock_to = current_lock_to(b, s) or time.time()
+        time.sleep(max(2, min(30, lock_to - time.time() - 10)))
+
+
+def commit_tick(cfg: dict) -> None:
+    """The launchd tick's part: keep a committed block locked until its end time.
+
+    - With a request pending, never extend or restart; apply it if the lock has run out
+      and the waiter died.
+    - Past the end: once the last lock has run out, clear the commitment and leave the
+      mode on, unlocked (starting it again if Cold Turkey stopped it).
+    - Stopped before the end with nothing pending (a missed tick, sleep, a locked
+      screen): start it and lock it again, and log that once it lands.
+    - Otherwise extend the lock when less than EXTEND_AHEAD_S of it remains."""
+    if read_commit() is None:
+        return
+    with commit_lock():
+        s = read_commit()
+        if s is None:
+            return
+        b = read_blocks().get(s["block"])
+        if b is None:
+            print(f"focus tick: Cold Turkey has no block {s['block']!r}")
+            return
+        if s["pending"]:
+            if lock_ran_out(b):
+                apply_pending(cfg, s, b)
+            return
+        now, on = time.time(), b.get("enabled") == "true"
+        if now >= s["until"]:
+            if not lock_ran_out(b):
+                return  # the last lock reaches a little past the end
+            if not on:
+                switch(s["block"], on=True)  # exits on failure; the record stays
+            COMMIT_FILE.unlink(missing_ok=True)
+            notify(f"Committed block over: {s['mode']} stays on, unlocked.")
+            print(f"committed block over; {s['mode']} stays on, unlocked")
+            return
+        lock_to = current_lock_to(b, s)
+        n = lock_minutes(now, lock_to, s["until"], commit_wait(cfg))
+        if n is None:
+            return
+        if not roll_lock(s, n, lock_to):
+            print(f"focus tick: Cold Turkey did not lock {s['block']!r}; trying again")
+            return
+        write_commit(s)
+        if not on:
+            log_reason(
+                "focus tick",
+                f"started and locked {s['block']!r} again: it had stopped before the "
+                "end with no request pending",
+                mode=s["mode"],
+            )
 
 
 def cmd_alfred(cfg: dict, query: str) -> None:
@@ -2711,6 +3149,12 @@ def cmd_overview(cfg: dict) -> None:
             cap = capped[m].get("minutes", DEFAULT_CAPPED_MIN)
             detail += f" · at most {cap} min a time"
         row(mark(PREFIX + m, m), m, paint(detail, "2"))
+    if commit := read_commit():
+        end = dt.datetime.fromtimestamp(commit["until"])
+        print(
+            f"  {paint('committed', '1;31')} {commit['mode']} until {end:%H:%M}  "
+            + paint("focus allow SITE · focus end", "2")
+        )
     for t, spec in (cfg.get("timers") or {}).items():
         print()
         head("Timer", f"focus {t} [minutes]")
@@ -2787,13 +3231,13 @@ def main() -> None:
         "command",
         nargs="?",
         help="a mode or timer name, or only | break | off | status | sync | screenzen | add | pull"
-        " | export | install-agent | uninstall-agent",
+        " | allow | end | export | install-agent | uninstall-agent",
     )
     p.add_argument(
         "args",
         nargs="*",
         help="export: output file; add: GROUP SITE [SITE…]; only: [GROUP…] [MINUTES] | end;"
-        " a capped mode: [MINUTES]",
+        " a capped mode, or a mode with --commit: [MINUTES]; allow: SITE [SITE…]",
     )
     p.add_argument(
         "--dry-run", action="store_true", help="screenzen, pull: show changes only"
@@ -2803,6 +3247,12 @@ def main() -> None:
         "--day",
         action="store_true",
         help="a capped mode: one longer stretch from its daily budget (asks a reason)",
+    )
+    p.add_argument(
+        "--commit",
+        action="store_true",
+        help="a mode: keep its block locked for MINUTES (default 60); only "
+        "'focus allow' and 'focus end' change it",
     )
     # Intermixed, so a flag may come before or after the minutes: 'focus x --day 90'.
     a = p.parse_intermixed_args()
@@ -2820,6 +3270,7 @@ def main() -> None:
         "resume",
         "only-wait",
         "capped-wait",
+        "commit-wait",
         "sz-apply",
         "alfred",
         "tick",
@@ -2844,6 +3295,14 @@ def main() -> None:
             cmd_tick(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
+        case "allow":
+            cmd_allow(cfg, a.args, a.app)
+        case "end":
+            cmd_end(cfg)
+        case (
+            "commit-wait"
+        ):  # internal: the detached waiter that 'allow' and 'end' leave
+            cmd_commit_wait(cfg)
         case "only":
             cmd_only(cfg, a.args)
         case "only-wait":  # internal: the detached waiter that 'only' starts
@@ -2875,20 +3334,24 @@ def main() -> None:
             cmd_alfred(cfg, " ".join(a.args))
         case name if name in (cfg.get("timers") or {}):
             cmd_timer(cfg, name, a.args)
+        case mode if a.commit:
+            cmd_commit(cfg, mode, a.args)
         case mode if mode in (cfg.get("capped_modes") or {}):
             cmd_capped(cfg, mode, a.args, day=a.day)
         case mode:
             if a.args or a.day:
                 sys.exit(
-                    f"focus: usage: focus {mode}; minutes and --day are for capped modes"
+                    f"focus: usage: focus {mode} [--commit [MINUTES]]; minutes and "
+                    "--day alone are for capped modes"
                 )
             cmd_start(cfg, mode)
 
 
 def cmd_tick(cfg: dict) -> None:
-    """The once-a-minute launchd job: end what is overdue, else stay silent. Each step
-    runs on its own, so one that fails (switch() exits) does not skip the others."""
-    for step in (end_break, end_only, end_capped):
+    """The once-a-minute launchd job: keep a committed block locked, then end what is
+    overdue; else stay silent. The lock goes first because it is the one that lapses.
+    Each step runs on its own, so one that fails (switch() exits) skips no other."""
+    for step in (commit_tick, end_break, end_only, end_capped):
         try:
             step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
