@@ -220,7 +220,8 @@ agents_dir, config = sys.argv[1], sys.argv[2]
 served = set()
 try:
     cfg = tomllib.loads(pathlib.Path(config).read_text())
-    served = {m["routing-id"] for m in cfg.get("models", [])} | {m["routing-id"] for p in cfg.get("openai-providers", []) for m in p.get("models", [])}
+    codex = [*cfg.get("model-overrides", []), *cfg.get("models", [])]  # [[models]] is the pre-2026-11-17 form
+    served = {m["routing-id"] for m in codex} | {m["routing-id"] for p in cfg.get("openai-providers", []) for m in p.get("models", [])}
 except FileNotFoundError:
     pass
 bad = []
