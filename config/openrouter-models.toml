@@ -153,7 +153,7 @@ reviewed = "2026-11-16"
 seats = [
   { alias = "opus", slug = "anthropic/claude-fable-5.2", family = "anthropic", score = 173.44, basis = "eci" },
   { alias = "gemini", slug = "google/gemini-4-carbon", family = "google", score = 169.76, basis = "eci" },
-  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 169.0, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6.2-astra", family = "openai", score = 0.0, basis = "newest-in-line" },
   { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 161.68, basis = "eci" },
   { alias = "kimi", slug = "moonshotai/kimi-k3.1-pro", family = "moonshotai", score = 161.37, basis = "eci" },
   { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 157.1, basis = "eci" },
