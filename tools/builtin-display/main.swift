@@ -178,20 +178,19 @@ func turnOff() {
     if waitFor({ !builtinIsOn() }) {
         print("built-in screen: \(paint("off", .green)) — run `builtin-display on` (or log out) to bring it back")
     } else {
-        fail("the call succeeded but the built-in screen is still online")
+        fail("the call was accepted but the built-in screen is still listed online; if it went dark, `builtin-display on` restores it")
     }
 }
 
+// Always sends the enable call, even when detection says the screen is on:
+// whether a disabled panel leaves the online list is not something to bet the
+// way back on. Enabling an already enabled display is a no-op.
 func turnOn() {
     requireWindowServer()
-    if builtinIsOn() {
-        print("built-in screen: \(paint("already on", .green))")
-        return
-    }
     if lidClosed() {
         fail("the lid is closed; open it first")
     }
-    guard let id = savedBuiltinID() else {
+    guard let id = savedBuiltinID() ?? onlineBuiltinID() else {
         fail("no remembered built-in display ID; log out and back in to restore the screen")
     }
     setEnabled(id, true)
@@ -214,8 +213,16 @@ func status() {
 }
 
 // Turn off, wait, turn back on. Ctrl-C or SIGTERM during the wait also restores.
+// Never exits between the disable and the enable, whatever detection reports;
+// it prints what detection saw, which is the point of a first test.
 func trial(seconds: UInt32) {
-    turnOff()
+    requireWindowServer()
+    guard let id = onlineBuiltinID() else { fail("the built-in screen is not online (lid closed or already off)") }
+    guard !externals().isEmpty else { fail("refusing: no external display is connected") }
+    saveBuiltinID(id)
+    if let error = trySetEnabled(id, false) { fail(error) }
+    let gone = waitFor({ !builtinIsOn() }, seconds: 3)
+    print("disable sent; built-in \(gone ? paint("left the online list", .green) : paint("still listed online", .yellow))")
     for sig in [SIGINT, SIGTERM] {
         signal(sig) { _ in
             if let id = savedBuiltinID(), let configure = loadConfigureEnabled() {
@@ -230,7 +237,12 @@ func trial(seconds: UInt32) {
     }
     print(paint("restoring in \(seconds)s (Ctrl-C restores now)", .dim))
     sleep(seconds)
-    turnOn()
+    if let error = trySetEnabled(id, true) {
+        fail("re-enable FAILED (\(error)); log out to restore the screen")
+    }
+    let back = waitFor({ builtinIsOn() })
+    print("enable sent; built-in \(back ? paint("back online", .green) : paint("not listed online — if it is still dark, log out", .red))")
+    if !back { exit(1) }
 }
 
 // MARK: watcher
@@ -244,8 +256,15 @@ func trial(seconds: UInt32) {
 // left alone. Reconfiguration events arrive in bursts, so each burst is handled
 // once, 2 s after it settles.
 
-var knownExternals: Set<CGDirectDisplayID> = []
+// Externals are keyed by vendor/model/serial, not CGDirectDisplayID, in case a
+// reconfiguration (such as re-enabling the built-in) renumbers them and makes an
+// already connected monitor look new.
+var knownExternals: Set<String> = []
 var pendingCheck: DispatchWorkItem?
+
+func hardwareKey(_ id: CGDirectDisplayID) -> String {
+    "\(CGDisplayVendorNumber(id))-\(CGDisplayModelNumber(id))-\(CGDisplaySerialNumber(id))"
+}
 
 func log(_ message: String) {
     let stamp = ISO8601DateFormatter().string(from: Date())
@@ -254,8 +273,9 @@ func log(_ message: String) {
 }
 
 func reconcile() {
-    let now = Set(externals())
+    let now = Set(externals().map(hardwareKey))
     let added = now.subtracting(knownExternals)
+    log("reconfigured: externals=\(now.sorted()) builtin=\(builtinIsOn() ? "on" : "off") lid=\(lidClosed() ? "closed" : "open")")
     defer { knownExternals = now }
 
     if !added.isEmpty, let id = onlineBuiltinID(), !lidClosed() {
