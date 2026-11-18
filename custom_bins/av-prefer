@@ -14,7 +14,7 @@
 # across reboots, and it is meant to win again when the display returns. An app
 # that saved its own choice (Zoom, a Chrome site, FaceTime's Video menu) keeps
 # it. Speaker: SwitchAudioSource (switchaudio-osx, in the Brewfile) sets the
-# output and sound-effects device. The microphone is left alone.
+# output device only; alert sounds and the microphone are left alone.
 set -euo pipefail
 
 # Priority lists: the first present device wins. Case-insensitive substrings.
@@ -84,7 +84,6 @@ apply() {
     print -n "camera   "; paint green "$cam"; print
     if spk=$(pick_speaker); then
         SwitchAudioSource -t output -s "$spk" >/dev/null
-        SwitchAudioSource -t system -s "$spk" >/dev/null
         print -n "speaker  "; paint green "$spk"; print
     else
         print -n "speaker  "; paint yellow "no match for: ${(j:, :)SPEAKERS} — left as is"; print
