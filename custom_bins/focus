@@ -1676,10 +1676,14 @@ def cmd_status(cfg: dict) -> None:
 
 
 def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
-    """The allowed sites a sync would add to mode blocks: the part of a sync that loosens."""
+    """The allowed sites a sync would add to mode blocks: the part of a sync that loosens.
+    A committed mode is left out: its lock keeps new exceptions out, so a sync adds none
+    to it and an agent has nothing there to wait for."""
+    c = read_commit()
     return sorted(
         f"{m}:{e}"
         for m in cfg["modes"]
+        if c is None or c["mode"] != m
         for e in drift(cfg, blocks, m).get("add_exc", [])
     )
 
@@ -1716,10 +1720,25 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             f"allowing new sites ({', '.join(loosen)})",
         )
     needs_import, failed, modes, sent, banned = [], [], [], [], []
+    held = []  # additions a committed block's lock keeps out until it ends
+    commit = read_commit()
     for mode in cfg["modes"]:
         name, d = PREFIX + mode, drift(cfg, blocks, mode)
         if not d["exists"]:
             needs_import.append(f"{paint(name, '1')}: {CT_MISSING_BLOCK}")
+            continue
+        if commit is not None and commit["mode"] == mode:
+            # A locked block takes no new exception, so sending one only fails. A sync
+            # after the end adds them; 'focus allow' adds them sooner, at its cost.
+            if d["add_exc"]:
+                ends = max(commit["until"], commit["locked_to"])
+                until = dt.datetime.fromtimestamp(ends).strftime("%H:%M")
+                held.append(
+                    f"{paint(name, '1')} is committed and locked until about {until}, so "
+                    f"Cold Turkey takes no new allowed site yet: {', '.join(d['add_exc'])}. "
+                    f"Run 'focus sync' after {until}, or 'focus allow "
+                    f"{' '.join(d['add_exc'])}' to add it sooner."
+                )
             continue
         modes.append(name)
         # Exceptions before '*.*', so a running block never blocks a site it should allow.
@@ -1785,6 +1804,8 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             )
         )
         print("\n".join(f"  {line}" for line in needs_import))
+    for line in held:
+        print(paint(line, "33"))
     # One command applies the note everywhere: ScreenZen too, for the running mode.
     if sz_on:
         print()
@@ -3044,8 +3065,12 @@ def apply_pending(cfg: dict, s: dict, block: dict) -> None:
     from ruamel.yaml.error import YAMLError
 
     note_failed = None
+    # A site the note already allows in this mode (added while the block was locked)
+    # needs only the Cold Turkey exception, not a copy in 'added-<mode>'.
+    new = [x for x in sites if x not in desired_exceptions(cfg, mode)]
     try:
-        allow_in_note(CONFIG_PATH, mode, sites)
+        if new:
+            allow_in_note(CONFIG_PATH, mode, new)
         cfg = load_config(CONFIG_PATH)
     except (SystemExit, OSError, ValueError, KeyError, TypeError, YAMLError) as e:
         note_failed = str(e) or type(e).__name__
@@ -3122,6 +3147,13 @@ def cmd_commit_keep(cfg: dict) -> None:
         time.sleep(KEEP_EVERY_S)
 
 
+def held_exceptions(cfg: dict, mode: str) -> list[str]:
+    """The allowed sites the note has for a mode and its Cold Turkey block lacks: what a
+    commitment's lock kept out, named when it ends."""
+    d = drift(cfg, read_blocks(), mode)
+    return d["add_exc"] if d["exists"] else []
+
+
 def commit_tick(cfg: dict) -> None:
     """The launchd tick's part: keep a committed block locked until its end time.
 
@@ -3153,8 +3185,15 @@ def commit_tick(cfg: dict) -> None:
             if not on:
                 switch(s["block"], on=True)  # exits on failure; the record stays
             COMMIT_FILE.unlink(missing_ok=True)
-            notify(f"Committed block over: {s['mode']} stays on, unlocked.")
-            print(f"committed block over; {s['mode']} stays on, unlocked")
+            # Sites added to the note while the lock kept them out are named, not added:
+            # the tick never loosens by itself, so a note edited by an agent during the
+            # commitment still needs a person's 'focus sync'.
+            waiting = held_exceptions(cfg, s["mode"])
+            text = f"Committed block over: {s['mode']} stays on, unlocked"
+            if waiting:
+                text += f"; run 'focus sync' to allow {', '.join(waiting)}"
+            notify(text + ".")
+            print(text)
             return
         lock_to = current_lock_to(b, s)
         n = lock_minutes(now, lock_to, s["until"], commit_wait(cfg))
