@@ -26,7 +26,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | "only Bear and ChatGPT for 45 minutes", "let me pick what's allowed", "something like Micromanager" | `focus only` opens the search (a terminal and fzf, so Yulong runs it himself); `focus only bear chatgpt 45` names the picks, as a group, a word in one group, or an installed app. See "Only sessions" below |
 | "a stretch of a capped mode", "another half hour of it" | `focus <capped mode> [MINUTES]`: at most the mode's `minutes`, then back to the mode before it. A later start the same day asks Yulong for a reason at the terminal, so an agent can make only the first. See "Capped modes" below |
 | "a long day in a capped mode" | `focus <capped mode> --day [MINUTES]`: one stretch from the daily budget, with a reason; Yulong runs it himself |
-| "lock me into research for two hours", "commit to writing" | `focus research 120 --commit`: starts the mode and keeps its block locked until the end. Needs `focus install-agent`. See "Committed blocks" below |
+| "lock me into research for two hours", "commit to writing" | `focus research 120 --commit`: starts the mode and keeps its block locked until the end. Refuses unless the launchd job from `focus install-agent` is loaded for this focus and note. See "Committed blocks" below |
 | "allow X" or "end it" during a committed block | `focus allow X` or `focus end`: a typed text and a reason at the terminal, so Yulong runs these himself; the change lands when Cold Turkey's lock runs out |
 | "what's running", "is it in sync", "is X locked strongly enough" | `focus status` |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
@@ -66,7 +66,8 @@ The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fall
 - **End, applied:** the block stops and the commitment is cleared; ScreenZen follows as for `focus off`.
 - **A stopped block is put back:** if the tick finds the block stopped before the end with nothing pending (a missed tick, sleep, a locked screen), it starts and locks it again and logs that. Commands cannot land while the screen is locked.
 - **At the end time:** the last lock runs out and the mode stays on, unlocked.
-- **Accepted limitation:** unloading the launchd job, or deleting the state file, lets the lock lapse within one wait. Never do either to get past a commitment, and never edit the state or the log.
+- **Two keepers:** the commitment starts only when `launchctl print` shows the job loaded and running this focus with this note; a plist on disk is not enough, since `launchctl` may have refused it. A detached keeper also runs the same check every 30 s until the end.
+- **Accepted limitation:** unloading the launchd job and stopping the keeper (or restarting with the job unloaded), or deleting the state file, lets the lock lapse within one wait. Never do either to get past a commitment, and never edit the state or the log.
 
 ## Loosening waits; do not work around it
 

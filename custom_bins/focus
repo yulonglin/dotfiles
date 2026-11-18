@@ -95,8 +95,10 @@ block locked until the end time with a rolling lock: the launchd tick (and every
 focus command, first) keeps the lock about `commit_wait_minutes` (default 5, at
 least 2) ahead with '-start <block> -lock N',
 and starts and locks the block again if it finds it stopped before the end with
-nothing pending (a missed tick, sleep, a locked screen), logging that. It needs the
-launchd job, and refuses without it. While it runs, 'break', 'off', 'only' and
+nothing pending (a missed tick, sleep, a locked screen), logging that. It refuses
+unless 'launchctl print' shows the job loaded and running this focus with this
+note (a plist on disk proves nothing), and it leaves a detached keeper that runs
+the same check every 30 s until the end. While it runs, 'break', 'off', 'only' and
 starting another mode refuse; 'focus deep' still runs. Only two commands change it,
 and only at a terminal: 'focus allow SITE…' and 'focus end'. Each shows a random
 text of `commit_text_chars` (default 300) characters to type back exactly, asks for
@@ -108,8 +110,9 @@ list), adds them to the block as exceptions, then starts and locks the block aga
 for end, it stops the block and clears the commitment, and ScreenZen follows as for
 'off'. Only sites can be allowed this way, not apps. At the end time the last lock
 runs out and the mode stays on, unlocked. The state is ~/.local/state/focus/
-commit.json. Accepted limitation: unloading the launchd job, or deleting the state
-file, lets the lock lapse within one wait.
+commit.json. Accepted limitation: unloading the launchd job and stopping the keeper
+(or restarting with the job unloaded), or deleting the state file, lets the lock
+lapse within one wait.
 
 The config is a Markdown note with one fenced ```yaml block, kept in the vault so
 personal entries stay out of this public repo. Override its path with
@@ -888,17 +891,12 @@ def cmd_install_agent() -> None:
     """Install the once-a-minute launchd job ('focus tick'). It extends a committed
     block's rolling lock, and ends overdue breaks, only sessions and capped stretches,
     so each ends even if its waiter dies, the Mac restarts, or focus is never run again.
-    Unloading it lets a committed block's lock lapse within one wait."""
+    A plist launchctl refuses is removed, so its presence never reads as a job."""
     path = os.environ.get("PATH", "")
     extra = ["/opt/homebrew/bin", str(Path.home() / ".local/bin"), "/usr/bin", "/bin"]
     plist = {
         "Label": AGENT_LABEL,
-        "ProgramArguments": [
-            str(Path(sys.argv[0]).resolve()),
-            "--config",
-            str(CONFIG_PATH),
-            "tick",
-        ],
+        "ProgramArguments": tick_args(),
         "StartInterval": 60,
         "RunAtLoad": True,
         "EnvironmentVariables": {"PATH": ":".join(extra + [path])},
@@ -917,13 +915,44 @@ def cmd_install_agent() -> None:
         text=True,
     )
     if r.returncode:
-        sys.exit(
-            f"focus: wrote {AGENT_PLIST} but launchctl refused it: {r.stderr.strip()}"
-        )
+        # Leave no plist behind: its presence must never read as a working job.
+        AGENT_PLIST.unlink(missing_ok=True)
+        sys.exit(f"focus: launchctl refused {AGENT_LABEL}: {r.stderr.strip()}")
     print(
         f"installed {AGENT_LABEL}: every minute it keeps a committed block locked and "
         "ends a break, only session or capped stretch that is over"
     )
+
+
+def tick_args() -> list[str]:
+    """The arguments the launchd job must run: this focus, this note, 'tick'."""
+    return [str(Path(sys.argv[0]).resolve()), "--config", str(CONFIG_PATH), "tick"]
+
+
+def launchd_print() -> str | None:
+    """'launchctl print' for the tick job, or None when launchd has no such job loaded
+    (it exits 113 then). A plist on disk says nothing: launchctl may have refused it."""
+    r = subprocess.run(
+        ["launchctl", "print", f"gui/{os.getuid()}/{AGENT_LABEL}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return r.stdout if r.returncode == 0 else None
+
+
+def tick_job_problem() -> str | None:
+    """Why the loaded launchd job cannot keep a committed block locked, or None. It
+    must be loaded and run this focus with this note: one left from another checkout
+    or note would tick the wrong state."""
+    out = launchd_print()
+    if out is None:
+        return f"launchd has no job {AGENT_LABEL} loaded"
+    m = re.search(r"^\s*arguments = \{\n(.*?)^\s*\}", out, re.DOTALL | re.MULTILINE)
+    args = [line.strip() for line in m.group(1).splitlines()] if m else []
+    if args != tick_args():
+        return f"the loaded job runs {' '.join(args) or 'something else'!r}"
+    return None
 
 
 def cmd_uninstall_agent() -> None:
@@ -2782,10 +2811,10 @@ def cmd_commit(cfg: dict, mode: str, args: list[str]) -> None:
         sys.exit(
             "focus: a request waits for the lock to run out; commit again after it"
         )
-    if not AGENT_PLIST.exists():
+    if problem := tick_job_problem():
         sys.exit(
-            "focus: the launchd job keeps a committed block locked, and it is not "
-            "installed; run 'focus install-agent' first"
+            f"focus: the launchd job keeps a committed block locked, but {problem}; "
+            "run 'focus install-agent', then commit again"
         )
     wait = commit_wait(cfg)
 
@@ -2799,10 +2828,11 @@ def cmd_commit(cfg: dict, mode: str, args: list[str]) -> None:
             sys.exit(f"focus: Cold Turkey did not start {name!r} locked: {CT_DROPPED}")
         write_commit(s)
 
-    # A switch from another mode passes the agent gate here. A block that already runs
-    # is locked below instead.
-    cmd_start(cfg, mode, starter=start_locked)
+    # One lock over the start and the state, so a tick or waiter never sees half of it.
+    # A switch from another mode passes the agent gate inside; a block that already
+    # runs is locked below instead.
     with commit_lock():
+        cmd_start(cfg, mode, starter=start_locked)
         now = time.time()
         s = read_commit() or {"mode": mode, "block": PREFIX + mode, "until": 0}
         s.setdefault("locked_to", 0)
@@ -2813,6 +2843,14 @@ def cmd_commit(cfg: dict, mode: str, args: list[str]) -> None:
         n = lock_minutes(now, lock_to, s["until"], wait, ahead=math.inf)
         locked = n is None or roll_lock(s, n, lock_to)
         write_commit(s)
+    # Belt and braces for the launchd job: a detached keeper runs the same check every
+    # 30 s until the commitment ends, so a job that dies later does not fail open.
+    try:
+        spawn_self("commit-keep")
+    except OSError as e:
+        print(
+            f"focus: could not start the keeper ({e}); the launchd job alone keeps it"
+        )
     end = dt.datetime.fromtimestamp(s["until"])
     print(
         f"committed: {s['block']!r} stays locked until {end:%H:%M}, with the lock kept "
@@ -2980,6 +3018,23 @@ def cmd_commit_wait(cfg: dict) -> None:
             return
         lock_to = current_lock_to(b, s) or time.time()
         time.sleep(max(2, min(30, lock_to - time.time() - 10)))
+
+
+KEEP_EVERY_S = 30  # the keeper's period: well inside EXTEND_AHEAD_S
+
+
+def cmd_commit_keep(cfg: dict) -> None:
+    """Run commit_tick every KEEP_EVERY_S until the commitment ends (run detached by
+    '--commit'), so the lock is kept even if the launchd job is unloaded or dies. It
+    cannot outlive a restart; the launchd job covers that."""
+    while read_commit() is not None:
+        try:
+            commit_tick(cfg)
+        except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
+            print(f"focus keeper: {e}")
+        if read_commit() is None:
+            return
+        time.sleep(KEEP_EVERY_S)
 
 
 def commit_tick(cfg: dict) -> None:
@@ -3303,6 +3358,7 @@ def main() -> None:
         "only-wait",
         "capped-wait",
         "commit-wait",
+        "commit-keep",
         "sz-apply",
         "alfred",
         "tick",
@@ -3330,6 +3386,8 @@ def main() -> None:
             "commit-wait"
         ):  # internal: the detached waiter that 'allow' and 'end' leave
             cmd_commit_wait(cfg)
+        case "commit-keep":  # internal: the detached keeper that '--commit' leaves
+            cmd_commit_keep(cfg)
         case "only":
             cmd_only(cfg, a.args)
         case "only-wait":  # internal: the detached waiter that 'only' starts

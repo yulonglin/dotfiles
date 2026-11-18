@@ -2213,6 +2213,7 @@ def commit_env(tmp_path, monkeypatch):
     monkeypatch.setattr(ct.time, "time", clock)
     calls = locking_cold_turkey(monkeypatch, blocks, clock)
     ct.AGENT_PLIST.write_text("")
+    monkeypatch.setattr(ct, "launchd_print", lambda: loaded_job(ct.tick_args()))
     spawned, followed = [], []
     monkeypatch.setattr(ct, "spawn_self", lambda *a: spawned.append(a))
     monkeypatch.setattr(
@@ -2230,12 +2231,72 @@ def committed(commit_env, minutes="60"):
     return cfg, blocks, clock, calls
 
 
-def test_a_commitment_needs_the_launchd_job(commit_env):
-    cfg, *_ = commit_env
-    ct.AGENT_PLIST.unlink()
-    with pytest.raises(SystemExit, match="install-agent"):
+def loaded_job(args: list[str]) -> str:
+    """What 'launchctl print' shows for a loaded job, trimmed to what focus reads."""
+    lines = "".join(f"\t\t{a}\n" for a in args)
+    return (
+        f"gui/501/{ct.AGENT_LABEL} = {{\n\tstate = not running\n\n"
+        f"\tprogram = {args[0]}\n\targuments = {{\n{lines}\t}}\n\n"
+        "\tinherited environment = {\n\t\tSSH_AUTH_SOCK => /x\n\t}\n}\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "printed, why",
+    [
+        (lambda: None, "no job"),  # the plist exists, but launchd has not loaded it
+        (lambda: loaded_job(["/elsewhere/focus", "--config", "/n.md", "tick"]), "runs"),
+    ],
+)
+def test_a_commitment_needs_the_launchd_job_loaded_for_this_focus(
+    commit_env, monkeypatch, printed, why
+):
+    cfg, _, _, calls, spawned, _ = commit_env
+    assert ct.AGENT_PLIST.exists()
+    monkeypatch.setattr(ct, "launchd_print", printed)
+    with pytest.raises(SystemExit, match=f"{why}.*install-agent"):
         ct.cmd_commit(cfg, "research", ["60"])
+    assert ct.read_commit() is None and calls == [] and spawned == []
+
+
+def test_the_loaded_job_is_read_from_launchctl_print(commit_env):
+    assert ct.tick_job_problem() is None
+
+
+def test_a_refused_install_leaves_no_plist(monkeypatch, tmp_path):
+    monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agents" / "tick.plist")
+
+    def run(cmd, **k):
+        return ct.subprocess.CompletedProcess(
+            cmd, 5 if cmd[1] == "bootstrap" else 0, "", "Input/output error"
+        )
+
+    monkeypatch.setattr(ct.subprocess, "run", run)
+    with pytest.raises(SystemExit, match="refused"):
+        ct.cmd_install_agent()
+    assert not ct.AGENT_PLIST.exists()
+
+
+def test_a_commitment_leaves_a_keeper_that_ticks_until_it_ends(commit_env, monkeypatch):
+    cfg, blocks, clock, calls, spawned, _ = commit_env
+    ct.cmd_commit(cfg, "research", ["10"])
+    assert ("commit-keep",) in spawned
+    calls.clear()
+
+    def sleep(s):  # the launchd job is gone; only the keeper runs
+        clock.advance(s / 60)
+        if clock.now >= ct.read_commit()["until"]:
+            run_out(blocks)
+
+    monkeypatch.setattr(ct.time, "sleep", sleep)
+    ct.cmd_commit_keep(cfg)
     assert ct.read_commit() is None
+    assert [c[:3] for c in calls if "-lock" in c][0] == (
+        "-start",
+        "mode: research",
+        "-lock",
+    )
+    assert blocks["mode: research"]["enabled"] == "true"  # the mode stays on, unlocked
 
 
 def test_a_commitment_starts_the_mode_and_locks_it_one_wait_ahead(commit_env):
