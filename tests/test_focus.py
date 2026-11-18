@@ -20,6 +20,7 @@ def load():
 
 
 ct = load()
+REAL_CAN_SHOW_DIALOG = ct.can_show_dialog
 REAL_WAKE = ct.wake_agent  # the autouse fixture stubs ct.wake_agent
 
 
@@ -29,6 +30,8 @@ def isolated(monkeypatch, tmp_path):
     # wants agent behaviour sets it itself. The delay queue, the backups and ScreenZen's
     # preferences are never the real ones: a mode switch writes ScreenZen.
     monkeypatch.delenv("CLAUDECODE", raising=False)
+    # A missing terminal would otherwise put a real reason dialog on the screen.
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: False)
     monkeypatch.setattr(ct, "PENDING", tmp_path / "pending.json")
     monkeypatch.setattr(ct, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(ct, "BREAK_FILE", tmp_path / "break.json")
@@ -2050,6 +2053,50 @@ def test_a_later_start_the_same_day_needs_a_reason_at_a_terminal(
     assert entry["command"] == "focus writing 20"
     assert entry["reason"] == "the draft is due" and "ts" in entry
     assert on(blocks) == ["mode: writing"]
+
+
+def test_without_a_terminal_a_person_types_the_reason_into_a_dialog(
+    capped_env, monkeypatch
+):
+    # Alfred runs focus with no terminal: the reason comes from a macOS dialog instead.
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: True)
+    calls = []
+
+    def fake_run(cmd, **k):
+        calls.append(cmd)
+        return ct.subprocess.CompletedProcess(cmd, 0, stdout="email the landlord\n")
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_run)
+    ct.cmd_capped(cfg, "writing", ["20"])
+    assert calls[0][0] == "osascript" and calls[0][-1] == "writing again today"
+    (entry,) = log_lines()
+    assert entry["reason"] == "email the landlord"
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_cancelling_the_reason_dialog_changes_nothing(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: True)
+    monkeypatch.setattr(
+        ct.subprocess,
+        "run",
+        lambda cmd, **k: ct.subprocess.CompletedProcess(cmd, 1, stdout=""),
+    )
+    with pytest.raises(SystemExit, match="no reason given"):
+        ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: research"]
+
+
+def test_an_agent_never_gets_the_dialog(monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")
+    assert not REAL_CAN_SHOW_DIALOG()
 
 
 def test_renewing_straight_away_keeps_the_mode_from_before(capped_env, monkeypatch):

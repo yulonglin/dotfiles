@@ -832,10 +832,40 @@ def need_terminal(what: str) -> None:
         sys.exit(f"focus: {what} asks for typed input, so it runs only in a terminal")
 
 
+REASON_DIALOG = """on run argv
+    display dialog ("Why " & item 1 of argv & "? One line:") default answer "" \
+        with title "focus" buttons {"Cancel", "Go on"} default button "Go on" \
+        cancel button "Cancel" giving up after 300
+    return text returned of result
+end run"""
+
+
+def can_show_dialog() -> bool:
+    """Whether a reason can come from a macOS dialog: a person (not an agent) launching
+    focus without a terminal, as Alfred does. The dialog is the same friction as the
+    terminal prompt, typed by hand, so an agent never gets it."""
+    return (
+        sys.platform == "darwin" and not by_agent() and bool(shutil.which("osascript"))
+    )
+
+
+def need_reason_input(what: str) -> None:
+    """Refuse before any wait unless a reason can be asked: a terminal, or a dialog."""
+    if not sys.stdin.isatty() and not can_show_dialog():
+        sys.exit(f"focus: {what} asks for typed input, so it runs only in a terminal")
+
+
 def ask_reason(what: str) -> str:
-    """A one-line reason typed at the terminal; refuse without one."""
-    need_terminal(what)
-    reason = input(f"Why {what}? One line: ").strip()
+    """A one-line reason, typed at the terminal or, without one, into a macOS dialog
+    (Alfred); refuse without one."""
+    if sys.stdin.isatty():
+        reason = input(f"Why {what}? One line: ").strip()
+    else:
+        need_reason_input(what)
+        r = subprocess.run(
+            ["osascript", "-e", REASON_DIALOG, what], capture_output=True, text=True
+        )
+        reason = r.stdout.strip() if r.returncode == 0 else ""
     if not reason:
         sys.exit("focus: no reason given; nothing changed")
     return reason
@@ -1219,7 +1249,7 @@ def start_capped(
         minutes = want or cap
     need_reason = day or today["starts"].get(mode, 0) > 0
     if need_reason:  # refuse before any wait, not after it
-        need_terminal(f"another start of {mode} today")
+        need_reason_input(f"another start of {mode} today")
     if renewing:
         back = current["back"]
         # Keeping a looser mode on longer is loosening, so an agent waits.
