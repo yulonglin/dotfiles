@@ -145,7 +145,12 @@ def test_unknown_group_is_refused(tmp_path):
 def test_screenzen_allow_list_is_a_superset_of_every_mode(cfg):
     # The wildcard rule is cut to a prefix that allows more; a cut leaving only a scheme is
     # kept, so local files open without a pause.
-    assert ct.sz_allow_sites(cfg) == ["file://", "localhost", "arxiv.org", "github.com/"]
+    assert ct.sz_allow_sites(cfg) == [
+        "file://",
+        "localhost",
+        "arxiv.org",
+        "github.com/",
+    ]
 
 
 def test_screenzen_keeps_a_scheme_cut_and_drops_an_empty_one():
@@ -1856,3 +1861,44 @@ def test_status_headline_names_a_break_an_only_session_and_a_timer(cfg, monkeypa
     assert ct.status_headline(cfg, blocks).startswith(
         f"now: only session until {end:%H:%M} (bear)"
     )
+
+
+def note_with(tmp_path, extra: str) -> Path:
+    """The test note with extra top-level YAML lines in its block."""
+    p = tmp_path / "extra.md"
+    p.write_text(NOTE.replace("blocklists:", extra.rstrip("\n") + "\nblocklists:"))
+    return p
+
+
+def test_status_warns_when_a_strong_lock_block_has_no_or_a_delay_lock(
+    tmp_path, monkeypatch, capsys
+):
+    cfg = ct.load_config(
+        note_with(tmp_path, "strong_lock_blocks: [avoid, night, gone]")
+    )
+    blank = {"enabled": "true", "web": [], "exceptions": [], "apps": []}
+    blocks = {
+        "avoid": {**blank, "lock": "none"},
+        "night": {**blank, "lock": "delay,5,m,0"},
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    assert ct.weak_locks(cfg, blocks) == [
+        "'avoid' has no lock; a random-text lock is wanted",
+        "'night' has a delay lock; a random-text lock is wanted",
+        "'gone' is listed under strong_lock_blocks, but Cold Turkey has no such block",
+    ]
+    blocks["night"]["lock"] = "random,300"  # any other lock counts as strong enough
+    assert len(ct.weak_locks(cfg, blocks)) == 2
+    fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_status(cfg)
+    assert "weak lock: 'avoid' has no lock" in capsys.readouterr().out
+
+
+def test_no_strong_lock_key_means_no_warning(cfg):
+    assert ct.weak_locks(cfg, {"avoid": {"lock": "none"}}) == []
+
+
+def test_strong_lock_blocks_must_be_a_list_of_names(tmp_path):
+    with pytest.raises(SystemExit, match="strong_lock_blocks"):
+        ct.load_config(note_with(tmp_path, "strong_lock_blocks: avoid"))
