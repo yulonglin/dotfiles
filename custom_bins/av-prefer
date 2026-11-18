@@ -1,25 +1,25 @@
 #!/usr/bin/env zsh
-# av-prefer — make the Studio Display the default camera, and the speakers
-# AirPods when connected, else the Studio Display. Sibling of builtin-display:
-# with the lid open, macOS hands apps the MacBook camera first.
+# av-prefer — set the default camera, speaker and microphone from a priority
+# list in config/av-prefer.conf: by default the Studio Display camera, and the
+# speakers AirPods when connected, else the Studio Display. Sibling of
+# builtin-display: with the lid open, macOS hands apps the MacBook camera first.
 #
 #   av-prefer            same as status
-#   av-prefer status     show the default camera and speaker
-#   av-prefer apply      set both to the first present device in CAMERAS and
-#                        SPEAKERS at the top of this script
+#   av-prefer status     show each configured device and whether it is preferred
+#   av-prefer apply      set each kind to the first present device in the config
+#   av-prefer list       show every camera, speaker and mic on this Mac
 #   av-prefer --help
+#
+# Config: config/av-prefer.conf, or AV_PREFER_CONFIG=<path>. A kind with no
+# lines there is left alone (the microphone, by default).
 #
 # Camera: tools/av-prefer/main.swift sets AVCaptureDevice.userPreferredCamera,
 # which changes the default every app sees; Apple documents it as persisting
 # across reboots, and it is meant to win again when the display returns. An app
 # that saved its own choice (Zoom, a Chrome site, FaceTime's Video menu) keeps
-# it. Speaker: SwitchAudioSource (switchaudio-osx, in the Brewfile) sets the
-# output device only; alert sounds and the microphone are left alone.
+# it. Speaker and mic: SwitchAudioSource (switchaudio-osx, in the Brewfile)
+# sets the output and input devices; alert sounds are left alone.
 set -euo pipefail
-
-# Priority lists: the first present device wins. Case-insensitive substrings.
-CAMERAS=("Studio Display Camera" "MacBook Pro Camera")
-SPEAKERS=("AirPods" "Studio Display Speakers" "MacBook Pro Speakers")
 
 if [[ $OSTYPE != darwin* ]]; then
     print -u2 "av-prefer: macOS only"
@@ -30,14 +30,17 @@ SELF="${0:A}"
 DOT_DIR="${SELF:h:h}"
 SRC="${DOT_DIR}/tools/av-prefer/main.swift"
 BIN="${DOT_DIR}/tools/av-prefer/av-prefer"
+CONFIG="${AV_PREFER_CONFIG:-${DOT_DIR}/config/av-prefer.conf}"
+KINDS=(camera speaker mic)
+typeset -A SAS_TYPE=(speaker output mic input)
 
 paint() {  # paint <colour> <text>: coloured only on a terminal without NO_COLOR
     if [[ -t 1 && -z ${NO_COLOR:-} ]]; then print -nP "%F{$1}$2%f"; else print -nr -- "$2"; fi
 }
 
-usage() { sed -n '2,17p' "$SELF" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,21p' "$SELF" | sed 's/^# \{0,1\}//'; }
 
-camera() {  # camera <args…>: run the Swift helper, compiling it when stale
+camera_helper() {  # run the Swift helper, compiling it when stale
     if [[ ! -x $BIN || $SRC -nt $BIN ]]; then
         command -v swiftc >/dev/null 2>&1 || { print -u2 "av-prefer: swiftc not found (xcode-select --install)"; exit 1; }
         swiftc -O -o "$BIN" "$SRC" || { print -u2 "av-prefer: compile failed"; exit 1; }
@@ -45,66 +48,100 @@ camera() {  # camera <args…>: run the Swift helper, compiling it when stale
     "$BIN" "$@"
 }
 
-need_sas() {
+sas() {  # SwitchAudioSource, checked only when an audio kind needs it
     command -v SwitchAudioSource >/dev/null 2>&1 \
         || { print -u2 "av-prefer: SwitchAudioSource not found (brew install switchaudio-osx)"; exit 1; }
+    SwitchAudioSource "$@"
 }
 
-pick_speaker() {  # print the first present output matching SPEAKERS; 1 = no match, 2 = list failed
-    local want dev out
-    out=$(SwitchAudioSource -a -t output) || { print -u2 "av-prefer: could not list audio outputs"; return 2; }
-    local -a present=("${(@f)out}")
-    for want in "${SPEAKERS[@]}"; do
-        for dev in "${present[@]}"; do
+# Config: "<kind> <name>" per line; a line starting with '#' is a comment, and
+# a '#' later in a line is part of the name ("Mixer #2"). Fills WANT_<kind>.
+typeset -a WANT_camera WANT_speaker WANT_mic
+load_config() {
+    [[ -r $CONFIG ]] || { print -u2 "av-prefer: config not found: $CONFIG"; exit 1; }
+    setopt local_options extended_glob
+    local line kind name n=0
+    while IFS= read -r line || [[ -n $line ]]; do
+        (( ++n ))
+        [[ $line == [[:space:]]#(\#*|) ]] && continue
+        kind=${${=line}[1]}
+        name=${${line#*$kind}##[[:space:]]#}
+        name=${name%%[[:space:]]#}
+        if (( ! ${KINDS[(Ie)$kind]} )) || [[ -z $name ]]; then
+            print -u2 "av-prefer: $CONFIG:$n: expected '<camera|speaker|mic> <name>', got: $line"
+            exit 1
+        fi
+        eval "WANT_${kind}+=(\"\$name\")"
+    done < "$CONFIG"
+}
+
+present() {  # present <kind>: every device of that kind, one per line
+    if [[ $1 == camera ]]; then camera_helper list
+    else sas -a -t "${SAS_TYPE[$1]}" || { print -u2 "av-prefer: could not list ${1}s"; return 1; }
+    fi
+}
+
+current() {  # current <kind>: the default device of that kind
+    if [[ $1 == camera ]]; then camera_helper status; else sas -c -t "${SAS_TYPE[$1]}"; fi
+}
+
+pick() {  # pick <kind>: the first present device matching the config; 1 = none, 2 = list failed
+    local kind=$1 want dev out
+    out=$(present "$kind") || return 2
+    local -a devs=("${(@f)out}") wants=("${(@P)${:-WANT_$kind}}")
+    for want in "${wants[@]}"; do
+        for dev in "${devs[@]}"; do
             [[ ${dev:l} == *${want:l}* ]] && { print -r -- "$dev"; return 0; }
         done
     done
     return 1
 }
 
-# show <label> <current> <preferred>: green when they agree, yellow otherwise;
-# an empty <preferred> means no present device is in the priority list
-show() {
-    printf '%-8s ' "$1"
-    if [[ -z $3 ]]; then paint yellow "$2"; print " (no present device is in the $1 list)"
-    elif [[ $2 == "$3" ]]; then paint green "$2"; print " (preferred)"
-    else paint yellow "$2"; print " (preferred: $3 — run av-prefer apply)"; fi
+set_device() {  # set_device <kind> <exact name>
+    if [[ $1 == camera ]]; then camera_helper set "$2" >/dev/null
+    else sas -t "${SAS_TYPE[$1]}" -s "$2" >/dev/null; fi
 }
 
+configured() { local -a w=("${(@P)${:-WANT_$1}}"); (( ${#w} > 0 )); }
+
 status() {
-    need_sas
-    local cam spk want_cam want_spk rc=0
-    cam=$(camera status)
-    spk=$(SwitchAudioSource -c -t output)
-    want_cam=$(camera pick "${CAMERAS[@]}" 2>/dev/null) || want_cam=""
-    want_spk=$(pick_speaker) || rc=$?
-    (( rc == 2 )) && exit 1
-    show camera "$cam" "$want_cam"
-    show speaker "$spk" "$want_spk"
+    local kind cur want rc
+    for kind in "${KINDS[@]}"; do
+        printf '%-8s ' "$kind"
+        cur=$(current "$kind") || { print; print -u2 "av-prefer: could not read the current $kind"; exit 1; }
+        if ! configured "$kind"; then print -r -- "$cur (not in config, left alone)"; continue; fi
+        rc=0; want=$(pick "$kind") || rc=$?
+        (( rc == 2 )) && exit 1
+        if (( rc == 1 )); then paint yellow "$cur"; print " (no present $kind is in the config)"
+        elif [[ $cur == "$want" ]]; then paint green "$cur"; print " (preferred)"
+        else paint yellow "$cur"; print " (preferred: $want — run av-prefer apply)"; fi
+    done
 }
 
 apply() {
-    need_sas
-    local cam spk rc=0
-    if cam=$(camera set "${CAMERAS[@]}" 2>/dev/null); then
-        print -n "camera   "; paint green "$cam"; print
-    else
-        print -n "camera   "; paint yellow "no match for: ${(j:, :)CAMERAS} — left as is"; print
-    fi
-    spk=$(pick_speaker) || rc=$?
-    if (( rc == 0 )); then
-        SwitchAudioSource -t output -s "$spk" >/dev/null
-        print -n "speaker  "; paint green "$spk"; print
-    elif (( rc == 1 )); then
-        print -n "speaker  "; paint yellow "no match for: ${(j:, :)SPEAKERS} — left as is"; print
-    else
-        exit 1
-    fi
+    local kind want rc
+    for kind in "${KINDS[@]}"; do
+        configured "$kind" || continue
+        printf '%-8s ' "$kind"
+        rc=0; want=$(pick "$kind") || rc=$?
+        (( rc == 2 )) && exit 1
+        if (( rc == 1 )); then paint yellow "no present $kind is in the config — left as is"; print
+        else set_device "$kind" "$want"; paint green "$want"; print; fi
+    done
+}
+
+list() {
+    local kind
+    for kind in "${KINDS[@]}"; do
+        print -r -- "${kind}s:"
+        present "$kind" | sed 's/^/  /'
+    done
 }
 
 case ${1:-status} in
-    status) status ;;
-    apply) apply ;;
+    status) load_config; status ;;
+    apply) load_config; apply ;;
+    list) list ;;
     -h|--help|help) usage ;;
-    *) print -u2 "usage: av-prefer [status|apply|--help]"; exit 2 ;;
+    *) print -u2 "usage: av-prefer [status|apply|list|--help]"; exit 2 ;;
 esac
