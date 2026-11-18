@@ -2608,3 +2608,33 @@ def test_commit_note_keys_and_reserved_names_are_checked(tmp_path):
     p.write_text(NOTE.replace("writing:", "end:", 1))
     with pytest.raises(SystemExit, match="taken by the command"):
         ct.load_config(p)
+
+
+def alfred_rows(capsys, cfg, query):
+    capsys.readouterr()
+    ct.cmd_alfred(cfg, query)
+    return json.loads(capsys.readouterr().out)["items"]
+
+
+def test_alfred_offers_committed_blocks(cfg, capsys, monkeypatch):
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    rows = alfred_rows(capsys, cfg, "commit")
+    assert {r["arg"] for r in rows} == {
+        f"{m} {ct.ALFRED_COMMIT_MIN} --commit" for m in cfg["modes"]
+    }
+    # 'research 25' means a committed research block for 25 minutes, and only that.
+    rows = alfred_rows(capsys, cfg, "research 25")
+    assert [r["arg"] for r in rows] == ["research 25 --commit"]
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "commit res")] == [
+        f"research {ct.ALFRED_COMMIT_MIN} --commit"
+    ]
+
+
+def test_alfred_commit_rows_while_one_runs(cfg, capsys, monkeypatch):
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    ct.write_commit(
+        {"mode": "research", "until": 2_000_000_000, "locked_to": 0, "pending": []}
+    )
+    rows = alfred_rows(capsys, cfg, "commit")
+    assert rows[0]["uid"] == "commit-running" and rows[0]["valid"] is False
+    assert all(r["valid"] is False for r in rows if r["uid"] != "commit-running")

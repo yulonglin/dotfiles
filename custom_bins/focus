@@ -734,6 +734,7 @@ DEFAULT_CAPPED_DAY_MIN = 180
 COMMIT_FILE = PENDING.parent / "commit.json"  # the committed block that runs now
 COMMIT_LOCK = PENDING.parent / "commit.lock"  # the tick and the waiter take turns
 DEFAULT_COMMIT_MIN = 60
+ALFRED_COMMIT_MIN = 50  # what Alfred offers before minutes are typed: one work block
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
@@ -3145,7 +3146,8 @@ def commit_tick(cfg: dict) -> None:
 
 
 def cmd_alfred(cfg: dict, query: str) -> None:
-    """Alfred script-filter JSON: modes, 'off' and timers, filtered by what was typed.
+    """Alfred script-filter JSON: modes, 'off', timers and committed blocks, filtered by
+    what was typed. 'commit research 25' or just 'research 25' offers a committed block.
 
     'add GROUP SITE' offers to add a site to a group: 'focus add' lists the groups.
     """
@@ -3242,6 +3244,52 @@ def cmd_alfred(cfg: dict, query: str) -> None:
                 "autocomplete": f"{name} ",
             }
         )
+    # Committed blocks: 'commit research 50', or just 'research 50'. Starting one only
+    # needs a command; 'focus allow' and 'focus end' ask for typed text at a terminal,
+    # so Alfred offers no row for them.
+    capped = cfg.get("capped_modes") or {}
+    commit_modes = [m for m in cfg["modes"] if m not in capped]
+    rest = words[1:] if words and words[0] == "commit" else words
+    want = rest[0] if rest and rest[0] in commit_modes else None
+    cmins = (
+        int(rest[1])
+        if want and len(rest) == 2 and rest[1].isdigit() and int(rest[1]) > 0
+        else ALFRED_COMMIT_MIN
+    )
+    c = read_commit()
+    commit_rows = [
+        {
+            "uid": f"commit-{m}",
+            "title": f"{m} for {cmins if m == want else ALFRED_COMMIT_MIN} min, committed",
+            "subtitle": "locked until it ends; allow a site or end early only from a "
+            "terminal, with typed text, a reason and a wait. Type minutes after the name",
+            "arg": f"{m} {cmins if m == want else ALFRED_COMMIT_MIN} --commit",
+            "autocomplete": f"commit {m} ",
+            "valid": c is None,
+        }
+        for m in commit_modes
+        if (
+            m == want
+            if want
+            else (not rest or words[0] != "commit" or m.startswith(rest[0]))
+        )
+    ]
+    if c is not None:
+        until = dt.datetime.fromtimestamp(c["until"]).strftime("%H:%M")
+        commit_rows.insert(
+            0,
+            {
+                "uid": "commit-running",
+                "title": f"committed: {c['mode']} until {until}",
+                "subtitle": "focus allow SITE or focus end in a terminal changes it",
+                "valid": False,
+            },
+        )
+    # 'research 50' means a committed research block: show only that row.
+    if want and len(rest) == 2 and rest[1].isdigit():
+        print(json.dumps({"items": commit_rows}))
+        return
+    items += commit_rows
     items.append(
         {
             "uid": "add",
