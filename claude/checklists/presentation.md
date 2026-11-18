@@ -24,6 +24,7 @@ The rule governs how **results are presented**. It does not govern the per-examp
 - **A results paragraph carries at most one measured quantity, with its interval and sample size n.** A second measured quantity in the same paragraph is a figure or a table you have not drawn yet. This results-prose rule does not require confidence intervals in a paper abstract: follow the abstract's audience and venue, and place detailed uncertainty in the figures and results.
 - Chunks of prose are fine and skimmable, so length is not what is being policed here — the problem is density of digits.
 - Conceptual material — system design, UML, infra, experiment design, eval structure — wants a **mermaid diagram**, not a paragraph describing a diagram.
+- **Draw flows, states and graphs in Mermaid, not ASCII art, wherever Yulong reads.** Everything he reads in renders a ```` ```mermaid ```` fence: Artifacts through `md2artifact`, Bear notes, and `.md` files opened in Lettera on the Mac (Yulong, 2026-11-18). ASCII in a plain code block stays for what Mermaid lays out poorly, where position carries the meaning (a timeline, two columns side by side), and for terminal replies, which render nothing.
 
 ## Headings assert, sections elaborate
 
