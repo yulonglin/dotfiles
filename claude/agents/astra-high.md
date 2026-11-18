@@ -1,6 +1,6 @@
 ---
 name: astra(high)
-description: General-purpose agent driven by GPT-6 Astra at high reasoning effort through the model-router gateway via the OpenAI account (Codex OAuth). Use for a task that should be done by this model inside the Claude Code loop with repo tools.
+description: General-purpose agent driven by GPT-6.2 Astra at high reasoning effort through the model-router gateway via the OpenAI account (Codex OAuth). Use for a task that should be done by this model inside the Claude Code loop with repo tools.
 model: astra
 effort: high
 ---
