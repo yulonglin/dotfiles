@@ -1,6 +1,9 @@
 #!/usr/bin/env zsh
 # Pins rex-prefs' custom-theme sync against a scratch defaults domain, never the live Rex one.
 #
+# Also pins the APP_KEYS allowlist: an allowlisted non-Workspace key round-trips through
+# app-prefs.tsv, and a per-machine key (tailnet hostname) never reaches the file.
+#
 # Covers: capture writes Rex's themes to the JSON file; capture merges by id (a theme only in the
 # file survives); apply writes the file's themes back as plist data without dropping a Rex-only
 # theme; check reports drift and exits 0 when in sync.
@@ -17,6 +20,7 @@ export REX_PREFS_DOMAIN="com.superlogical.rex.test-$$"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/rex-prefs-test.XXXXXX")
 TSV=$WORK/ui-prefs.tsv
 THEMES=$WORK/themes.json
+APP=$WORK/app-prefs.tsv
 
 cleanup() {
     defaults delete "$REX_PREFS_DOMAIN" >/dev/null 2>&1 || true
@@ -43,9 +47,11 @@ file_theme_ids() {
     python3 -c 'import json, sys; print(" ".join(sorted(t["id"] for t in json.load(open(sys.argv[1])))))' "$THEMES"
 }
 
-run() { "$BIN" --file "$TSV" --themes-file "$THEMES" "$@"; }
+run() { "$BIN" --file "$TSV" --themes-file "$THEMES" --app-file "$APP" "$@"; }
 
 defaults write "$REX_PREFS_DOMAIN" Workspace.tabStyle -string horizontal
+defaults write "$REX_PREFS_DOMAIN" rex.server.tailnet-enabled -bool true
+defaults write "$REX_PREFS_DOMAIN" rex.server.tailnet-hostname -string scratch-host
 write_live_themes '[{"id":"a","name":"A","palette":{"background":"#000"}}]'
 
 # 1. capture creates the themes file from Rex
@@ -53,6 +59,8 @@ run capture --quiet
 [[ $(file_theme_ids) == "a" ]] || fail "capture did not write theme a (got: $(file_theme_ids))"
 grep -q $'^tabStyle\tstring\thorizontal$' "$TSV" || fail "capture lost the scalar row"
 run check >/dev/null || fail "check not in sync right after capture"
+grep -q $'^rex.server.tailnet-enabled\tbool\ttrue$' "$APP" || fail "capture missed allowlisted app key"
+if grep -q tailnet-hostname "$APP"; then fail "capture leaked non-allowlisted tailnet-hostname"; fi
 
 # 2. a theme only in the file survives capture (merge by id), and check flags it
 python3 - "$THEMES" <<'PY'
@@ -71,6 +79,11 @@ write_live_themes '[{"id":"a","name":"A","palette":{"background":"#000"}},{"id":
 run apply >/dev/null
 [[ $(defaults read-type "$REX_PREFS_DOMAIN" Workspace.customThemes) == "Type is data" ]] || fail "apply did not store themes as data"
 [[ $(live_theme_ids) == "a b c" ]] || fail "apply result wrong (got: $(live_theme_ids))"
+
+# 3b. apply writes app rows under their full key names
+defaults write "$REX_PREFS_DOMAIN" rex.server.tailnet-enabled -bool false
+run apply >/dev/null
+[[ $(defaults read "$REX_PREFS_DOMAIN" rex.server.tailnet-enabled) == 1 ]] || fail "apply did not restore app key from file"
 
 # 4. after capture, file and Rex agree
 run capture --quiet
