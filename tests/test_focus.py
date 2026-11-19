@@ -2849,3 +2849,20 @@ def test_a_commitments_end_names_sites_held_out_but_does_not_add_them(
     assert "focus sync" in said[-1] and "arxiv.org" in said[-1]
     # the tick never loosens by itself
     assert "arxiv.org" not in blocks["mode: research"]["exceptions"]
+
+
+def test_alfred_capped_mode_passes_typed_minutes(tmp_path, capsys, monkeypatch):
+    # 'writing 2' in Alfred used to run the full 30-minute cap: the row's arg was the
+    # bare mode name, so the typed minutes never reached 'focus'.
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    cfg = ct.load_config(note_with(tmp_path, CAPPED))
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing 2")] == ["writing 2"]
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing")] == ["writing 30"]
+    # Past the cap, Alfred offers a day stretch instead of a row 'focus' would refuse.
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing 90")] == [
+        "writing --day 90"
+    ]
+    # An uncapped mode with minutes is still a committed block.
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "research 25")] == [
+        "research 25 --commit"
+    ]

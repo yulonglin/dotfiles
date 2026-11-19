@@ -3339,8 +3339,46 @@ def cmd_alfred(cfg: dict, query: str) -> None:
     except (OSError, sqlite3.Error, ValueError):
         running = set()
     items = []
+    capped = cfg.get("capped_modes") or {}
+    qwords = query.split()
     for mode, spec in cfg["modes"].items():
         on = mode in running
+        if mode in capped:
+            # 'admin 10' runs admin for 10 minutes. The row used to pass only the mode,
+            # so the typed minutes were dropped and every stretch ran the full cap.
+            cap = int(capped[mode].get("minutes", DEFAULT_CAPPED_MIN))
+            typed = (
+                int(qwords[1])
+                if len(qwords) == 2
+                and qwords[0] == mode
+                and qwords[1].isdigit()
+                and int(qwords[1]) > 0
+                else None
+            )
+            if typed and typed > cap:
+                items.append(
+                    {
+                        "uid": mode,
+                        "title": f"{mode} for {typed} min, from the day budget",
+                        "subtitle": f"a normal stretch is at most {cap} min; a day "
+                        "stretch asks for a reason",
+                        "arg": f"{mode} --day {typed}",
+                    }
+                )
+                continue
+            mins = typed or cap
+            items.append(
+                {
+                    "uid": mode,
+                    "title": f"{mode} for {mins} min" + (" (running)" if on else ""),
+                    "subtitle": "allows "
+                    + ", ".join(spec.get("allow") or [])
+                    + f"; type minutes after the name (at most {cap})",
+                    "arg": f"{mode} {mins}",
+                    "autocomplete": f"{mode} ",
+                }
+            )
+            continue
         items.append(
             {
                 "uid": mode,
