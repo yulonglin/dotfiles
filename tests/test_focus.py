@@ -1756,7 +1756,7 @@ def test_the_picker_offers_contents_and_hides_keep_and_current_picks(
     picked = ct.pick_groups(only_cfg, ["bear"])
     names = [r.split("\t")[0] for r in seen["rows"]]
     assert "base" not in names and "tools" not in names and "bear" not in names
-    assert "llms\tChatGPT, chatgpt.com" in seen["rows"]
+    assert "llms\tllms\tChatGPT, chatgpt.com" in seen["rows"]
     assert picked == [names[0]]
 
 
@@ -1814,6 +1814,58 @@ def test_the_picker_lists_ungrouped_apps_only(only_cfg, tmp_path, monkeypatch):
     assert ct.pick_groups(only_cfg, ["app:Notes"]) == []
     apps = [r.split("\t")[0] for r in seen["rows"] if r.startswith("app:")]
     assert apps == ["app:Zotero"]  # Telegram and Grind have groups; Notes is picked
+
+
+def test_an_app_token_without_spaces_names_an_ungrouped_app(
+    only_cfg, tmp_path, monkeypatch
+):
+    fake_app(tmp_path, "iPhone Mirroring")
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    assert ct.pick_token("app:iPhone Mirroring") == "app:iPhoneMirroring"
+    assert ct.resolve_pick(only_cfg, "app:iPhoneMirroring") == "app:iPhone Mirroring"
+    with pytest.raises(SystemExit, match="no installed app"):
+        ct.resolve_pick(only_cfg, "app:Telegram")  # grouped, so not offered as an app
+
+
+def test_alfred_only_piles_picks_into_the_query(only_cfg, tmp_path, capsys, monkeypatch):
+    fake_app(tmp_path, "Zotero")
+    fake_app(tmp_path, "iPhone Mirroring")
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    rows = alfred_rows(capsys, only_cfg, "only ")
+    titles = [r["title"] for r in rows]
+    assert "bear" in titles and "Zotero" in titles and "base" not in titles
+    assert all(not r.get("valid", True) for r in rows)  # nothing to start yet
+    mirror = next(r for r in rows if r["title"] == "iPhone Mirroring")
+    assert mirror["autocomplete"] == "only app:iPhoneMirroring "
+
+    rows = alfred_rows(capsys, only_cfg, "only bear app:iPhoneMirroring zot")
+    start, *rest = rows
+    assert start["title"] == "Start: bear, iPhone Mirroring for 30 min"
+    assert start["arg"] == "only bear app:iPhoneMirroring 30"
+    ticked = [r for r in rest if r["title"].startswith("✓")]
+    assert [r["autocomplete"] for r in ticked] == [
+        "only app:iPhoneMirroring ",
+        "only bear ",
+    ]
+    assert [r["title"] for r in rest if not r["title"].startswith("✓")] == ["Zotero"]
+
+    start = alfred_rows(capsys, only_cfg, "only bear 45")[0]
+    assert start["arg"] == "only bear 45"
+
+
+def test_alfred_only_adds_to_a_running_session(only_cfg, capsys):
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    rows = alfred_rows(capsys, only_cfg, "only ")
+    assert rows[0]["arg"] == "only end"
+    assert "bear" not in [r["title"] for r in rows[1:]]
+    rows = alfred_rows(capsys, only_cfg, "only papers ")
+    assert rows[0]["title"].startswith("Add papers")
+    assert rows[0]["arg"] == "only papers"
+
+
+def test_alfred_main_list_offers_only(only_cfg, capsys):
+    rows = alfred_rows(capsys, only_cfg, "on")
+    assert [r["autocomplete"] for r in rows if r["uid"] == "only"] == ["only "]
 
 
 def test_drift_says_which_side_has_what_and_how_to_fix_it():
