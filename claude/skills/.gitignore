@@ -58,6 +58,12 @@ synced/**
 rex/
 rex/**
 
+# Trash dir left by skill tooling. Its hard-wrapped copies failed the pre-commit
+# gate and blocked dotfiles-sync (2026-11-19). The root .gitignore cannot ignore it:
+# this allowlist file is deeper, so its !**/*/ wins.
+.trash/
+.trash/**
+
 # Skill dev/eval artifacts (A/B output comparisons, not skill definitions)
 anthropic-style-workspace/
 anthropic-style-workspace/**
