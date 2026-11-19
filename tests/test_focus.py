@@ -2866,3 +2866,22 @@ def test_alfred_capped_mode_passes_typed_minutes(tmp_path, capsys, monkeypatch):
     assert [r["arg"] for r in alfred_rows(capsys, cfg, "research 25")] == [
         "research 25 --commit"
     ]
+
+
+def test_menu_rows_offer_every_mode_and_ask_minutes_only_where_taken(tmp_path):
+    cfg = ct.load_config(note_with(tmp_path, TIMER + "\n" + CAPPED))
+    blocks = {ct.PREFIX + "research": {"enabled": "true"}}
+    rows = {n: (sec, desc, mins) for sec, n, desc, mins in ct.menu_rows(cfg, blocks)}
+    assert set(cfg["modes"]) <= rows.keys()
+    assert {"break", "off", "status"} <= rows.keys()
+    assert rows["research"][1].startswith("● running")
+    assert rows["research"][2] is None  # a plain mode takes no minutes
+    assert rows["writing"][2] == 30  # a capped mode asks, defaulting to its cap
+    assert rows["deep"] == ("Timers", rows["deep"][1], 30)
+    assert all("|" not in n for n in rows)  # the picker splits rows on '|'
+
+
+def test_bare_focus_falls_back_to_the_list_off_a_terminal(cfg, monkeypatch):
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
+    assert ct.cmd_menu(cfg) is False
