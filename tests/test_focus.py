@@ -1756,7 +1756,7 @@ def test_the_picker_offers_contents_and_hides_keep_and_current_picks(
     picked = ct.pick_groups(only_cfg, ["bear"])
     names = [r.split("\t")[0] for r in seen["rows"]]
     assert "base" not in names and "tools" not in names and "bear" not in names
-    assert "llms\tChatGPT, chatgpt.com" in seen["rows"]
+    assert "llms\tllms\tChatGPT, chatgpt.com" in seen["rows"]
     assert picked == [names[0]]
 
 
@@ -1814,6 +1814,58 @@ def test_the_picker_lists_ungrouped_apps_only(only_cfg, tmp_path, monkeypatch):
     assert ct.pick_groups(only_cfg, ["app:Notes"]) == []
     apps = [r.split("\t")[0] for r in seen["rows"] if r.startswith("app:")]
     assert apps == ["app:Zotero"]  # Telegram and Grind have groups; Notes is picked
+
+
+def test_an_app_token_without_spaces_names_an_ungrouped_app(
+    only_cfg, tmp_path, monkeypatch
+):
+    fake_app(tmp_path, "iPhone Mirroring")
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    assert ct.pick_token("app:iPhone Mirroring") == "app:iPhoneMirroring"
+    assert ct.resolve_pick(only_cfg, "app:iPhoneMirroring") == "app:iPhone Mirroring"
+    with pytest.raises(SystemExit, match="no installed app"):
+        ct.resolve_pick(only_cfg, "app:Telegram")  # grouped, so not offered as an app
+
+
+def test_alfred_only_piles_picks_into_the_query(only_cfg, tmp_path, capsys, monkeypatch):
+    fake_app(tmp_path, "Zotero")
+    fake_app(tmp_path, "iPhone Mirroring")
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    rows = alfred_rows(capsys, only_cfg, "only ")
+    titles = [r["title"] for r in rows]
+    assert "bear" in titles and "Zotero" in titles and "base" not in titles
+    assert all(not r.get("valid", True) for r in rows)  # nothing to start yet
+    mirror = next(r for r in rows if r["title"] == "iPhone Mirroring")
+    assert mirror["autocomplete"] == "only app:iPhoneMirroring "
+
+    rows = alfred_rows(capsys, only_cfg, "only bear app:iPhoneMirroring zot")
+    start, *rest = rows
+    assert start["title"] == "Start: bear, iPhone Mirroring for 30 min"
+    assert start["arg"] == "only bear app:iPhoneMirroring 30"
+    ticked = [r for r in rest if r["title"].startswith("✓")]
+    assert [r["autocomplete"] for r in ticked] == [
+        "only app:iPhoneMirroring ",
+        "only bear ",
+    ]
+    assert [r["title"] for r in rest if not r["title"].startswith("✓")] == ["Zotero"]
+
+    start = alfred_rows(capsys, only_cfg, "only bear 45")[0]
+    assert start["arg"] == "only bear 45"
+
+
+def test_alfred_only_adds_to_a_running_session(only_cfg, capsys):
+    ct.write_only({"groups": ["bear"], "until": 2e9, "back": []})
+    rows = alfred_rows(capsys, only_cfg, "only ")
+    assert rows[0]["arg"] == "only end"
+    assert "bear" not in [r["title"] for r in rows[1:]]
+    rows = alfred_rows(capsys, only_cfg, "only papers ")
+    assert rows[0]["title"].startswith("Add papers")
+    assert rows[0]["arg"] == "only papers"
+
+
+def test_alfred_main_list_offers_only(only_cfg, capsys):
+    rows = alfred_rows(capsys, only_cfg, "on")
+    assert [r["autocomplete"] for r in rows if r["uid"] == "only"] == ["only "]
 
 
 def test_drift_says_which_side_has_what_and_how_to_fix_it():
@@ -2872,3 +2924,57 @@ def test_a_commitments_end_names_sites_held_out_but_does_not_add_them(
     assert "focus sync" in said[-1] and "arxiv.org" in said[-1]
     # the tick never loosens by itself
     assert "arxiv.org" not in blocks["mode: research"]["exceptions"]
+
+
+def test_alfred_capped_mode_passes_typed_minutes(tmp_path, capsys, monkeypatch):
+    # 'writing 2' in Alfred used to run the full 30-minute cap: the row's arg was the
+    # bare mode name, so the typed minutes never reached 'focus'.
+    monkeypatch.setattr(ct, "read_blocks", lambda: {})
+    cfg = ct.load_config(note_with(tmp_path, CAPPED))
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing 2")] == ["writing 2"]
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing")] == ["writing 30"]
+    # Past the cap, Alfred offers a day stretch instead of a row 'focus' would refuse.
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing 90")] == [
+        "writing --day 90"
+    ]
+    # A running capped mode stays pickable: renewing it is allowed. The row used to be
+    # greyed out while it ran, so 'admin' did nothing mid-stretch.
+    monkeypatch.setattr(
+        ct, "read_blocks", lambda: {ct.PREFIX + "writing": {"enabled": "true"}}
+    )
+    monkeypatch.setattr(ct, "mode_blocks", lambda b: b)
+    rows = alfred_rows(capsys, cfg, "writing")
+    assert rows[0].get("valid", True) and "(running)" in rows[0]["title"]
+    # An uncapped mode with minutes is still a committed block.
+    assert [r["arg"] for r in alfred_rows(capsys, cfg, "research 25")] == [
+        "research 25 --commit"
+    ]
+
+
+def test_menu_rows_offer_every_mode_and_ask_minutes_only_where_taken(tmp_path):
+    cfg = ct.load_config(note_with(tmp_path, TIMER + "\n" + CAPPED))
+    blocks = {ct.PREFIX + "research": {"enabled": "true"}}
+    rows = {n: (sec, desc, mins) for sec, n, desc, mins in ct.menu_rows(cfg, blocks)}
+    assert set(cfg["modes"]) <= rows.keys()
+    assert {"break", "off", "status"} <= rows.keys()
+    assert rows["research"][1].startswith("● running")
+    assert rows["research"][2] is None  # a plain mode takes no minutes
+    assert rows["writing"][2] == 30  # a capped mode asks, defaulting to its cap
+    assert rows["deep"] == ("Timers", rows["deep"][1], 30)
+    assert all("|" not in n for n in rows)  # the picker splits rows on '|'
+
+
+def test_bare_focus_falls_back_to_the_list_off_a_terminal(cfg, monkeypatch):
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
+    assert ct.cmd_menu(cfg) is False
+
+
+def test_bare_focus_piped_gets_the_list_though_stdin_is_a_terminal(cfg, monkeypatch):
+    # 'focus | cat' in a shell: stdin and stderr are the terminal, stdout a pipe.
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(ct.sys.stderr, "isatty", lambda: True)
+    monkeypatch.setattr(ct.sys.stdout, "isatty", lambda: False)
+    monkeypatch.setattr(ct.shutil, "which", lambda name: "/bin/claude-tools")
+    monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
+    assert ct.cmd_menu(cfg) is False

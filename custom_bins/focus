@@ -5,6 +5,8 @@
 # ///
 """Switch Cold Turkey Blocker between work modes defined in one config note.
 
+    focus                     # menu: pick a mode, timer or session (list when piped)
+    focus list                # the modes, timers and sessions, and what runs now
     focus research            # stop the other 'mode: …' blocks, start this one
     focus off                 # stop every unlocked 'mode: …' block
     focus status              # what runs now (mode, break, only, timer), every block by kind, drift
@@ -58,7 +60,9 @@ mode allows but an always-on block bans stays banned, and `status` flags it.
 warns, in yellow, for each one that has no lock or only a delay lock.
 
 'focus only' is a session like Cold Turkey Micromanager that can be bypassed. With no
-groups it opens a search over the groups and every installed app in no group; a word
+groups it opens a search over the groups and every installed app in no group, where
+SPACE or TAB ticks several and the header lists them (in Alfred, 'only' piles one
+pick per ENTER into the query and the top row starts them); a word
 that is not a group name finds the one group holding that app or site ('chatgpt' finds
 ai-chat), else the one installed app it names ('zotero'). ScreenZen does all the
 work: its '✅ focus: only' group holds the note's `only.keep` groups plus the picks, and
@@ -2706,7 +2710,14 @@ def ungrouped_apps(cfg: dict) -> list[str]:
 
 def resolve_pick(cfg: dict, word: str) -> str:
     """A group name, a word found in exactly one group's apps and sites, or else one
-    ungrouped installed app."""
+    ungrouped installed app. 'app:NAME' names an ungrouped app outright, spaces left
+    out ('app:iPhoneMirroring'), which is how the Alfred picker passes one."""
+    if word.startswith(APP_PICK):
+        want = word.removeprefix(APP_PICK).replace(" ", "").lower()
+        for a in ungrouped_apps(cfg):
+            if a.replace(" ", "").lower() == want:
+                return APP_PICK + a
+        sys.exit(f"focus: {word!r}: no installed app outside the groups has that name")
     pool = only_pool(cfg)
     if word in pool:
         return word
@@ -2727,23 +2738,51 @@ def resolve_pick(cfg: dict, word: str) -> str:
     sys.exit(f"focus: {word!r}: {found}")
 
 
+def pick_token(key: str) -> str:
+    """A pick as one shell word: a group name, or 'app:NAME' with the spaces left out."""
+    return key.replace(" ", "") if key.startswith(APP_PICK) else key
+
+
+def pick_choices(cfg: dict, exclude: list[str]) -> list[tuple[str, str, str]]:
+    """(key, label, detail) for everything a session can pick, less the keep groups and
+    what is already picked: groups first, then the installed apps in no group."""
+    keep = cfg["only"].get("keep") or []
+    rows = [
+        (g, g, ", ".join(group_contents(cfg, g)))
+        for g in only_pool(cfg)
+        if g not in keep and g not in exclude and group_contents(cfg, g)
+    ]
+    rows += [
+        (APP_PICK + a, a, "app")
+        for a in ungrouped_apps(cfg)
+        if APP_PICK + a not in exclude
+    ]
+    return rows
+
+
+# fzf runs this through $SHELL on every change of selection, so the header always says
+# what ENTER will start. FZF_SELECT_COUNT is 0 when nothing is ticked, and {+2} would
+# then name the row under the cursor, so the count decides which line to print.
+PICK_HELP = "Type to search · SPACE or TAB ticks · ENTER starts · ESC cancels"
+PICK_HEADER = (
+    'if [ "${FZF_SELECT_COUNT:-0}" -gt 0 ]; then '
+    "printf '%s\\nPicked %s: ' "
+    f"'{PICK_HELP}' "
+    '"$FZF_SELECT_COUNT"; '
+    "printf '%s, ' {+2} | sed 's/, $//'; "
+    f"else printf '%s\\nPicked: nothing yet' '{PICK_HELP}'; fi"
+)
+
+
 def pick_groups(cfg: dict, exclude: list[str]) -> list[str]:
-    """Search the groups with fzf; [] when cancelled."""
+    """Search groups and apps with fzf and tick several; [] when cancelled."""
     if not sys.stdin.isatty() or not shutil.which("fzf"):
         sys.exit(
             "focus: the picker needs a terminal and fzf; name the groups instead, "
             "e.g. focus only bear ai-chat 45"
         )
-    keep = cfg["only"].get("keep") or []
     rows = [
-        f"{g}\t{', '.join(group_contents(cfg, g))}"
-        for g in only_pool(cfg)
-        if g not in keep and g not in exclude and group_contents(cfg, g)
-    ]
-    rows += [
-        f"{APP_PICK}{a}\tinstalled app"
-        for a in ungrouped_apps(cfg)
-        if APP_PICK + a not in exclude
+        f"{k}\t{label}\t{detail}" for k, label, detail in pick_choices(cfg, exclude)
     ]
     r = subprocess.run(
         [
@@ -2751,12 +2790,19 @@ def pick_groups(cfg: dict, exclude: list[str]) -> list[str]:
             "--multi",
             "--exact",  # fuzzy matching finds any word in a group with many sites
             "--delimiter=\t",
-            "--tabstop=18",
+            "--with-nth=2,3",  # the key in field 1 stays hidden; it is what comes back
+            "--tabstop=20",
             "--bind=space:toggle+clear-query",
-            "--prompt=allow> ",
-            "--header=Type to search. SPACE to toggle, ENTER to confirm.",
-            "--preview=echo {2} | tr ',' '\\n'",
-            "--preview-window=right:40%:wrap",
+            f"--bind=multi:transform-header:{PICK_HEADER}",
+            "--prompt=allow > ",
+            "--marker=✓ ",
+            "--pointer=▶",
+            "--highlight-line",
+            "--color=marker:green:bold,selected-fg:green:bold,selected-hl:green",
+            f"--header={PICK_HELP}\nPicked: nothing yet",
+            "--header-first",
+            "--preview=echo {3} | tr ',' '\\n' | sed 's/^ //'",
+            "--preview-window=right:35%:wrap",
         ],
         input="\n".join(rows),
         stdout=subprocess.PIPE,
@@ -3364,13 +3410,110 @@ def commit_tick(cfg: dict) -> None:
             )
 
 
+def alfred_only(cfg: dict, query: str) -> list[dict]:
+    """Rows for 'only …' in Alfred, which can pick one row at a time: ENTER on a group or
+    app writes it into the query and searches again, so picks pile up there; ENTER on a
+    ticked row takes it back out; the top row starts the session with them all."""
+    if "only" not in cfg:
+        return [
+            {
+                "title": "only is switched off",
+                "subtitle": f"{CONFIG_PATH.name} has no 'only:' section",
+                "valid": False,
+            }
+        ]
+    words = query.split()[1:]
+    search = "" if query.endswith(" ") or not words else words.pop()
+    minutes = None
+    if search.isdecimal():
+        minutes, search = int(search), ""
+    elif words and words[-1].isdecimal():
+        minutes = int(words.pop())
+    picks: list[str] = []
+    for w in words:
+        try:
+            key = resolve_pick(cfg, w)
+        except SystemExit:
+            continue  # a word typed by hand that names nothing: leave it out
+        if key not in picks:
+            picks.append(key)
+    session = read_only()
+    now_groups = session["groups"] if session else []
+    tokens = [pick_token(k) for k in picks]
+    tail = [str(minutes)] if minutes else []
+
+    def query_of(keys: list[str]) -> str:
+        return " ".join(["only", *(pick_token(k) for k in keys), *tail]) + " "
+
+    rows = []
+    labels = ", ".join(k.removeprefix(APP_PICK) for k in picks)
+    if session:
+        end = dt.datetime.fromtimestamp(session["until"])
+        running = ", ".join(g.removeprefix(APP_PICK) for g in now_groups)
+        if picks or minutes:
+            what = f"Add {labels}" if picks else "Keep the session"
+            when = f"{minutes} more min" if minutes else f"until {end:%H:%M}"
+            rows.append(
+                {
+                    "title": f"{what} · {when}",
+                    "subtitle": f"running: {running}",
+                    "arg": " ".join(["only", *tokens, *tail]),
+                }
+            )
+        else:
+            rows.append(
+                {
+                    "title": "End the only session",
+                    "subtitle": f"running: {running} until {end:%H:%M}; pick below "
+                    "to add, or type minutes",
+                    "arg": "only end",
+                }
+            )
+    elif picks:
+        m = minutes or int(cfg["only"].get("minutes", DEFAULT_ONLY_MIN))
+        rows.append(
+            {
+                "title": f"Start: {labels} for {m} min",
+                "subtitle": "the rest gets a pause screen; type a number at the end "
+                "for other minutes",
+                "arg": " ".join(["only", *tokens, str(m)]),
+            }
+        )
+    for k in picks:
+        rows.append(
+            {
+                "title": f"✓ {k.removeprefix(APP_PICK)}",
+                "subtitle": "picked · ENTER takes it out",
+                "autocomplete": query_of([p for p in picks if p != k]),
+                "valid": False,
+            }
+        )
+    needle = search.lower()
+    hint = "ENTER adds it, then search the next" if not picks else "ENTER adds it"
+    found = [
+        {
+            "title": label,
+            "subtitle": f"{hint} · {detail}"[:160],
+            "autocomplete": query_of([*picks, key]),
+            "valid": False,
+        }
+        for key, label, detail in pick_choices(cfg, [*picks, *now_groups])
+        if needle in label.lower() or needle in detail.lower()
+    ]
+    return rows + found[:50]
+
+
 def cmd_alfred(cfg: dict, query: str) -> None:
     """Alfred script-filter JSON: modes, 'off', timers and committed blocks, filtered by
     what was typed. 'commit research 25' or just 'research 25' offers a committed block.
+    'only' opens the multi-pick for an only session (alfred_only).
 
     'add GROUP SITE' offers to add a site to a group: 'focus add' lists the groups.
     """
     words = query.split()
+    if words and words[0] == "only":
+        print(json.dumps({"items": alfred_only(cfg, query)}))
+        return
     if words and words[0] == "add":
         groups = cfg["groups"]
         if len(words) >= 3 and words[1] in groups:
@@ -3407,8 +3550,46 @@ def cmd_alfred(cfg: dict, query: str) -> None:
     except (OSError, sqlite3.Error, ValueError):
         running = set()
     items = []
+    capped = cfg.get("capped_modes") or {}
+    qwords = query.split()
     for mode, spec in cfg["modes"].items():
         on = mode in running
+        if mode in capped:
+            # 'admin 10' runs admin for 10 minutes. The row used to pass only the mode,
+            # so the typed minutes were dropped and every stretch ran the full cap.
+            cap = int(capped[mode].get("minutes", DEFAULT_CAPPED_MIN))
+            typed = (
+                int(qwords[1])
+                if len(qwords) == 2
+                and qwords[0] == mode
+                and qwords[1].isdigit()
+                and int(qwords[1]) > 0
+                else None
+            )
+            if typed and typed > cap:
+                items.append(
+                    {
+                        "uid": mode,
+                        "title": f"{mode} for {typed} min, from the day budget",
+                        "subtitle": f"a normal stretch is at most {cap} min; a day "
+                        "stretch asks for a reason",
+                        "arg": f"{mode} --day {typed}",
+                    }
+                )
+                continue
+            mins = typed or cap
+            items.append(
+                {
+                    "uid": mode,
+                    "title": f"{mode} for {mins} min" + (" (running)" if on else ""),
+                    "subtitle": "allows "
+                    + ", ".join(spec.get("allow") or [])
+                    + f"; type minutes after the name (at most {cap})",
+                    "arg": f"{mode} {mins}",
+                    "autocomplete": f"{mode} ",
+                }
+            )
+            continue
         items.append(
             {
                 "uid": mode,
@@ -3515,6 +3696,23 @@ def cmd_alfred(cfg: dict, query: str) -> None:
         print(json.dumps({"items": commit_rows}))
         return
     items += commit_rows
+    if "only" in cfg:
+        only_s = read_only()
+        until = (
+            f" (running until {dt.datetime.fromtimestamp(only_s['until']):%H:%M})"
+            if only_s
+            else ""
+        )
+        items.append(
+            {
+                "uid": "only",
+                "title": "only…" + until,
+                "subtitle": "tick apps and groups for a timed session; the rest gets "
+                "a pause screen",
+                "autocomplete": "only ",
+                "valid": False,
+            }
+        )
     items.append(
         {
             "uid": "add",
@@ -3527,6 +3725,97 @@ def cmd_alfred(cfg: dict, query: str) -> None:
     first = words[0].lower() if words else ""
     items = [i for i in items if i["uid"].removeprefix("timer-").startswith(first)]
     print(json.dumps({"items": items}))
+
+
+def menu_rows(cfg: dict, blocks: dict) -> list[tuple[str, str, str, int | None]]:
+    """The rows of the bare-'focus' menu: (section, command, description, default
+    minutes or None). Every command is one 'focus' already accepts, so a pick runs
+    exactly what typing it would."""
+    capped = cfg.get("capped_modes") or {}
+
+    def running(block: str) -> str:
+        return "● running · " if blocks.get(block, {}).get("enabled") == "true" else ""
+
+    rows: list[tuple[str, str, str, int | None]] = []
+    for m, spec in cfg["modes"].items():
+        # The cap leads: a long allow list is cut at the terminal's edge.
+        detail = "allows " + (
+            ", ".join(spec.get("allow") or []) or "only the shared list"
+        )
+        minutes = None
+        if m in capped:
+            minutes = int(capped[m].get("minutes", DEFAULT_CAPPED_MIN))
+            detail = f"at most {minutes} min · " + detail
+        rows.append(("Modes", m, running(PREFIX + m) + detail, minutes))
+    for t, spec in (cfg.get("timers") or {}).items():
+        blocked = ", ".join(spec.get("block") or [])
+        rows.append(
+            (
+                "Timers",
+                t,
+                running(TIMER_PREFIX + t) + f"blocks {blocked}, locked",
+                int(spec.get("minutes", 50)),
+            )
+        )
+    if "only" in cfg:
+        s = read_only()
+        detail = (
+            f"● running · {', '.join(s['groups'])}"
+            if s
+            else "pick what to allow; the rest gets a pause screen"
+        )
+        rows.append(("Sessions", "only", detail, None))
+    cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    rows.append(("Sessions", "break", f"pause the mode, up to {cap} min", 15))
+    hours = ", ".join(cfg.get("off_hours") or []) or "any time"
+    rows.append(("Other", "off", f"stop every mode ({hours} only)", None))
+    rows.append(("Other", "status", "what runs now, every block, drift", None))
+    return rows
+
+
+def cmd_menu(cfg: dict) -> bool:
+    """Bare 'focus' at a terminal: pick a mode, timer or session from a menu, then
+    run it as if typed. False when no menu can be drawn, so the caller prints the
+    overview instead."""
+    picker = shutil.which("claude-tools")
+    # stdout too: 'focus | cat' keeps a terminal on stdin and stderr, and must get
+    # the list, not a menu that could switch a mode.
+    if not (
+        sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty() and picker
+    ):
+        return False
+    try:
+        blocks = read_blocks()
+    except (OSError, sqlite3.Error, ValueError):
+        blocks = {}
+    rows = menu_rows(cfg, blocks)
+    with tempfile.NamedTemporaryFile("w", suffix=".items", delete=False) as f:
+        for section, name, desc, _ in rows:
+            f.write(f"{section}|{name}|{desc.replace('|', '/')}|false\n")
+        items = f.name
+    try:
+        r = subprocess.run(
+            [picker, "select", "--single", "--title", "focus", "--items", items],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+    finally:
+        Path(items).unlink(missing_ok=True)
+    picked = r.stdout.strip()
+    if r.returncode or not picked:  # 1: q or Esc; anything else: no choice made
+        print("nothing picked; nothing changed")
+        return True
+    default = next(m for _, n, _, m in rows if n == picked)
+    args = [picked]
+    if default is not None:
+        args.append(str(ask_minutes(default)))
+    print(paint("focus " + " ".join(args), "2"))
+    # Run the pick as a fresh 'focus' so it takes the same path as typing it,
+    # prompts (a reason, minutes) included.
+    os.execv(
+        sys.executable,
+        [sys.executable, sys.argv[0], "--config", str(CONFIG_PATH), *args],
+    )
 
 
 def cmd_overview(cfg: dict) -> None:
@@ -3635,7 +3924,8 @@ def main() -> None:
     p = argparse.ArgumentParser(
         prog="focus",
         description="Switch Cold Turkey and ScreenZen between work modes defined in one note.",
-        epilog="Run 'focus' with no command to list the modes and what is running.",
+        epilog="Run 'focus' with no command for a menu of the modes (a list when not at a"
+        " terminal); 'focus list' prints that list.",
     )
     p.add_argument(
         "--config",
@@ -3646,7 +3936,7 @@ def main() -> None:
     p.add_argument(
         "command",
         nargs="?",
-        help="a mode or timer name, or only | break | off | status | sync | screenzen | add | pull"
+        help="a mode or timer name, or list | only | break | off | status | sync | screenzen | add | pull"
         " | allow | end | export | install-agent | uninstall-agent",
     )
     p.add_argument(
@@ -3696,6 +3986,9 @@ def main() -> None:
         catch_up(cfg)
     match a.command:
         case None:
+            if not cmd_menu(cfg):
+                cmd_overview(cfg)
+        case "list":
             cmd_overview(cfg)
         case "off":
             cmd_off(cfg)

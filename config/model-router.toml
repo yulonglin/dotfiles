@@ -194,19 +194,32 @@ agent = false
 # Code request (2026-09-22), not reproduced on 3.7 or 3.8 Flash on 2026-10-12.
 # If a 400 recurs on any Gemini, keep the upstream error.metadata.raw.
 #
-# `gemini` moved here from gemini-4-argon on 2026-11-12 (Carbon listed on
-# OpenRouter 2026-11-10 at Argon's $2/$10 per M). Epoch ECI on 2026-11-12:
-# Carbon 169.76 (CI 166.48-173.50), Argon 166.48 (CI 163.77-169.46); the
-# intervals overlap. One tool-calling request through OpenRouter returned a
-# well-formed call on both; a full Claude Code turn through the router is
-# what `tests/test_model_router_gateway.sh` checks after apply.
+# `gemini` moved here from gemini-4-carbon on 2026-11-18 (Yulong), the day
+# Neon was listed on OpenRouter at $3/$15 per M against Carbon's $2/$10.
+# Launch-week evidence only, no Epoch ECI yet: Artificial Analysis puts both at
+# about 60 at high effort, Neon at about 110 tok/s against 57, and Google
+# reports 32% lower cost per task than Carbon. Carbon keeps a slight lead on
+# long-horizon agent tasks. Revisit when Epoch scores Neon. A full Claude
+# Code turn through the router is what `tests/test_model_router_gateway.sh`
+# checks after apply.
+[[models]]
+id = "gemini-4-neon"
+aliases = ["gemini"]
+name = "Gemini 4 Neon"
+provider = "openrouter"
+slug = "google/gemini-4-neon"
+context-window = 1048576
+
+# `gemini` named Carbon from 2026-11-12 to 2026-11-18 (Epoch ECI 169.76 against
+# Argon's 166.48, intervals overlapping).
 [[models]]
 id = "gemini-4-carbon"
-aliases = ["gemini"]
 name = "Gemini 4 Carbon"
 provider = "openrouter"
 slug = "google/gemini-4-carbon"
 context-window = 1048576
+picker = false           # `gemini` is now Neon; the route stays for anything naming gemini-4-carbon
+agent = false
 
 [[models]]
 id = "gemini-4-argon"
@@ -214,7 +227,7 @@ name = "Gemini 4 Argon"
 provider = "openrouter"
 slug = "google/gemini-4-argon"
 context-window = 1048576
-picker = false           # `gemini` is now Carbon; the route stays for anything naming gemini-4-argon
+picker = false           # `gemini` moved on (Carbon, then Neon); the route stays for anything naming gemini-4-argon
 agent = false
 
 # `sol` named this model from 2026-10-01 to 2026-11-17. Router 0.1.23 serves
