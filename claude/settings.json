@@ -182,7 +182,7 @@
       },
       {
         "model": "astra",
-        "label": "GPT-6 Astra",
+        "label": "GPT-6.2 Astra",
         "description": "ChatGPT subscription (Codex)"
       },
       {
@@ -192,7 +192,7 @@
       },
       {
         "model": "sol",
-        "label": "GPT-6.1 Sol",
+        "label": "GPT-6.2 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
@@ -689,7 +689,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh -c 'rex __internal session-start --agent claude 2>/dev/null || true'",
+            "command": "/bin/sh -c 'rex __internal session-start --agent claude --feature-session-naming=false 2>/dev/null || true'",
             "timeout": 5
           }
         ]
@@ -991,16 +991,22 @@
     "claude-opus-5-5": {
       "effortLevel": "high"
     },
-    "gpt-6-astra": {
+    "gpt-6.2-astra": {
       "autoCompactWindow": 258400
     },
-    "gpt-6-astra-fast": {
+    "gpt-6.2-astra-fast": {
       "autoCompactWindow": 258400
     },
     "astra": {
       "autoCompactWindow": 258400
     },
     "astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-astra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-astra-fast": {
       "autoCompactWindow": 258400
     },
     "gemini-4-carbon": {
@@ -1016,6 +1022,12 @@
       "autoCompactWindow": 258400
     },
     "gpt-6.1-sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol": {

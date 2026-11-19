@@ -1,65 +1,43 @@
-model = "gpt-6-astra"
-model_reasoning_effort = "ultra"
+sandbox_mode = "workspace-write"
+model = "gpt-6.2-astra"
+model_reasoning_effort = "medium"
+service_tier = "default"
 # Default to "Approve for me": automatically review requests, keeping the sandbox.
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
-sandbox_mode = "workspace-write"
-service_tier = "default"
 
-[mcp_servers.linear]
-url = "https://mcp.linear.app/mcp"
+[marketplaces.ai-safety-plugins]
+source_type = "git"
+source = "https://github.com/yulonglin/ai-safety-plugins.git"
 
-[mcp_servers.figma]
-url = "https://mcp.figma.com/mcp"
+[marketplaces.alignment-hive]
+source_type = "git"
+source = "https://github.com/Crazytieguy/alignment-hive.git"
 
-[mcp_servers.notion]
-url = "https://mcp.notion.com/mcp"
+[marketplaces.claude-plugins-official]
+source_type = "git"
+source = "https://github.com/anthropics/claude-plugins-official.git"
 
-[mcp_servers.playwright]
-command = "npx"
-args = ["@playwright/mcp@latest"]
+[marketplaces.codex-plugin-cc]
+source_type = "git"
+source = "https://github.com/crazytieguy/codex-plugin-cc.git"
 
-[mcp_servers.node_repl]
-command = "/Applications/Codex.app/Contents/Resources/cua_node/bin/node_repl"
-startup_timeout_sec = 120.0
+[marketplaces.dev-browser-marketplace]
+source_type = "git"
+source = "https://github.com/sawyerhood/dev-browser.git"
 
-[mcp_servers.node_repl.env]
-BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
-BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
-BROWSER_USE_CODEX_APP_VERSION = "26.609.41114"
-CODEX_CLI_PATH = "/Applications/Codex.app/Contents/Resources/codex"
-CODEX_HOME = "/Users/yulong/.codex"
-NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
-NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
-NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
-NODE_REPL_NODE_MODULE_DIRS = "/Applications/Codex.app/Contents/Resources/cua_node/lib/node_modules"
-NODE_REPL_NODE_PATH = "/Applications/Codex.app/Contents/Resources/cua_node/bin/node"
-NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "27dca86fd6b571c49414a4b78e46b57bcf683a46cd1319799c11fbb6cfae3110"  # gitleaks:allow (sha256 trust pin, not a secret)
-NODE_REPL_TRUSTED_CODE_PATHS = "/Users/yulong/.codex"
+[marketplaces.productivity-tools]
+source_type = "git"
+source = "https://github.com/yulonglin/productivity-tools.git"
 
-
-[mcp_servers.openaiDeveloperDocs]
-url = "https://developers.openai.com/mcp"
-
-[notice.model_migrations]
-"gpt-5.3-codex" = "gpt-5.4"
-
-[plugins."google-calendar@openai-curated"]
-enabled = true
-
-[plugins."slack@openai-curated"]
-enabled = true
-
-[plugins."google-drive@openai-curated"]
-enabled = true
-
-[plugins."github@openai-curated"]
-enabled = true
-
-[plugins."gmail@openai-curated"]
-enabled = true
+[marketplaces.ui-ux-pro-max-skill]
+source_type = "git"
+source = "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git"
 
 [plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."pdf@openai-primary-runtime"]
 enabled = true
 
 [plugins."spreadsheets@openai-primary-runtime"]
@@ -68,19 +46,28 @@ enabled = true
 [plugins."presentations@openai-primary-runtime"]
 enabled = true
 
-[plugins."codex-security@openai-curated"]
+[plugins."code@ai-safety-plugins"]
 enabled = true
 
-[plugins."granola@openai-curated"]
+[plugins."core@ai-safety-plugins"]
 enabled = true
 
-[plugins."zotero@openai-curated"]
+[plugins."viz@ai-safety-plugins"]
 enabled = true
 
-[plugins."latex@openai-bundled"]
+[plugins."workflow@ai-safety-plugins"]
+enabled = true
+
+[plugins."writing@ai-safety-plugins"]
+enabled = true
+
+[plugins."llms-fetch-mcp@alignment-hive"]
 enabled = true
 
 [plugins."claude-md-management@claude-plugins-official"]
+enabled = true
+
+[plugins."code-simplifier@claude-plugins-official"]
 enabled = true
 
 [plugins."commit-commands@claude-plugins-official"]
@@ -89,7 +76,25 @@ enabled = true
 [plugins."context7@claude-plugins-official"]
 enabled = true
 
+[plugins."figma@claude-plugins-official"]
+enabled = true
+
+[plugins."frontend-design@claude-plugins-official"]
+enabled = true
+
 [plugins."hookify@claude-plugins-official"]
+enabled = true
+
+[plugins."huggingface-skills@claude-plugins-official"]
+enabled = true
+
+[plugins."imessage@claude-plugins-official"]
+enabled = true
+
+[plugins."playground@claude-plugins-official"]
+enabled = true
+
+[plugins."playwright@claude-plugins-official"]
 enabled = true
 
 [plugins."plugin-dev@claude-plugins-official"]
@@ -101,71 +106,60 @@ enabled = true
 [plugins."remember@claude-plugins-official"]
 enabled = true
 
+[plugins."security-guidance@claude-plugins-official"]
+enabled = true
+
 [plugins."superpowers@claude-plugins-official"]
 enabled = true
 
-[plugins."browser@openai-bundled"]
+[plugins."telegram@claude-plugins-official"]
 enabled = true
 
-[plugins."sites@openai-bundled"]
+[plugins."codex@codex-plugin-cc"]
+enabled = true
+
+[plugins."template-creator@openai-primary-runtime"]
 enabled = true
 
 [plugins."visualize@openai-bundled"]
 enabled = true
 
-[tui.model_availability_nux]
-"gpt-5.5" = 4
-"gpt-5.6-sol" = 2
+[plugins."codex-app-tools@openai-bundled"]
+enabled = true
 
-[marketplaces.openai-bundled]
-last_updated = "2026-09-03T04:37:38Z"
-source_type = "local"
-source = "/home/yulong/code/dotfiles/codex/.tmp/bundled-marketplaces/openai-bundled"
+[plugins."browser@openai-bundled"]
+enabled = true
 
-[marketplaces.openai-primary-runtime]
-last_updated = "2026-06-06T10:48:42Z"
-source_type = "local"
-source = "/Users/yulong/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
-
-[marketplaces.claude-plugins-official]
-last_updated = "2026-08-29T01:09:43Z"
-last_revision = "ed404106fcd80ba98ecb7c851e531dcb626d13b7"
-source_type = "git"
-source = "https://github.com/anthropics/claude-plugins-official.git"
-
-[desktop]
-usePointerCursors = false
-followUpQueueMode = "steer"
-composerEnterBehavior = "enter"
-preventSleepWhileRunning = true
-keepRemoteControlAwakeWhilePluggedIn = true
-git-branch-prefix = "yulong/"
-mac-menu-bar-enabled = true
-show-context-window-usage = true
-hotkey-window-projectless-default-enabled = false
-notifications-turn-mode = "always"
+[plugins."unified-computer-use@openai-bundled"]
+enabled = true
 
 [features]
-js_repl = false
 memories = true
-chronicle = true
+js_repl = false
+computer_use = false
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+
+[mcp_servers.bear]
+command = "/Applications/Bear.app/Contents/MacOS/bearcli"
+args = ["mcp-server"]
+
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+BASH_MAX_OUTPUT_LENGTH = "100000"
+CLAUDECODE = ""
+CLAUDE_CODE_ATTRIBUTION_HEADER = "0"
+CLAUDE_CODE_AUTO_COMPACT_WINDOW = "250000"
+CLAUDE_CODE_COORDINATOR_MODE = "1"
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
+CLAUDE_CODE_NO_FLICKER = "1"
+ENABLE_TOOL_SEARCH = "1"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "9230e2bd8b24b7ac7a0ba6774c64bf0d78ecdabbdd91d0ed627b02a587bae2df"
 
 [hooks.state]
-
-[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
-trusted_hash = "sha256:33cab461db694142d691bc1267d6b4694a32402af2301bd1cc1becfbe5888a81"
-
-[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:pre_tool_use:0:0"]
-trusted_hash = "sha256:2763d5b04659d5af7b607ed8ae8524d45987b047509ae969db296c1163793e98"
-
-[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:stop:0:0"]
-trusted_hash = "sha256:81df2b0427162d1d2fe4b84733748a11f5bcb7b10dae9af3bced6c8b0709b6ca"
-
-[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
-trusted_hash = "sha256:cbc990263a4b369738f970a9273caec2a5b55213795a57494ebb581240631a33"
-
-[hooks.state."ralph-loop@claude-plugins-official:hooks/hooks.json:stop:0:0"]
-trusted_hash = "sha256:6157c9f3776a29424b3a497707296124a3f628909fc09129dc89412d1c6b35b1"
 
 [hooks.state."remember@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
 trusted_hash = "sha256:ef24c8247cbf33474955f9782a22e47c3a5542b9b7c60357eef4b92d32372835"
@@ -173,14 +167,69 @@ trusted_hash = "sha256:ef24c8247cbf33474955f9782a22e47c3a5542b9b7c60357eef4b92d3
 [hooks.state."remember@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
 trusted_hash = "sha256:218ec4865b8e4413c4c9fafe9d9ee0b5e787b46e50a21b29787d5463c122af6b"
 
-[hooks.state."superpowers@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
-trusted_hash = "sha256:62acbaff2b2f55f41971e21a164990aaa53c96919baa0a5eae2eb5db73b9e6e6"
-
 [hooks.state."superpowers@claude-plugins-official:hooks/hooks-codex.json:session_start:0:0"]
 trusted_hash = "sha256:687e7af87f0cb59b1bcc71d368e097304b45d84999c90dc97358a22811691a3f"
 
+[hooks.state."codex@codex-plugin-cc:hooks/hooks.json:session_start:0:0"]
+enabled = false
+trusted_hash = "sha256:fd950dc99ea73773658878416a8e06c24eb62378fea2ede7f585f76623e75eb9"
+
+[hooks.state."codex@codex-plugin-cc:hooks/hooks.json:session_end:0:0"]
+enabled = false
+trusted_hash = "sha256:bc55a03ac0094c5deb4af95c405b75b34735f318b3d9bd64a2f9902973861606"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:pre_tool_use:0:0"]
+trusted_hash = "sha256:2763d5b04659d5af7b607ed8ae8524d45987b047509ae969db296c1163793e98"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:33cab461db694142d691bc1267d6b4694a32402af2301bd1cc1becfbe5888a81"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:cbc990263a4b369738f970a9273caec2a5b55213795a57494ebb581240631a33"
+
+[hooks.state."hookify@claude-plugins-official:hooks/hooks.json:stop:0:0"]
+trusted_hash = "sha256:81df2b0427162d1d2fe4b84733748a11f5bcb7b10dae9af3bced6c8b0709b6ca"
+
+[hooks.state."ralph-loop@claude-plugins-official:hooks/hooks.json:stop:0:0"]
+enabled = false
+trusted_hash = "sha256:6157c9f3776a29424b3a497707296124a3f628909fc09129dc89412d1c6b35b1"
+
 [hooks.state."remember@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
 trusted_hash = "sha256:063ea45c81012b7c36a92e4f0de9e8aaf2dcefeac5c09c6b45466acc62695486"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
+trusted_hash = "sha256:e1f574c07fd492df4de2ceb615c3b0a2a3eca27329bf0929ff9095650c7174bf"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:0"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:1"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:2"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:3"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:4"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:3def3be0b299c29f829ea4b057509c24f3c6f8eede7b8c719bbd4167866d6cf6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
+trusted_hash = "sha256:c22701bf949e9ffd219867faec1158e0124874e94f3668dab6209fa3acc92dd6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:stop:0:0"]
+trusted_hash = "sha256:5d8880157e747997146b5eb0443a43909e23fb0203e64ae4895eff5a1b0282fa"
+
+[hooks.state."codex@codex-plugin-cc:hooks/hooks.json:session_start:1:0"]
+enabled = false
+trusted_hash = "sha256:8563cbed7def1e440c61f3560356c00f0c03588f37ee23ff2386cc052b77ee6c"
+
+[hooks.state."browser@openai-bundled:plugin.json#hooks[0]:stop:0:0"]
+trusted_hash = "sha256:317a07045dfc95aef2e80c55428a2f817e2768be867e3b1ef29a73da8636ae7f"
 
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:post_tool_use:0:0"]
 trusted_hash = "sha256:b54eb6fa509b1829789b3c820f29cacd3636120ad2a563b8b839d94face0170a"
@@ -188,12 +237,31 @@ trusted_hash = "sha256:b54eb6fa509b1829789b3c820f29cacd3636120ad2a563b8b839d94fa
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:session_start:0:0"]
 trusted_hash = "sha256:cd46d4c1408a0c59a707c959639837696d2fa1f17346db351523e3c04916ef56"
 
+[hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:session_end:0:0"]
+trusted_hash = "sha256:72c553c0f49b70f00f7c41756a190376c8b2b2d0629f4ba8f5becba3ea9e3dce"
+
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:user_prompt_submit:0:0"]
 trusted_hash = "sha256:71d43e21408ae365e00406e47e68fc72a78df1a758513ad07dcbf2490467ecd1"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:5"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:6"]
+trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:subagent_stop:0:0"]
+trusted_hash = "sha256:259af6de997af555cb363624a6db1b8e9a9ec644864293ec97b5abe3ad30eb55"
 
 [memories]
 generate_memories = true
 use_memories = true
+
+[apps.connector_openai_codex_document_control]
+enabled = false
+
+[mcp_servers.slack]
+url = "https://mcp.slack.com/mcp"
+http_headers_helper = 'bash "${DOT_DIR:-$HOME/code/dotfiles}/custom_bins/slack-mcp-headers"'
 
 # BEGIN SHARED MCP SERVERS
 # Auto-generated by scripts/helpers/sync_mcp_servers.py

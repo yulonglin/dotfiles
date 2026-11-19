@@ -455,6 +455,15 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     if git -C "$DOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
         git -C "$DOT_DIR" config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
         log_success "Configured the zed-ssh clean filter for $DOT_DIR"
+        # codex-local: the clean side keeps this machine's Codex tables (trusted
+        # projects, app preferences, local marketplaces) out of
+        # codex/config.toml blobs and saves them; the smudge side appends them
+        # back when a pull rewrites the file. --save seeds the saved copy so the
+        # first pull after deploy already keeps them.
+        git -C "$DOT_DIR" config --local filter.codex-local.clean 'scripts/git-filters/codex-config-local --clean %f'
+        git -C "$DOT_DIR" config --local filter.codex-local.smudge 'scripts/git-filters/codex-config-local --smudge'
+        "$DOT_DIR/scripts/git-filters/codex-config-local" --save || true
+        log_success "Configured the codex-local clean/smudge filter for $DOT_DIR"
     fi
 fi
 

@@ -1,0 +1,10 @@
+# Rex app settings outside Workspace.* (macOS defaults domain com.superlogical.rex, full key names).
+# Allowlisted in custom_bins/rex-prefs (APP_KEYS); same two-way sync as ui-prefs.tsv.
+# key	type	value
+SUAutomaticallyUpdate	bool	true
+SUEnableAutomaticChecks	bool	true
+rex.agents.names-sessions	bool	false
+rex.server.automatic-restart-enabled	bool	true
+rex.server.block-plugin-reload-enabled	bool	false
+rex.server.run-mode	string	bundled
+rex.server.tailnet-enabled	bool	true
