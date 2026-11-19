@@ -2862,6 +2862,14 @@ def test_alfred_capped_mode_passes_typed_minutes(tmp_path, capsys, monkeypatch):
     assert [r["arg"] for r in alfred_rows(capsys, cfg, "writing 90")] == [
         "writing --day 90"
     ]
+    # A running capped mode stays pickable: renewing it is allowed. The row used to be
+    # greyed out while it ran, so 'admin' did nothing mid-stretch.
+    monkeypatch.setattr(
+        ct, "read_blocks", lambda: {ct.PREFIX + "writing": {"enabled": "true"}}
+    )
+    monkeypatch.setattr(ct, "mode_blocks", lambda b: b)
+    rows = alfred_rows(capsys, cfg, "writing")
+    assert rows[0].get("valid", True) and "(running)" in rows[0]["title"]
     # An uncapped mode with minutes is still a committed block.
     assert [r["arg"] for r in alfred_rows(capsys, cfg, "research 25")] == [
         "research 25 --commit"
