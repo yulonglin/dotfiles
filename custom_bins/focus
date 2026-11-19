@@ -16,7 +16,7 @@
     focus add travel westjet.com  # add to a group in the note, then sync both apps
     focus pull [--dry-run]    # copy sites and apps added inside Cold Turkey into the note
     focus deep [MINUTES]      # a timer: block its groups on top of any mode, locked
-    focus only [GROUP…] [MINUTES]  # pick what to allow; everything else gets a pause screen
+    focus only [GROUP…] [no:NAME…] [MINUTES]  # pick what to allow; the rest gets a pause screen
     focus CAPPED [MINUTES]    # a capped mode: at most its minutes, then back to the mode before
     focus CAPPED --day [MIN]  # one longer stretch from its daily budget
     focus research 90 --commit  # keep the mode's block locked for 90 minutes
@@ -67,7 +67,11 @@ that is not a group name finds the one group holding that app or site ('chatgpt'
 ai-chat), else the one installed app it names ('zotero'). ScreenZen does all the
 work: its '✅ focus: only' group holds the note's `only.keep` groups plus the picks, and
 a '🚫 focus: only' group holds every installed app except those, so anything else gets
-a pause screen that can be passed. A session uses no Cold Turkey block: Cold Turkey can
+a pause screen that can be passed. `only.default` lists picks a new session starts
+with (groups, or installed apps in no group): the picker shows them ticked, so SPACE
+unticks one; named picks bring them along, and a word 'no:NAME' leaves one out
+('focus only ai-chat no:spotify'). During a session 'focus only no:NAME' takes a pick
+away. A session uses no Cold Turkey block: Cold Turkey can
 only be passed with a command, and the point is to reach something forgotten without
 leaving the work. So it stops the running mode, and only the always-on blocks stay
 hard. It lives in a state file, not in `modes`. When the time is up focus sends a
@@ -191,6 +195,7 @@ PREFIX = "mode: "
 TIMER_PREFIX = "timer: "
 ONLY = "only"  # a session: a ScreenZen state, not a Cold Turkey block or a note mode
 APP_PICK = "app:"  # a picked installed app that is in no group
+NO_PICK = "no:"  # a word that leaves a pick out: 'no:spotify'
 BLOCK_ALL = "*.*"
 SZ_DOMAIN = (
     Path.home()
@@ -526,8 +531,8 @@ def load_config(path: Path) -> dict:
         refs += [(f"timer {name}", t.get("block") or [])]
     if "only" in cfg:
         cfg["only"] = cfg["only"] or {}
-        if set(cfg["only"]) - {"keep", "minutes"}:
-            problems.append("'only' may only have 'keep' and 'minutes'")
+        if set(cfg["only"]) - {"keep", "minutes", "default"}:
+            problems.append("'only' may only have 'keep', 'minutes' and 'default'")
         if ONLY in (cfg.get("modes") or {}) or ONLY in (cfg.get("timers") or {}):
             problems.append(f"{ONLY!r} is taken by the 'only' section")
         refs += [("only keep", cfg["only"].get("keep") or [])]
@@ -1714,23 +1719,8 @@ def cmd_status(cfg: dict) -> None:
         print(f"{PREFIX}{mode}: {verdict}")
         for k, v in issues.items():
             print(describe(k, v))
-    # Always-on blocks are reported, never written: they carry delay locks the CLI cannot get past.
-    fixed = []
-    for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
-        apps, missing = ct_apps(group_items(cfg, bl.get("block") or [], "apps"))
-        fixed.append(
-            (
-                name,
-                group_items(cfg, bl.get("block") or [], "sites"),
-                group_items(cfg, bl.get("allow") or [], "sites"),
-                apps,
-                missing,
-            )
-        )
-    for t in cfg.get("timers") or {}:
-        web, apps, missing = timer_lists(cfg, t)
-        fixed.append((TIMER_PREFIX + t, web, ["file://*.*"], apps, missing))
-    for name, want_web, want_exc, want_apps, missing in fixed:
+    # Always-on blocks and timers: sync adds what they lack, but a lock can refuse it.
+    for name, want_web, want_exc, want_apps, missing in fixed_blocks(cfg):
         block = blocks.get(name)
         if block is None:
             print(f"{name}: {CT_MISSING_BLOCK}")
@@ -1763,17 +1753,46 @@ def cmd_status(cfg: dict) -> None:
         print(f"{paint('weak lock', '33')}: {line} (set it in Cold Turkey)")
 
 
+def fixed_blocks(cfg: dict) -> list[tuple]:
+    """(name, blocked sites, allowed sites, apps, missing apps) for each always-on block
+    and timer the note describes."""
+    fixed = []
+    for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
+        apps, missing = ct_apps(group_items(cfg, bl.get("block") or [], "apps"))
+        fixed.append(
+            (
+                name,
+                group_items(cfg, bl.get("block") or [], "sites"),
+                group_items(cfg, bl.get("allow") or [], "sites"),
+                apps,
+                missing,
+            )
+        )
+    for t in cfg.get("timers") or {}:
+        web, apps, missing = timer_lists(cfg, t)
+        fixed.append((TIMER_PREFIX + t, web, ["file://*.*"], apps, missing))
+    return fixed
+
+
 def sync_loosen(cfg: dict, blocks: dict) -> list[str]:
-    """The allowed sites a sync would add to mode blocks: the part of a sync that loosens.
-    A committed mode is left out: its lock keeps new exceptions out, so a sync adds none
-    to it and an agent has nothing there to wait for."""
+    """The allowed sites a sync would add: the part of a sync that loosens. A committed
+    mode is left out: its lock keeps new exceptions out, so a sync adds none to it and an
+    agent has nothing there to wait for."""
     c = read_commit()
-    return sorted(
+    modes = [
         f"{m}:{e}"
         for m in cfg["modes"]
         if c is None or c["mode"] != m
         for e in drift(cfg, blocks, m).get("add_exc", [])
-    )
+    ]
+    fixed = [
+        f"{name}:{e}"
+        for name, _, want_exc, _, _ in fixed_blocks(cfg)
+        if name in blocks
+        for e in want_exc
+        if e not in blocks[name]["exceptions"]
+    ]
+    return sorted(modes + fixed)
 
 
 def add_site(name: str, flag: str, kind: str, site: str) -> tuple:
@@ -1845,17 +1864,21 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
                 + paint("apps not found on this Mac:", "33")
                 + f" {', '.join(d['missing_apps'])}"
             )
-    # Always-on blocks and timers: adding a banned site only tightens, so try it even though
-    # they may be locked. Whether the CLI accepts an addition to a locked block is untested.
-    bans = dict((cfg.get("blocklists") or {}).get("cold_turkey", {}))
-    bans.update({TIMER_PREFIX + t: s for t, s in (cfg.get("timers") or {}).items()})
-    for name, spec in bans.items():
+    # Always-on blocks and timers may be locked, so try each addition and report one Cold
+    # Turkey refuses as a hand edit, not as a failed sync. Allowed sites go first, as for a
+    # mode; the gate above approved them. Until 19 Nov 2026 sync skipped allowed sites
+    # here while status told you to run it for them.
+    for name, want_web, want_exc, _, _ in fixed_blocks(cfg):
         block = blocks.get(name)
         if block is None:
             continue
-        for site in group_items(cfg, spec.get("block") or [], "sites"):
-            if site not in block["web"]:
-                banned.append(add_site(name, "-web", "web", site))
+        for kind, flag, sites in (
+            ("exceptions", "-exception", want_exc),
+            ("web", "-web", want_web),
+        ):
+            for site in sites:
+                if site not in block[kind]:
+                    banned.append(add_site(name, flag, kind, site))
     missing = unconfirmed(sent + banned)
     for name in modes:
         added = sum(s[0] == name and s not in missing for s in sent)
@@ -1869,7 +1892,8 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             listed = "allowed" if kind == "exceptions" else "blocked"
             failed.append(f"{name}: {site} (to its {listed} sites)")
     for s in banned:
-        name, _, site = s
+        name, kind, site = s
+        listed = "allowed" if kind == "exceptions" else "blocked"
         verdict = (
             paint(f"could not add {site}", "31")
             if s in missing
@@ -1878,9 +1902,9 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
         print(f"{paint(name, '1')}: {verdict}")
         if s in missing:
             needs_import.append(
-                f"{paint(name, '1')}:\n    Cold Turkey did not take the new blocked site {site}; "
-                "the block may be locked.\n      Fix: in Cold Turkey, add it to this "
-                "block's blocked sites once the lock allows."
+                f"{paint(name, '1')}:\n    Cold Turkey did not take the new {listed} site "
+                f"{site}; the block may be locked.\n      Fix: in Cold Turkey, add it to "
+                f"this block's {listed} sites once the lock allows."
             )
     if needs_import:
         print(
@@ -2675,6 +2699,37 @@ def pick_token(key: str) -> str:
     return key.replace(" ", "") if key.startswith(APP_PICK) else key
 
 
+def drop_token(key: str) -> str:
+    """The word that leaves a pick out: 'no:' and its name, spaces left out."""
+    return NO_PICK + key.removeprefix(APP_PICK).replace(" ", "")
+
+
+def only_defaults(cfg: dict) -> list[str]:
+    """The picks a new session starts with: `only.default` names groups or installed apps
+    in no group. One that is not installed on this Mac is left out."""
+    pool = only_pool(cfg)
+    apps = {a.replace(" ", "").lower(): a for a in ungrouped_apps(cfg)}
+    keys: list[str] = []
+    for d in cfg["only"].get("default") or []:
+        d = str(d)
+        a = apps.get(d.replace(" ", "").lower())
+        key = d if d in pool else APP_PICK + a if a else None
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def resolve_drop(cfg: dict, word: str, among: list[str]) -> str:
+    """The pick a 'no:NAME' word leaves out: one of `among` by its name, case and spaces
+    aside, else whatever the name finds as a pick."""
+    name = word.removeprefix(NO_PICK)
+    want = name.replace(" ", "").lower()
+    for k in among:
+        if want in (pick_token(k).lower(), drop_token(k).removeprefix(NO_PICK).lower()):
+            return k
+    return resolve_pick(cfg, name)
+
+
 def pick_choices(cfg: dict, exclude: list[str]) -> list[tuple[str, str, str]]:
     """(key, label, detail) for everything a session can pick, less the keep groups and
     what is already picked: groups first, then the installed apps in no group."""
@@ -2706,16 +2761,28 @@ PICK_HEADER = (
 )
 
 
-def pick_groups(cfg: dict, exclude: list[str]) -> list[str]:
-    """Search groups and apps with fzf and tick several; [] when cancelled."""
+def pick_groups(cfg: dict, exclude: list[str], preset: list[str] = ()) -> list[str]:
+    """Search groups and apps with fzf and tick several; [] when cancelled. The preset
+    picks come first and start ticked."""
     if not sys.stdin.isatty() or not shutil.which("fzf"):
         sys.exit(
             "focus: the picker needs a terminal and fzf; name the groups instead, "
             "e.g. focus only bear ai-chat 45"
         )
-    rows = [
-        f"{k}\t{label}\t{detail}" for k, label, detail in pick_choices(cfg, exclude)
-    ]
+    choices = pick_choices(cfg, exclude)
+    first = [c for k in preset for c in choices if c[0] == k]
+    choices = first + [c for c in choices if c not in first]
+    rows = [f"{k}\t{label}\t{detail}" for k, label, detail in choices]
+    header = f"{PICK_HELP}\nPicked: nothing yet"
+    ticks = []
+    if first:
+        header = f"{PICK_HELP}\nPicked {len(first)}: " + ", ".join(c[1] for c in first)
+        # pos(N) is 1-based in input order; 'load' waits until every row is read.
+        ticks = [
+            "--bind=load:"
+            + "+".join(f"pos({i})+select" for i in range(1, len(first) + 1))
+            + "+first"
+        ]
     r = subprocess.run(
         [
             "fzf",
@@ -2731,8 +2798,9 @@ def pick_groups(cfg: dict, exclude: list[str]) -> list[str]:
             "--pointer=▶",
             "--highlight-line",
             "--color=marker:green:bold,selected-fg:green:bold,selected-hl:green",
-            f"--header={PICK_HELP}\nPicked: nothing yet",
+            f"--header={header}",
             "--header-first",
+            *ticks,
             "--preview=echo {3} | tr ',' '\\n' | sed 's/^ //'",
             "--preview-window=right:35%:wrap",
         ],
@@ -2825,10 +2893,18 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
     minutes = int(words.pop()) if words and words[-1].isdigit() else None
     if minutes == 0:
         sys.exit("focus: minutes must be at least 1")
+    no_words = [w for w in words if w.startswith(NO_PICK)]
+    words = [w for w in words if not w.startswith(NO_PICK)]
     picks = list(dict.fromkeys(resolve_pick(cfg, w) for w in words))
     now_groups = session["groups"] if session else []
-    if not picks and (minutes is None or not session):
-        picks = pick_groups(cfg, now_groups)
+    defaults = [] if session else only_defaults(cfg)
+    drops = {resolve_drop(cfg, w, now_groups + defaults + picks) for w in no_words}
+    if not session and (picks or drops):
+        picks = [k for k in dict.fromkeys(defaults + picks) if k not in drops]
+        if not picks:
+            sys.exit("focus: the no: words leave nothing to allow")
+    if not picks and not drops and (minutes is None or not session):
+        picks = pick_groups(cfg, now_groups, defaults)
         if not picks:
             print("nothing picked; nothing changed")
             return
@@ -2838,16 +2914,18 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
     if not Path(f"{SZ_DOMAIN}.plist").exists():
         sys.exit("focus: a session runs on ScreenZen, which is not installed here")
     if session:
-        new = [g for g in picks if g not in now_groups]
+        new = [g for g in picks if g not in now_groups and g not in drops]
+        gone = [g for g in now_groups if g in drops]
         if new:
             gate(cfg, "only:+" + ",".join(sorted(new)), f"allowing {', '.join(new)}")
         if minutes:
             gate(cfg, f"only-time:{minutes}", f"running the session {minutes} more min")
-        session["groups"] += new
+        # Taking a pick away only tightens, so it passes no gate.
+        session["groups"] = [g for g in now_groups if g not in drops] + new
         if minutes:
             session["until"] = time.time() + minutes * 60
         write_only(session)
-        if new:
+        if new or gone:
             cmd_screenzen(cfg, dry_run=False, gated=False, modes=[ONLY], quiet=True)
         end = dt.datetime.fromtimestamp(session["until"])
         print(f"only: {', '.join(session['groups'])} until {end:%H:%M}")
@@ -3361,21 +3439,32 @@ def alfred_only(cfg: dict, query: str) -> list[dict]:
         minutes, search = int(search), ""
     elif words and words[-1].isdecimal():
         minutes = int(words.pop())
-    picks: list[str] = []
+    session = read_only()
+    now_groups = session["groups"] if session else []
+    # A new session starts from the defaults; a 'no:NAME' word in the query leaves one out.
+    defaults = [] if session else only_defaults(cfg)
+    named: list[str] = []
+    drops: list[str] = []
     for w in words:
         try:
+            if w.startswith(NO_PICK):
+                key = resolve_drop(cfg, w, defaults)
+                if key in defaults and key not in drops:
+                    drops.append(key)
+                continue
             key = resolve_pick(cfg, w)
         except SystemExit:
             continue  # a word typed by hand that names nothing: leave it out
-        if key not in picks:
-            picks.append(key)
-    session = read_only()
-    now_groups = session["groups"] if session else []
-    tokens = [pick_token(k) for k in picks]
+        if key not in named:
+            named.append(key)
+    picks = [k for k in dict.fromkeys(defaults + named) if k not in drops]
+    drop_tokens = [drop_token(k) for k in drops]
+    tokens = [pick_token(k) for k in named] + drop_tokens
     tail = [str(minutes)] if minutes else []
 
-    def query_of(keys: list[str]) -> str:
-        return " ".join(["only", *(pick_token(k) for k in keys), *tail]) + " "
+    def query_of(keys: list[str], no: list[str]) -> str:
+        words = [*(pick_token(k) for k in keys), *(drop_token(k) for k in no)]
+        return " ".join(["only", *words, *tail]) + " "
 
     rows = []
     labels = ", ".join(k.removeprefix(APP_PICK) for k in picks)
@@ -3408,15 +3497,22 @@ def alfred_only(cfg: dict, query: str) -> list[dict]:
                 "title": f"Start: {labels} for {m} min",
                 "subtitle": "the rest gets a pause screen; type a number at the end "
                 "for other minutes",
-                "arg": " ".join(["only", *tokens, str(m)]),
+                # Every pick spelled out, so the defaults alone still start a session.
+                "arg": " ".join(
+                    ["only", *(pick_token(k) for k in picks), *drop_tokens, str(m)]
+                ),
             }
         )
     for k in picks:
+        default = k in defaults and k not in named
         rows.append(
             {
                 "title": f"✓ {k.removeprefix(APP_PICK)}",
-                "subtitle": "picked · ENTER takes it out",
-                "autocomplete": query_of([p for p in picks if p != k]),
+                "subtitle": f"{'default' if default else 'picked'} · ENTER takes it out",
+                "autocomplete": query_of(
+                    [p for p in named if p != k],
+                    drops + [k] if k in defaults else drops,
+                ),
                 "valid": False,
             }
         )
@@ -3426,7 +3522,10 @@ def alfred_only(cfg: dict, query: str) -> list[dict]:
         {
             "title": label,
             "subtitle": f"{hint} · {detail}"[:160],
-            "autocomplete": query_of([*picks, key]),
+            # A default left out comes back by dropping its 'no:' word.
+            "autocomplete": query_of(named, [d for d in drops if d != key])
+            if key in drops
+            else query_of([*named, key], drops),
             "valid": False,
         }
         for key, label, detail in pick_choices(cfg, [*picks, *now_groups])

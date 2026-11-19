@@ -1762,7 +1762,7 @@ def test_the_picker_offers_contents_and_hides_keep_and_current_picks(
 
 def test_cancelling_the_picker_changes_nothing(only_cfg, session_env, monkeypatch):
     blocks, writes, *_ = session_env
-    monkeypatch.setattr(ct, "pick_groups", lambda cfg, exclude: [])
+    monkeypatch.setattr(ct, "pick_groups", lambda cfg, exclude, preset=(): [])
     ct.cmd_only(only_cfg, [])
     assert ct.read_only() is None and not writes
     assert blocks["mode: research"]["enabled"] == "true"
@@ -2955,3 +2955,111 @@ def test_bare_focus_piped_gets_the_list_though_stdin_is_a_terminal(cfg, monkeypa
     monkeypatch.setattr(ct.shutil, "which", lambda name: "/bin/claude-tools")
     monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
     assert ct.cmd_menu(cfg) is False
+
+
+def avoid_blocks(cfg):
+    avoid = {
+        "enabled": "true",
+        "lock": "none",
+        "web": ["x.com", "*casino*"],
+        "exceptions": ["file://*.*"],
+        "apps": [],
+    }
+    return {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+        "avoid": avoid,
+    }
+
+
+def test_sync_adds_an_always_on_blocks_missing_allowed_site(cfg, monkeypatch, capsys):
+    # status says "Run 'focus sync', which adds it" for this; sync used to skip it.
+    blocks = avoid_blocks(cfg)
+    fake_cold_turkey(monkeypatch, blocks)
+    assert "avoid:localhost" in ct.sync_loosen(cfg, blocks)  # an agent waits for it
+    ct.cmd_sync(cfg)
+    assert blocks["avoid"]["exceptions"] == ["file://*.*", "localhost"]
+    assert "avoid: added localhost" in capsys.readouterr().out
+
+
+def test_a_locked_always_on_block_that_refuses_an_allowed_site_is_a_hand_edit(
+    cfg, monkeypatch, capsys
+):
+    fake_cold_turkey(monkeypatch, avoid_blocks(cfg), refuse={"avoid"})
+    ct.cmd_sync(cfg)  # not a failed sync: a lock is expected on these blocks
+    out = capsys.readouterr().out
+    assert "avoid: could not add localhost" in out
+    assert "did not take the new allowed site localhost" in out
+
+
+@pytest.fixture
+def picks_cfg(only_cfg, tmp_path, monkeypatch):
+    """The only note with defaults: a group, an installed app, and one not installed."""
+    fake_app(tmp_path, "Zotero")
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    p = tmp_path / "default.md"
+    p.write_text(
+        ONLY_NOTE.replace(
+            "  minutes: 30", "  minutes: 30\n  default: [bear, Zotero, Missing]"
+        )
+    )
+    return ct.load_config(p)
+
+
+def test_defaults_name_groups_and_installed_apps(picks_cfg):
+    assert ct.only_defaults(picks_cfg) == ["bear", "app:Zotero"]
+
+
+def test_named_picks_bring_the_defaults_and_no_leaves_one_out(picks_cfg, session_env):
+    ct.cmd_only(picks_cfg, ["llms", "no:zotero", "45"])
+    assert ct.read_only()["groups"] == ["bear", "llms"]
+
+
+def test_the_picker_starts_with_the_defaults_ticked(picks_cfg, monkeypatch):
+    monkeypatch.setattr(ct.sys, "stdin", type("T", (), {"isatty": lambda s: True})())
+    monkeypatch.setattr(ct.shutil, "which", lambda n: "/bin/fzf")
+    seen = {}
+
+    def fake_fzf(cmd, input, **k):
+        seen["cmd"], seen["rows"] = cmd, input.split("\n")
+        return ct.subprocess.CompletedProcess(cmd, 0, stdout=seen["rows"][1] + "\n")
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_fzf)
+    # Unticking bear in fzf leaves Zotero, and that is all that comes back.
+    picked = ct.pick_groups(picks_cfg, [], ct.only_defaults(picks_cfg))
+    assert picked == ["app:Zotero"]
+    assert [r.split("\t")[0] for r in seen["rows"][:2]] == ["bear", "app:Zotero"]
+    assert "--bind=load:pos(1)+select+pos(2)+select+first" in seen["cmd"]
+    assert f"--header={ct.PICK_HELP}\nPicked 2: bear, Zotero" in seen["cmd"]
+
+
+def test_a_bare_only_offers_the_defaults_to_the_picker(
+    picks_cfg, session_env, monkeypatch
+):
+    got = []
+    monkeypatch.setattr(
+        ct, "pick_groups", lambda cfg, exclude, preset=(): got.append(preset) or []
+    )
+    ct.cmd_only(picks_cfg, [])
+    assert got == [["bear", "app:Zotero"]]
+
+
+def test_no_takes_a_pick_out_of_a_running_session(picks_cfg, session_env):
+    _, writes, *_ = session_env
+    ct.write_only({"groups": ["bear", "llms"], "until": 2e9, "back": []})
+    ct.cmd_only(picks_cfg, ["no:bear"])
+    assert ct.read_only()["groups"] == ["llms"]
+    assert writes == [[ct.ONLY]]
+
+
+def test_alfred_starts_from_the_defaults_and_no_drops_one(picks_cfg, capsys):
+    rows = alfred_rows(capsys, picks_cfg, "only ")
+    assert rows[0]["arg"] == "only bear app:Zotero 30"
+    bear = next(r for r in rows if r["title"] == "✓ bear")
+    assert bear["subtitle"].startswith("default")
+    assert bear["autocomplete"] == "only no:bear "
+
+    rows = alfred_rows(capsys, picks_cfg, "only no:bear ")
+    assert rows[0]["arg"] == "only app:Zotero no:bear 30"
+    back = next(r for r in rows if r["title"] == "bear")
+    assert back["autocomplete"] == "only "  # picking it again drops the no: word
