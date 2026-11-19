@@ -3552,7 +3552,11 @@ def cmd_menu(cfg: dict) -> bool:
     run it as if typed. False when no menu can be drawn, so the caller prints the
     overview instead."""
     picker = shutil.which("claude-tools")
-    if not (sys.stdin.isatty() and sys.stderr.isatty() and picker):
+    # stdout too: 'focus | cat' keeps a terminal on stdin and stderr, and must get
+    # the list, not a menu that could switch a mode.
+    if not (
+        sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty() and picker
+    ):
         return False
     try:
         blocks = read_blocks()

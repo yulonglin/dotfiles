@@ -2885,3 +2885,13 @@ def test_bare_focus_falls_back_to_the_list_off_a_terminal(cfg, monkeypatch):
     monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: False)
     monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
     assert ct.cmd_menu(cfg) is False
+
+
+def test_bare_focus_piped_gets_the_list_though_stdin_is_a_terminal(cfg, monkeypatch):
+    # 'focus | cat' in a shell: stdin and stderr are the terminal, stdout a pipe.
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(ct.sys.stderr, "isatty", lambda: True)
+    monkeypatch.setattr(ct.sys.stdout, "isatty", lambda: False)
+    monkeypatch.setattr(ct.shutil, "which", lambda name: "/bin/claude-tools")
+    monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
+    assert ct.cmd_menu(cfg) is False
