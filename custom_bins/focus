@@ -5,6 +5,8 @@
 # ///
 """Switch Cold Turkey Blocker between work modes defined in one config note.
 
+    focus                     # menu: pick a mode, timer or session (list when piped)
+    focus list                # the modes, timers and sessions, and what runs now
     focus research            # stop the other 'mode: …' blocks, start this one
     focus off                 # stop every unlocked 'mode: …' block
     focus status              # what runs now (mode, break, only, timer), every block by kind, drift
@@ -3657,6 +3659,97 @@ def cmd_alfred(cfg: dict, query: str) -> None:
     print(json.dumps({"items": items}))
 
 
+def menu_rows(cfg: dict, blocks: dict) -> list[tuple[str, str, str, int | None]]:
+    """The rows of the bare-'focus' menu: (section, command, description, default
+    minutes or None). Every command is one 'focus' already accepts, so a pick runs
+    exactly what typing it would."""
+    capped = cfg.get("capped_modes") or {}
+
+    def running(block: str) -> str:
+        return "● running · " if blocks.get(block, {}).get("enabled") == "true" else ""
+
+    rows: list[tuple[str, str, str, int | None]] = []
+    for m, spec in cfg["modes"].items():
+        # The cap leads: a long allow list is cut at the terminal's edge.
+        detail = "allows " + (
+            ", ".join(spec.get("allow") or []) or "only the shared list"
+        )
+        minutes = None
+        if m in capped:
+            minutes = int(capped[m].get("minutes", DEFAULT_CAPPED_MIN))
+            detail = f"at most {minutes} min · " + detail
+        rows.append(("Modes", m, running(PREFIX + m) + detail, minutes))
+    for t, spec in (cfg.get("timers") or {}).items():
+        blocked = ", ".join(spec.get("block") or [])
+        rows.append(
+            (
+                "Timers",
+                t,
+                running(TIMER_PREFIX + t) + f"blocks {blocked}, locked",
+                int(spec.get("minutes", 50)),
+            )
+        )
+    if "only" in cfg:
+        s = read_only()
+        detail = (
+            f"● running · {', '.join(s['groups'])}"
+            if s
+            else "pick what to allow; the rest gets a pause screen"
+        )
+        rows.append(("Sessions", "only", detail, None))
+    cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    rows.append(("Sessions", "break", f"pause the mode, up to {cap} min", 15))
+    hours = ", ".join(cfg.get("off_hours") or []) or "any time"
+    rows.append(("Other", "off", f"stop every mode ({hours} only)", None))
+    rows.append(("Other", "status", "what runs now, every block, drift", None))
+    return rows
+
+
+def cmd_menu(cfg: dict) -> bool:
+    """Bare 'focus' at a terminal: pick a mode, timer or session from a menu, then
+    run it as if typed. False when no menu can be drawn, so the caller prints the
+    overview instead."""
+    picker = shutil.which("claude-tools")
+    # stdout too: 'focus | cat' keeps a terminal on stdin and stderr, and must get
+    # the list, not a menu that could switch a mode.
+    if not (
+        sys.stdin.isatty() and sys.stdout.isatty() and sys.stderr.isatty() and picker
+    ):
+        return False
+    try:
+        blocks = read_blocks()
+    except (OSError, sqlite3.Error, ValueError):
+        blocks = {}
+    rows = menu_rows(cfg, blocks)
+    with tempfile.NamedTemporaryFile("w", suffix=".items", delete=False) as f:
+        for section, name, desc, _ in rows:
+            f.write(f"{section}|{name}|{desc.replace('|', '/')}|false\n")
+        items = f.name
+    try:
+        r = subprocess.run(
+            [picker, "select", "--single", "--title", "focus", "--items", items],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+    finally:
+        Path(items).unlink(missing_ok=True)
+    picked = r.stdout.strip()
+    if r.returncode or not picked:  # 1: q or Esc; anything else: no choice made
+        print("nothing picked; nothing changed")
+        return True
+    default = next(m for _, n, _, m in rows if n == picked)
+    args = [picked]
+    if default is not None:
+        args.append(str(ask_minutes(default)))
+    print(paint("focus " + " ".join(args), "2"))
+    # Run the pick as a fresh 'focus' so it takes the same path as typing it,
+    # prompts (a reason, minutes) included.
+    os.execv(
+        sys.executable,
+        [sys.executable, sys.argv[0], "--config", str(CONFIG_PATH), *args],
+    )
+
+
 def cmd_overview(cfg: dict) -> None:
     """What 'focus' with no command prints: the modes, the timers, and what runs now."""
     try:
@@ -3763,7 +3856,8 @@ def main() -> None:
     p = argparse.ArgumentParser(
         prog="focus",
         description="Switch Cold Turkey and ScreenZen between work modes defined in one note.",
-        epilog="Run 'focus' with no command to list the modes and what is running.",
+        epilog="Run 'focus' with no command for a menu of the modes (a list when not at a"
+        " terminal); 'focus list' prints that list.",
     )
     p.add_argument(
         "--config",
@@ -3774,7 +3868,7 @@ def main() -> None:
     p.add_argument(
         "command",
         nargs="?",
-        help="a mode or timer name, or only | break | off | status | sync | screenzen | add | pull"
+        help="a mode or timer name, or list | only | break | off | status | sync | screenzen | add | pull"
         " | allow | end | export | install-agent | uninstall-agent",
     )
     p.add_argument(
@@ -3824,6 +3918,9 @@ def main() -> None:
         catch_up(cfg)
     match a.command:
         case None:
+            if not cmd_menu(cfg):
+                cmd_overview(cfg)
+        case "list":
             cmd_overview(cfg)
         case "off":
             cmd_off(cfg)

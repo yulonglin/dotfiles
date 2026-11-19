@@ -31,6 +31,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | "lock me into research for two hours", "commit to writing" | `focus research 120 --commit`: starts the mode and keeps its block locked until the end. Refuses unless the launchd job from `focus install-agent` is loaded for this focus and note. See "Committed blocks" below |
 | "allow X" or "end it" during a committed block | `focus allow X` or `focus end`: a typed text and a reason at the terminal, so Yulong runs these himself; the change lands when Cold Turkey's lock runs out |
 | "what's running", "is it in sync", "is X locked strongly enough" | `focus status` |
+| "show me the modes", "let me pick a mode" | bare `focus` at a terminal opens a menu (`claude-tools select`) of the modes, timers, `only`, `break`, `off` and `status`, asks minutes where the command takes them, then runs the pick as if typed; off a terminal (an agent, a pipe) it prints the list instead, as `focus list` always does |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
 | "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
 | after editing the note by hand | `focus status`, then `focus sync` (applies the note to Cold Turkey and to ScreenZen for the running mode) |
