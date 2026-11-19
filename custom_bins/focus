@@ -1784,6 +1784,34 @@ def add_site(name: str, flag: str, kind: str, site: str) -> tuple:
     return name, kind, site
 
 
+# More new sites than this for one list of one block go to an import file instead of
+# the CLI: each CLI add brings Cold Turkey to the front for a moment, so 40 adds is 40
+# flickers. Cold Turkey's block editor imports a .txt with one entry per line
+# (Import > Websites from file..., per its user guide) in one step (Yulong, 2026-11-18).
+IMPORT_OVER = 10
+
+
+def import_file(name: str, kind: str, sites: list[str]) -> Path:
+    """Write one block list's new sites for a by-hand import; return the file."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "block"
+    path = Path.home() / "Downloads" / f"focus-{slug}-{kind}.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(sites) + "\n")
+    return path
+
+
+def progress(done: int, total: int, label: str) -> None:
+    """A one-line bar on stderr, redrawn in place, for a person at a terminal only."""
+    if not sys.stderr.isatty():
+        return
+    width = 24
+    fill = width * done // total if total else width
+    bar = "#" * fill + "-" * (width - fill)
+    end = "\n" if done >= total else ""
+    sys.stderr.write(f"\r\033[K[{bar}] {done}/{total} {label}"[:200] + end)
+    sys.stderr.flush()
+
+
 def unconfirmed(sent: list[tuple]) -> list[tuple]:
     """The (block, kind, site) additions the database does not show."""
     blocks = read_blocks()
@@ -1805,6 +1833,15 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
         )
     needs_import, failed, modes, sent, banned = [], [], [], [], []
     held = []  # additions a committed block's lock keeps out until it ends
+    jobs = []  # (block, flag, kind, site, is_mode): CLI adds, sent after planning
+    imports = []  # (block, kind, count, file): lists too long to send one by one
+
+    def plan(name: str, flag: str, kind: str, sites: list[str], is_mode: bool) -> None:
+        if len(sites) > IMPORT_OVER:
+            imports.append((name, kind, len(sites), import_file(name, kind, sites)))
+        else:
+            jobs.extend((name, flag, kind, site, is_mode) for site in sites)
+
     commit = read_commit()
     for mode in cfg["modes"]:
         name, d = PREFIX + mode, drift(cfg, blocks, mode)
@@ -1830,8 +1867,7 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             ("exceptions", "-exception", d["add_exc"]),
             ("web", "-web", d["add_web"]),
         ):
-            for site in sites:
-                sent.append(add_site(name, flag, kind, site))
+            plan(name, flag, kind, sites, True)
         for k in ("extra_web", "extra_exc", "add_apps", "extra_apps"):
             if d[k]:
                 needs_import.append(f"{paint(name, '1')}:\n{describe(k, d[k], '    ')}")
@@ -1849,9 +1885,26 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
         block = blocks.get(name)
         if block is None:
             continue
-        for site in group_items(cfg, spec.get("block") or [], "sites"):
-            if site not in block["web"]:
-                banned.append(add_site(name, "-web", "web", site))
+        new = [
+            s
+            for s in group_items(cfg, spec.get("block") or [], "sites")
+            if s not in block["web"]
+        ]
+        plan(name, "-web", "web", new, False)
+    if len(jobs) > 1:
+        # Each add brings Cold Turkey to the front for a moment; say so before it starts.
+        print(
+            paint(
+                f"Adding {len(jobs)} sites one at a time: Cold Turkey comes to the front "
+                f"once per site for about {len(jobs)} s. Keep off the keyboard until it ends.",
+                "2",
+            )
+        )
+    for i, (name, flag, kind, site, is_mode) in enumerate(jobs):
+        progress(i, len(jobs), f"{name}: {site}")
+        (sent if is_mode else banned).append(add_site(name, flag, kind, site))
+    if jobs:
+        progress(len(jobs), len(jobs), "done")
     missing = unconfirmed(sent + banned)
     for name in modes:
         added = sum(s[0] == name and s not in missing for s in sent)
@@ -1888,6 +1941,21 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
             )
         )
         print("\n".join(f"  {line}" for line in needs_import))
+    if imports:
+        print(
+            "\n"
+            + paint(
+                f"Too many new sites to send one by one (over {IMPORT_OVER} per list), "
+                "so import each file in Cold Turkey, then run 'focus status':",
+                "33",
+            )
+        )
+        for name, kind, count, path in imports:
+            tab = "Website Exceptions" if kind == "exceptions" else "Websites"
+            print(
+                f"  {paint(name, '1')}: {count} site(s). Blocks > edit '{name}' > "
+                f"{tab} tab > Import > Websites from file... > {path}"
+            )
     for line in held:
         print(paint(line, "33"))
     # One command applies the note everywhere: ScreenZen too, for the running mode.
