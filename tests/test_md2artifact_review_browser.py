@@ -28,6 +28,8 @@ playwright_api = pytest.importorskip("playwright.sync_api")
 sync_playwright = playwright_api.sync_playwright
 expect = playwright_api.expect
 
+from test_md2artifact_browser import layer_on_context  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 MD2ARTIFACT = ROOT / "custom_bins" / "md2artifact"
 KEY = "review-rb"
@@ -136,7 +138,7 @@ def browser():
 
 @pytest.fixture
 def ctx(browser):
-    c = browser.new_context()
+    c = layer_on_context(browser)  # the layer starts off; these tests need it on
     try:
         yield c
     finally:

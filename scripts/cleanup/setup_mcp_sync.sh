@@ -35,7 +35,7 @@ install() {
 
     mkdir -p "$DOT_DIR/custom_bins"
     cat > "$WRAPPER" <<WRAPPER
-#!/bin/bash
+#!/usr/bin/env bash
 # Auto-generated wrapper for scheduled shared MCP sync
 set -euo pipefail
 

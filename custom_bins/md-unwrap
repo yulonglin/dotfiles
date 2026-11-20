@@ -195,7 +195,12 @@ def _html_block_extents(tokens, lines: list[str], offset: int) -> tuple[set[int]
                 protected.update(span)
                 break
         else:
-            if not _closed_by_its_container(tokens, position):
+            # A block that runs to end of file has no extent its container
+            # established: markdown-it-py 4.3+ follows CommonMark and carries
+            # an unclosed type 1-5 block past blank lines to the end, so the
+            # container closes only because the document did.
+            reaches_eof = token.map[1] + offset >= len(lines)
+            if reaches_eof or not _closed_by_its_container(tokens, position):
                 opened = token.map[0] + offset + 1
                 return set(), f"unterminated HTML block ({enders[0]}) opened at line {opened}"
     return protected, None

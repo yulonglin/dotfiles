@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Git clean/smudge filter: keep this machine's Codex state out of codex/config.toml in git.
+
+Wired by `.gitattributes` (codex/config.toml filter=codex-local) plus two
+repo-local settings that `deploy.sh --git-config` sets:
+
+    git config --local filter.codex-local.clean  'scripts/git-filters/codex-config-local --clean %f'
+    git config --local filter.codex-local.smudge 'scripts/git-filters/codex-config-local --smudge'
+
+codex/ is symlinked to ~/.codex/, so the Codex app and CLI write their own
+state into a file this public repo tracks. That file holds two kinds of
+content. Settings meant for every machine (model, effort, approval policy, MCP
+servers, plugins, git-sourced marketplaces, features, shell environment) go to
+git. Tables one machine writes for itself are machine-local and never reach a
+blob:
+
+  [projects.*]                      trusted directories; the paths name private projects
+  [desktop], [tui], [notice]        desktop-app and TUI preferences and nags
+  [mcp_servers.node_repl]           the app's bundled REPL: absolute app paths, build hashes
+  [hooks.state."/abs/path:..."]     hook trust keyed by an absolute home path
+  [marketplaces.X] (source "local") marketplaces read from a local directory
+
+Inside the git-sourced marketplaces, `last_updated` and `last_revision` are
+dropped too: every machine rewrites them on each refresh, so keeping them would
+make two machines conflict daily. Codex writes them back after a pull.
+
+--clean (git add, git status, git diff): reads the file on stdin, prints it
+without those tables. When the file being cleaned is the live
+$CODEX_HOME/config.toml, the tables it removed are saved to
+${XDG_STATE_HOME:-~/.local/state}/codex-config-filter/local-tables.toml.
+
+--smudge (checkout, pull, rebase): reads the blob on stdin and prints it with
+the saved tables appended, so a pull that changes the file keeps this
+machine's trusted projects and preferences. Only whole tables are appended,
+because a bare key cannot follow a table header.
+
+Every failure prints the input unchanged: git stores whatever a clean filter
+prints, so a damaged result would be committed. The output must parse to the
+input minus exactly the stripped content, or the input passes through. The
+pre-commit guard `_validate_no_codex_trust_tables` is the backstop for a
+passthrough or a clone without the filter.
+
+--save reads the live file itself and saves its tables, without printing.
+"""
+
+import os
+import re
+import sys
+import tempfile
+from pathlib import Path
+
+REEXEC_GUARD = "CODEX_CONFIG_FILTER_REEXEC"
+
+try:
+    import tomllib
+except ImportError:  # Python < 3.11, e.g. /usr/bin/python3 on macOS under launchd's PATH
+    tomllib = None
+    if not os.environ.get(REEXEC_GUARD):
+        for cand in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3",
+                     str(Path.home() / ".local/bin/python3"), "/usr/bin/python3.12",
+                     "/usr/bin/python3.11"):
+            if os.access(cand, os.X_OK) and os.path.realpath(cand) != os.path.realpath(sys.executable):
+                os.environ[REEXEC_GUARD] = "1"
+                try:
+                    os.execv(cand, [cand, os.path.abspath(__file__), *sys.argv[1:]])
+                except OSError:
+                    continue
+
+LOCAL_ROOTS = {"projects", "desktop", "tui", "notice"}
+CHURN_KEYS = re.compile(r"^[ \t]*(last_updated|last_revision)[ \t]*=")
+
+
+class Doubt(Exception):
+    """The input is not a config this filter is sure it understands."""
+
+
+def state_file():
+    base = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(base) / "codex-config-filter" / "local-tables.toml"
+
+
+def live_config():
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
+
+
+def header_path(line):
+    """Return the key path of a [table] header line, or None if it is not one."""
+    s = line.strip()
+    if not s.startswith("["):
+        return None
+    if s.startswith("[["):
+        raise Doubt("array of tables")
+    try:
+        d = tomllib.loads(s + "\n")
+    except tomllib.TOMLDecodeError:
+        return None
+    path = []
+    while isinstance(d, dict) and len(d) == 1:
+        (k, d), = d.items()
+        path.append(k)
+    if d != {}:
+        return None
+    return tuple(path)
+
+
+def split_sections(text):
+    """Return (preamble_lines, [(path, lines)]); comments right above a header go with it."""
+    preamble, sections, cur = [], [], None
+    for line in text.splitlines(keepends=True):
+        path = header_path(line)
+        if path is None:
+            (cur[1] if cur else preamble).append(line)
+            continue
+        prev = cur[1] if cur else preamble
+        lead = []
+        while prev and prev[-1].lstrip().startswith("#"):
+            lead.insert(0, prev.pop())
+        cur = (path, lead + [line])
+        sections.append(cur)
+    return preamble, sections
+
+
+def dig(d, path):
+    for k in path:
+        d = d.get(k) if isinstance(d, dict) else None
+    return d
+
+
+def is_local(path, parsed):
+    if not path:
+        return False
+    if path[0] in LOCAL_ROOTS:
+        return True
+    if path[:2] == ("mcp_servers", "node_repl"):
+        return True
+    if path[:2] == ("hooks", "state") and len(path) >= 3 and path[2].startswith("/"):
+        return True
+    if path[0] == "marketplaces" and len(path) >= 2:
+        entry = dig(parsed, path[:2])
+        return isinstance(entry, dict) and entry.get("source_type") == "local"
+    return False
+
+
+def drop(d, path):
+    """Delete path from nested dict d; prune parents left empty by it."""
+    if len(path) == 1:
+        d.pop(path[0], None)
+        return
+    child = d.get(path[0])
+    if isinstance(child, dict):
+        drop(child, path[1:])
+        if not child:
+            d.pop(path[0])
+
+
+def collapse(text):
+    return re.sub(r"\n{3,}", "\n\n", text).strip("\n") + "\n"
+
+
+def clean(text):
+    """Return (shared_text, local_text)."""
+    parsed = tomllib.loads(text)
+    preamble, sections = split_sections(text)
+    shared, local = ["".join(preamble)], []
+    expected = tomllib.loads(text)
+    for path, lines in sections:
+        if is_local(path, parsed):
+            local.append("".join(lines))
+            drop(expected, path)
+            continue
+        if path[0] == "marketplaces" and len(path) == 2:
+            lines = [ln for ln in lines if not CHURN_KEYS.match(ln)]
+            entry = dig(expected, path)
+            if isinstance(entry, dict):
+                entry.pop("last_updated", None)
+                entry.pop("last_revision", None)
+        shared.append("".join(lines))
+    out = collapse("".join(shared))
+    local_text = collapse("\n".join(local)) if local else ""
+    if tomllib.loads(out) != expected:
+        raise Doubt("result does not equal the input minus the local tables")
+    if local_text and not smudge_ok(out, local_text):
+        raise Doubt("local tables do not re-append cleanly")
+    return out, local_text
+
+
+def smudge_ok(blob, local_text):
+    try:
+        tomllib.loads(blob.rstrip("\n") + "\n\n" + local_text)
+        return True
+    except tomllib.TOMLDecodeError:
+        return False
+
+
+def save_state(local_text):
+    if not local_text:
+        return  # never replace saved tables with nothing (e.g. a file a failed smudge left bare)
+    target = state_file()
+    try:
+        if target.exists() and target.read_text(encoding="utf-8") == local_text:
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".local-tables.")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(local_text)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, target)
+    except OSError:
+        pass  # saving is best effort; the clean output does not depend on it
+
+
+def is_live(rel):
+    if not rel:
+        return False
+    try:
+        return os.path.realpath(os.path.join(os.getcwd(), rel)) == os.path.realpath(live_config())
+    except OSError:
+        return False
+
+
+def main(argv):
+    mode = argv[0] if argv else "--clean"
+    if mode == "--save":
+        if tomllib is None:
+            return 2
+        try:
+            _, local_text = clean(live_config().read_text(encoding="utf-8"))
+        except (OSError, ValueError, Doubt):
+            return 2
+        save_state(local_text)
+        return 0
+    if mode not in ("--clean", "--smudge"):
+        sys.stderr.write("usage: codex-config-local [--clean [PATH] | --smudge | --save] < config.toml\n")
+        return 64
+
+    data = sys.stdin.buffer.read()
+    out = data
+    if tomllib is not None:
+        try:
+            text = data.decode("utf-8")
+            if mode == "--clean":
+                shared, local_text = clean(text)
+                out = shared.encode("utf-8")
+                if is_live(argv[1] if len(argv) > 1 else ""):
+                    save_state(local_text)
+            else:
+                saved = state_file().read_text(encoding="utf-8") if state_file().exists() else ""
+                if saved and smudge_ok(text, saved):
+                    out = (text.rstrip("\n") + "\n\n" + saved).encode("utf-8")
+        except Exception:  # noqa: BLE001 - any failure must pass the input through
+            out = data
+    sys.stdout.buffer.write(out)
+    sys.stdout.buffer.flush()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Wrapper for scheduled shared MCP sync.
 # Resolves the dotfiles root relative to this script so it works on any machine.
 set -euo pipefail
