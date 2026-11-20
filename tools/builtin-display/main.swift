@@ -269,7 +269,7 @@ func trial(seconds: UInt32) {
 
 // MARK: heal
 
-// One-shot safety net, run by launchd every 10 s as a fresh process (the
+// One-shot safety net, run by launchd every 2 s as a fresh process (the
 // com.user.builtin-display-heal agent). It does not trust the long-lived
 // watcher: on 2026-11-20 the watcher, 17 h old, never saw an unplug and left
 // the screen dark, while a fresh `builtin-display on` read the state right at
@@ -412,7 +412,7 @@ commands:
                   next plug event
   watch           what the agent runs (foreground; logs each action)
   heal            one-shot: turn the built-in on if no external display is
-                  present and the lid is open; `auto on` runs it every 10 s
+                  present and the lid is open; `auto on` runs it every 2 s
 
 Uses a private macOS API, so an update can break it. The change lasts for the
 login session: logging out or rebooting always restores the screen.
