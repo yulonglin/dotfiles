@@ -1,0 +1,12 @@
+# What the Python tests import beyond the standard library: the union of the
+# inline `# dependencies` of the scripts they load (custom_bins/focus,
+# custom_bins/md-unwrap, scripts/cloud/provision.py,
+# scripts/hooks/validate_claude_settings.py) plus pytest. No CI job runs the
+# whole suite, so these are declared nowhere else. Run everything with:
+#   uvx --with-requirements tests/requirements.txt pytest -q tests/
+pytest
+pyyaml>=6.0
+ruamel.yaml>=0.18
+markdown-it-py>=3.0
+httpx>=0.27
+jsonschema>=4.0

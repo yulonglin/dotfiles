@@ -1,0 +1,239 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""List Homebrew formulae that nothing needs, including those `brew autoremove` misses.
+
+`brew autoremove` trusts each formula's install record: the dependency list written
+when its bottle was poured. When a formula later stops needing something, the record
+still lists it until the formula is reinstalled, so autoremove keeps it forever. On
+2026-10-30 poppler's record still listed icu4c@78 after harfbuzz had moved to icu4c@79,
+which kept 87.5 MB of an old ICU installed. Homebrew also runs autoremove only on
+`brew uninstall` and the 30-day periodic cleanup, so a true orphan such as python@3.13
+can be upgraded several times before it goes.
+
+This compares each record against what the current formula declares (transitively)
+and reports both kinds: formulae autoremove would drop now, and formulae it would drop
+once the formulae holding them by an out-of-date record are reinstalled.
+
+The keep rules follow Homebrew's own Utils::Autoremove and Cleanup.autoremove: formulae
+installed on request, formulae built from source and their build dependencies, and the
+dependencies of casks resolved through the current formula definitions. A cask's formula
+dependency that is not installed appears only under "missing" in --json, never in the
+report: it is often satisfied another way (gcloud-cli lists python@3.14 but runs on the
+first python3.x on PATH, here uv's ~/.local/bin/python3.14).
+
+Exit status: 0 nothing to remove, 1 something to remove, 2 brew failed.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+
+def short(name: str) -> str:
+    return name.split("/")[-1]  # codersauce/tap/red -> red
+
+
+def cask_formulae(cask: dict) -> list[str]:
+    return (cask.get("depends_on") or {}).get("formula") or []
+
+
+def analyse(data: dict, extra: dict[str, dict] | None = None) -> dict:
+    """`extra` holds definitions of formulae a cask needs that are not installed."""
+    formulae = {f["name"]: f for f in data.get("formulae", [])}
+    defs = {**(extra or {}), **formulae}
+    canon = {}
+    for name, f in defs.items():
+        for other in [*(f.get("aliases") or []), *(f.get("oldnames") or [])]:
+            canon[other] = name
+
+    def norm(dep: str) -> str:
+        dep = short(dep)
+        return canon.get(dep, dep)
+
+    def declared(name: str) -> set[str] | None:
+        f = defs.get(name)
+        if f is None or "dependencies" not in f:
+            return None  # no formula definition to compare against: trust the record
+        deps = [
+            *f["dependencies"],
+            *(f.get("recommended_dependencies") or []),
+            *(f.get("optional_dependencies") or []),
+        ]
+        return {norm(d) for d in deps}
+
+    closures: dict[str, set[str] | None] = {}
+
+    def closure(name: str) -> set[str] | None:
+        if name not in closures:
+            if declared(name) is None:
+                closures[name] = None
+            else:
+                seen: set[str] = set()
+                stack = list(declared(name) or ())
+                while stack:
+                    dep = stack.pop()
+                    if dep not in seen:
+                        seen.add(dep)
+                        stack.extend(declared(dep) or ())
+                closures[name] = seen
+        return closures[name]
+
+    record, fresh, stale = {}, {}, {}
+    for name, f in formulae.items():
+        tab = f["installed"][0] if f.get("installed") else {}
+        listed = tab.get("runtime_dependencies")
+        need = closure(name)
+        if listed is None:  # no record: brew falls back to the formula's own deps
+            rec = set(need or ())
+        else:
+            rec = {norm(d["full_name"]) for d in listed}
+        record[name] = rec & formulae.keys()
+        fresh[name] = record[name] if need is None else record[name] & need
+        stale[name] = record[name] - fresh[name]
+
+    roots = set()
+    for name, f in formulae.items():
+        tab = f["installed"][0] if f.get("installed") else {}
+        if tab.get("installed_on_request"):
+            roots.add(name)
+        if (
+            tab.get("poured_from_bottle") is False
+        ):  # built from source: brew keeps it and its build deps
+            roots.add(name)
+            roots |= {
+                norm(d) for d in f.get("build_dependencies") or []
+            } & formulae.keys()
+    missing: dict[str, set[str]] = {}
+    for cask in data.get("casks") or []:
+        for dep in cask_formulae(cask):
+            for need in {norm(dep)} | (closure(norm(dep)) or set()):
+                if need in formulae:
+                    roots.add(need)
+                else:
+                    missing.setdefault(need, set()).add(cask["token"])
+
+    def kept(edges: dict[str, set[str]]) -> set[str]:
+        reached, stack = set(), list(roots)
+        while stack:
+            n = stack.pop()
+            if n not in reached:
+                reached.add(n)
+                stack.extend(edges.get(n, ()))
+        return reached
+
+    orphans = sorted(formulae.keys() - kept(record))
+    freed = sorted(formulae.keys() - kept(fresh) - set(orphans))
+    gone = set(orphans) | set(freed)
+    reasons = {}
+    for n in [*orphans, *freed]:
+        parents = sorted(p for p in formulae if n in record[p])
+        by_stale = [p for p in parents if n in stale[p] and p not in gone]
+        if by_stale:
+            reasons[n] = (
+                "listed only in the install record of "
+                + ", ".join(by_stale)
+                + ", whose current formula no longer needs it"
+            )
+        elif parents:
+            reasons[n] = "needed only by " + ", ".join(parents) + ", also removed"
+        else:
+            reasons[n] = "no installed formula or cask needs it"
+    reinstall = sorted({p for p in formulae if p not in gone and stale[p] & set(freed)})
+    return {
+        "orphans": orphans,
+        "freed_by_reinstall": freed,
+        "reinstall": reinstall,
+        "reasons": reasons,
+        "missing": {n: sorted(c) for n, c in sorted(missing.items())},
+    }
+
+
+def brew_json(brew: str, *args: str) -> dict:
+    proc = subprocess.run(
+        [brew, "info", "--json=v2", *args], check=False, capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"`brew info {' '.join(args)}` failed: {proc.stderr.strip()}"
+        )
+    return json.loads(proc.stdout)
+
+
+def missing_definitions(brew: str, data: dict) -> dict[str, dict]:
+    """Definitions of formulae casks need that are not installed, and of their deps, transitively."""
+    known = {f["name"] for f in data.get("formulae", [])}
+    extra: dict[str, dict] = {}
+    pending = {
+        short(d) for c in data.get("casks") or [] for d in cask_formulae(c)
+    } - known
+    while pending:
+        for f in brew_json(brew, "--formula", *sorted(pending)).get("formulae", []):
+            extra[f["name"]] = f
+        known |= pending | extra.keys()
+        pending = {
+            short(d) for f in extra.values() for d in f.get("dependencies") or []
+        } - known
+    return extra
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--json", action="store_true", help="print the analysis as JSON")
+    ap.add_argument(
+        "--reinstall-names",
+        action="store_true",
+        help="print only the formulae to reinstall, one per line",
+    )
+    ap.add_argument("--color", choices=["auto", "always", "never"], default="auto")
+    args = ap.parse_args()
+
+    brew = os.environ.get("BREW_ORPHANS_BREW", "brew")
+    try:
+        data = brew_json(brew, "--installed")
+        result = analyse(data, missing_definitions(brew, data))
+    except (RuntimeError, json.JSONDecodeError) as e:
+        print(f"brew-orphans: {e}", file=sys.stderr)
+        return 2
+    removable = result["orphans"] + result["freed_by_reinstall"]
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+    elif args.reinstall_names:
+        for name in result["reinstall"]:
+            print(name)
+    else:
+        on = args.color == "always" or (args.color == "auto" and sys.stdout.isatty())
+        on = on and not os.environ.get("NO_COLOR")
+
+        def paint(text: str, sgr: str) -> str:
+            return f"\033[{sgr}m{text}\033[0m" if on else text
+
+        if removable:
+            n = len(removable)
+            print(
+                paint(
+                    f"brew-orphans: {n} formula{'e' if n > 1 else ''} nothing needs",
+                    "33",
+                )
+            )
+            width = max(len(x) for x in removable)
+            for name in removable:
+                print(
+                    f"  {paint(name.ljust(width), '1')}  {paint(result['reasons'][name], '2')}"
+                )
+            print("Remove with:")
+            if result["reinstall"]:
+                print("  brew reinstall " + " ".join(result["reinstall"]))
+            print("  brew autoremove")
+        else:
+            print(paint("brew-orphans: every installed formula is needed", "32"))
+    return 1 if removable else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

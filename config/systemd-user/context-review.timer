@@ -1,0 +1,18 @@
+[Unit]
+Description=Monthly Claude Code context review
+
+[Timer]
+# The 1st of the month at 09:00. A calendar expression, not OnUnitActiveSec=30d,
+# for the reason council-roster.timer gives: a monotonic interval restarts at
+# every boot and drifts later on a machine that sleeps and reboots.
+OnCalendar=*-*-01 09:00:00
+
+# A missed window runs at the next boot instead of being skipped. The nudge
+# reports a run older than 40 days as "the timer is not firing".
+Persistent=true
+
+# Spread the transcript scan away from the other 09:00 timers.
+RandomizedDelaySec=2h
+
+[Install]
+WantedBy=timers.target

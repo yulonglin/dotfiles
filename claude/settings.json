@@ -171,8 +171,8 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-fable-5-1",
-        "label": "Fable 5.1",
+        "model": "claude-fable-5-2",
+        "label": "Fable 5.2",
         "description": "Claude subscription"
       },
       {
@@ -182,17 +182,17 @@
       },
       {
         "model": "astra",
-        "label": "GPT-6 Astra",
+        "label": "GPT-6.2 Astra",
         "description": "ChatGPT subscription (Codex)"
       },
       {
         "model": "gemini",
-        "label": "Gemini 4 Argon",
+        "label": "Gemini 4 Carbon",
         "description": "OpenRouter, pay per token"
       },
       {
         "model": "sol",
-        "label": "GPT-6.1 Sol",
+        "label": "GPT-6.2 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
@@ -225,8 +225,7 @@
         "label": "DeepSeek V4.1 Flash",
         "description": "OpenRouter, pay per token"
       }
-    ],
-    "replaceBuiltInOptions": true
+    ]
   },
   "skillOverrides": {
     "claude-api": "off",
@@ -253,7 +252,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run permissions.approval-classifier -- $HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
             "timeout": 30
           }
         ]
@@ -643,6 +642,12 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.context-review -- $HOME/.claude/hooks/nudge_context_review.zsh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.dotfiles-sync -- $HOME/.claude/hooks/nudge_dotfiles_sync.sh",
             "timeout": 5,
             "async": true
@@ -677,6 +682,15 @@
             "command": "python3 \"$HOME/.claude/hooks/check_model_router_update.py\"",
             "timeout": 75,
             "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'rex __internal session-start --agent claude --feature-session-naming=false 2>/dev/null || true'",
+            "timeout": 5
           }
         ]
       }
@@ -759,7 +773,7 @@
     "codex@codex-plugin-cc": true,
     "core@ai-safety-plugins": false,
     "dev-browser@dev-browser-marketplace": false,
-    "hookify@claude-plugins-official": true,
+    "hookify@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
     "model-router@alignment-hive": true,
     "playground@claude-plugins-official": false,
@@ -977,46 +991,97 @@
     "claude-opus-5-5": {
       "effortLevel": "high"
     },
-    "gpt-6-astra": {
+    "gpt-6.2-astra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-astra-fast": {
       "autoCompactWindow": 258400
     },
     "astra": {
       "autoCompactWindow": 258400
     },
-    "gemini-4-argon": {
+    "astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-astra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gemini-4-carbon": {
       "autoCompactWindow": 1000000
     },
     "gemini": {
       "autoCompactWindow": 1000000
     },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
     "gpt-6.1-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol": {
       "autoCompactWindow": 258400
     },
+    "sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6.1-terra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-terra-fast": {
       "autoCompactWindow": 258400
     },
     "terra": {
       "autoCompactWindow": 258400
     },
+    "terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol6": {
       "autoCompactWindow": 258400
     },
+    "sol6-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-terra": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-5.6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "kimi-k3.1-pro": {

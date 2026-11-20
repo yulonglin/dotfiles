@@ -93,6 +93,7 @@ COMPONENTS:
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
                       schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
+    --rex             Deploy Rex keybindings (init.lua) and UI layout prefs (macOS)
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
@@ -465,6 +466,15 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     if git -C "$DOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
         git -C "$DOT_DIR" config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
         log_success "Configured the zed-ssh clean filter for $DOT_DIR"
+        # codex-local: the clean side keeps this machine's Codex tables (trusted
+        # projects, app preferences, local marketplaces) out of
+        # codex/config.toml blobs and saves them; the smudge side appends them
+        # back when a pull rewrites the file. --save seeds the saved copy so the
+        # first pull after deploy already keeps them.
+        git -C "$DOT_DIR" config --local filter.codex-local.clean 'scripts/git-filters/codex-config-local --clean %f'
+        git -C "$DOT_DIR" config --local filter.codex-local.smudge 'scripts/git-filters/codex-config-local --smudge'
+        "$DOT_DIR/scripts/git-filters/codex-config-local" --save || true
+        log_success "Configured the codex-local clean/smudge filter for $DOT_DIR"
     fi
 fi
 
@@ -613,6 +623,23 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         safe_symlink "$DOT_DIR/config/ghostty-themes" "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/themes"
     else
         log_warning "Ghostty config not found"
+    fi
+fi
+
+# ─── Rex ──────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_REX" == "true" ]]; then
+    log_info "Deploying Rex configuration..."
+    safe_symlink "$DOT_DIR/config/rex/init.lua" "${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua"
+
+    # UI settings live in the app's defaults domain, not in init.lua. Capture
+    # first so settings changed in Rex since the last sync are not reverted,
+    # then apply (on a fresh Mac, capture finds nothing and apply sets the file's rows).
+    if is_macos; then
+        "$DOT_DIR/custom_bins/rex-prefs" capture --quiet && "$DOT_DIR/custom_bins/rex-prefs" apply
+        if pgrep -xq Rex; then
+            log_info "  Rex is running: quit and reopen it if the layout does not update"
+        fi
     fi
 fi
 
@@ -1217,6 +1244,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     vault-sync-tripwire.service vault-sync-tripwire.timer \
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
+                    context-review.service context-review.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
                     cloud-spend-check.service cloud-spend-check.timer \
@@ -1249,7 +1277,12 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         # their own state directories. Enabled unconditionally for the same
         # reason as the tripwire above -- a check that is installed but never
         # scheduled reports nothing while looking healthy.
-        for timer in openrouter-drift.timer council-roster.timer; do
+        #
+        # context-review.timer rides the same loop: monthly, no API key, no
+        # pueue, and it writes only its own state directory plus one report
+        # copy in ~/vault. A box without transcripts produces a near-empty
+        # report rather than an error.
+        for timer in openrouter-drift.timer council-roster.timer context-review.timer; do
             [[ -f "$systemd_user_dir/$timer" ]] || continue
             if systemctl --user enable --now "$timer" 2>/dev/null; then
                 log_success "$timer enabled"

@@ -1604,10 +1604,11 @@ def build(
     return page + REVIEW_ASSETS + _annotation_layer.layer_html(key)
 
 
-# What a publish of this page should declare, for the seen marks (db + user)
-# and the page-level comment button (comments, composer only). Everything
-# degrades without it: seen marks fall back to localStorage, and the comment
-# button stays hidden. `seen/{self}` is each reader's own document; the rule
+# What a publish of this page should declare, for the seen marks (db + user),
+# the page-level comment button (comments, composer only) and the "This page"
+# Download HTML button (downloads, owner only). Everything degrades without it:
+# seen marks fall back to localStorage, the comment button stays hidden, and
+# Download shows disabled with a pointer to Copy HTML. `seen/{self}` is each reader's own document; the rule
 # at the `seen` prefix opens the siblings to `admin` readers only, so one
 # reader never sees another's marks.
 CAPABILITIES = {
@@ -1619,6 +1620,7 @@ CAPABILITIES = {
     },
     "user": {},
     "comments": {"composer_only": True},
+    "downloads": {},
 }
 
 

@@ -1,64 +1,126 @@
-# Common Scenarios
+# Each Scenario Uses One Primary Route
 
-## Rental Negotiations
+## Rental Terms Start With Interests
 
-**Lead with tactical empathy:**
-1. Label their concerns: "It sounds like 6 months gives you the financial stability you need"
-2. Acknowledge their interests: "I imagine re-listing in winter is something you'd rather avoid"
-3. State your need clearly: "I'm looking for a 3.5 month rental through February"
-4. Collaborate with calibrated question: "How could we make a shorter-term work for you?"
-5. If changing plans, label their emotion first: "You're obviously annoyed that I postponed - I'm sorry for the inconvenience"
+Use *Getting to Yes* for dates, price and tenancy length.
 
-**Your landlord example IS the model**: "I previously said yes, but this other place with 2 bathrooms is too hard to give up. You're obviously annoyed by this, but I hope you understand."
+1. State the dates and terms needed.
+2. Ask what the minimum term protects.
+3. Wait for a response before adding an option or concession.
+4. Offer options that address that interest.
+5. Compare the proposal with the BATNA.
 
-See patterns.md "Pattern 1: Acknowledging Emotions" and "Pattern 5: Negotiating Terms"
+Example: "I'm looking to rent from now through early February, about three and a half months. I saw the six-month minimum. What would a shorter tenancy need to include to work for you?"
 
-## Salary Discussions
+See `patterns.md` "Pattern 5: Negotiating Terms Collaboratively" and "Pattern 1: Acknowledging Emotions + Clear Communication".
 
-**Stay warm while being clear:**
-1. Express genuine enthusiasm: "I'm really excited about this role and the team"
-2. Acknowledge market context: "Based on my research for similar roles..."
-3. Label potential concern: "You might be thinking this is outside your budget..."
-4. Collaborate: "I was expecting £X-Y range - how does that work with what you had in mind?"
-5. Multiple variables: "I'm also interested in discussing remote flexibility and start date"
+## Salary Terms Need Objective Criteria
 
-**Tone**: Positive & playful, not demanding. You're excited and want to make it work.
+Use *Getting to Yes* for compensation and conditions.
 
-See patterns.md "Salary/Compensation Negotiation"
+1. Hold the number until there is an offer, where possible. When naming one, anchor high within the market range.
+2. Confirm interest in the role.
+3. Ground the request in relevant criteria.
+4. State the package sought across salary, flexibility, scope or start date.
+5. Ask which parts can move.
+6. Keep the BATNA and minimum acceptable package clear internally.
 
-## Work Requests
+Example, once there is an offer: "I'm excited about the role. Based on the scope and comparable roles, I was expecting £X–Y, with two remote days each week. What flexibility is available across the package?"
 
-**Acknowledge their reality first:**
-1. Label their constraint: "I know you're swamped with the Q4 analysis"
-2. State what you need: "Could you send me the retention data by Friday?"
-3. Make it easy: "If you just point me to where it lives, I can pull it myself"
-4. Give them an out: "If Friday doesn't work, what works on your end?"
+See `patterns.md` "Salary/Compensation Negotiation".
 
-**Pattern**: [Acknowledge their workload] + [Specific ask] + [Make it easy for them]
+## Work Requests Need One Clear Ask
 
-See patterns.md "Pattern 2: Making Asks Clear"
+Use interests and reader-first clarity rather than a negotiation script.
 
-## Changing Plans or Backing Out
+1. State the shared outcome.
+2. Make one specific ask with a date.
+3. Acknowledge a visible constraint.
+4. Offer a lower-effort route.
 
-**Your instincts are perfect here:**
+Example: "I'm preparing the Q4 analysis for Friday. Could you send the retention data by Wednesday? If it is easier, point me to the source and I will pull it."
 
-1. Apologize for the impact: "I'm sorry for the late change"
-2. Be honest about why: "This other place has 2 bathrooms which is hard to give up"
-3. **Label their emotion explicitly**: "You're obviously annoyed by this"
-4. Stay human: "I hope you understand"
+See `patterns.md` "Pattern 2: Making Asks Clear (Without Being Demanding)".
 
-**Don't**: Disappear, be vague, skip the emotion label, refuse to apologize
+## Backing Out Needs The Third Story
 
-**The emotion label is critical** - it shows you're not oblivious and defuses their anger.
+Use *Difficult Conversations* when Yulong changes a commitment.
 
-See patterns.md "Pattern 3: Changing Plans/Backing Out"
+1. Open with the neutral difference: an earlier agreement and a new decision.
+2. State what changed without arguing that the other person should agree.
+3. Acknowledge the concrete impact and apologise for it.
+4. Hold the decision.
+5. Offer a practical repair if one exists.
 
-## Saying No (While Preserving Relationship)
+Yulong's landlord message keeps the human voice: "I previously said yes, but this other place with 2 toilets is just too hard to give up. You're obviously annoyed by this, but I hope you understand." Use that direct emotion label only when the feeling is visible or the relationship supports it; otherwise name the impact.
 
-**Structure**: [Direct no] + [Brief reason] + [Alternative if easy] + [No excessive apology]
+See `patterns.md` "Pattern 3: Changing Plans/Backing Out" and "Pattern 1: Acknowledging Emotions + Clear Communication".
 
-**Example**: "I can't take this on right now - I'm at capacity with current projects. Have you tried asking [person]?"
+## A Positive No Offers Direction
 
-**If you feel guilty**: Label it preemptively with an accusation audit: "You're probably frustrated that I'm saying no after you asked specifically..."
+Use *The Power of a Positive No*.
 
-See patterns.md "Pattern 4: Saying No"
+1. Yes: name what must be protected.
+2. No: state the refusal plainly.
+3. Yes: offer a genuine alternative.
+4. Keep a workable Plan B.
+
+Example: "I need to keep this week for the current deadline, so I can't take on the review. I can look at the final two pages on Monday, or Sam may have capacity sooner."
+
+See `patterns.md` "Pattern 4: Saying No While Preserving Relationship".
+
+## Institutions Need Decision-Ready Facts
+
+Use objective criteria and a clear administrative ask.
+
+1. Identify the case or reference.
+2. Ask for one exact decision and name the rule, precedent, deadline or discretion behind it.
+3. State the relevant facts and dates.
+4. Own any lapse in one sentence.
+5. Attach or offer the evidence needed, following `evidence-packs` for attachments.
+
+Example: "Re [case reference]: I am asking for the deferral to be reconsidered under [rule or discretion]. I missed the 14 October response deadline and take responsibility for that. The relevant dates and supporting documents are below."
+
+Do not label an official's emotions. Give the reader what they need to approve, refuse or route the request.
+
+## Hard News Starts From Shared Facts
+
+Use *Difficult Conversations* when the reader will dislike the outcome but no bargain will remove it.
+
+1. Open with the Third Story.
+2. State the decision or change early.
+3. Separate intent from impact.
+4. Name Yulong's contribution without taking blame for everything.
+5. Explain the practical next step.
+
+Example: "We planned around a Friday delivery, and the new test result means I can no longer support that date. This creates extra work for your launch plan. I can deliver the verified version Tuesday and send the completed sections today."
+
+See `patterns.md` "Pattern 1: Acknowledging Emotions + Clear Communication" and "Pattern 3: Changing Plans/Backing Out".
+
+## Replying To Criticism Separates Two Topics
+
+Use *Thanks for the Feedback* before replying.
+
+1. Identify whether truth, relationship or identity triggered the reaction.
+2. Identify whether the sender meant appreciation, coaching or evaluation.
+3. Extract the part that can be answered now.
+4. If delivery is also a problem, signpost it as a second topic.
+5. Address the two topics in order.
+
+Example: "I want to separate two issues: the accuracy concern in the analysis, and how it was raised in the meeting. On the analysis, I agree the comparison needs a second check. After that, I would like to discuss the meeting process."
+
+See `patterns.md` "Pattern 1: Acknowledging Emotions + Clear Communication".
+
+## Giving Feedback Names Its Kind
+
+Use *Thanks for the Feedback* to name the kind of feedback, and borrow intent versus impact from *Difficult Conversations*.
+
+1. Decide whether this is appreciation, coaching or evaluation.
+2. State the observed behaviour and concrete impact.
+3. Do not infer intent.
+4. Make one request for the future.
+5. Leave room for the other account.
+
+Example: "This is coaching rather than a performance evaluation. In the last two updates, the decision appeared after the background, so the team acted on different assumptions. Please put the decision first next time. I may be missing context about why the updates were structured that way."
+
+See `patterns.md` "Pattern 1: Acknowledging Emotions + Clear Communication" and "Pattern 2: Making Asks Clear (Without Being Demanding)".

@@ -53,10 +53,18 @@ def owned(hook, target):
 def merge_hooks(existing, maintained, target):
     result = copy.deepcopy(existing)
     events = result.setdefault("hooks", {})
+    # A hook identical to a maintained one is ours whatever its path: without this,
+    # a maintained hook outside the hooks directory (the `rex` SessionStart line)
+    # is kept as custom and then appended again, one more copy per --apply.
+    maintained_keys = {(event, h.get("type"), h.get("command"))
+                       for event, groups in maintained["hooks"].items()
+                       for group in groups for h in group.get("hooks", [])}
     for event, groups in list(events.items()):
         kept = []
         for group in groups:
-            group["hooks"] = [h for h in group.get("hooks", []) if not owned(h, target)]
+            group["hooks"] = [h for h in group.get("hooks", [])
+                              if not owned(h, target)
+                              and (event, h.get("type"), h.get("command")) not in maintained_keys]
             if group["hooks"]:
                 kept.append(group)
         if kept:
