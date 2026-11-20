@@ -28,7 +28,7 @@ say() {  # say <colour> <text>: coloured only on a terminal without NO_COLOR
 }
 
 # Two agents: the watcher reacts to plug events at once; the heal job is a
-# fresh process every 10 s that turns the built-in back on if no external is
+# fresh process every 2 s (about 40 ms a run, so cheap) that turns the built-in back on if no external is
 # present, in case the long-lived watcher misses an unplug (it did, 2026-11-20).
 HEAL_LABEL="com.user.builtin-display-heal"
 HEAL_PLIST="${HOME}/Library/LaunchAgents/${HEAL_LABEL}.plist"
@@ -81,8 +81,10 @@ auto_on() {
     <integer>30</integer>"
     write_plist "$HEAL_PLIST" "$HEAL_LABEL" heal \
         "    <key>StartInterval</key>
-    <integer>10</integer>"
-    say green "auto: on — the built-in screen turns off whenever an external display connects, and back on within ~10 s of the last one going"
+    <integer>2</integer>
+    <key>ThrottleInterval</key>
+    <integer>2</integer>"
+    say green "auto: on — the built-in screen turns off whenever an external display connects, and back on within ~2 s of the last one going"
     print "  undo with: builtin-display auto off    log: $LOG"
 }
 
