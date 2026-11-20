@@ -767,11 +767,27 @@ def block_is(name: str, enabled: bool):
 
 
 def switch(name: str, on: bool) -> None:
-    """Start or stop a block, and return as soon as the database shows it."""
-    if not ct_apply(("-start" if on else "-stop", name), block_is(name, on)):
-        sys.exit(
-            f"focus: Cold Turkey did not {'start' if on else 'stop'} {name!r}: {CT_DROPPED}"
-        )
+    """Start or stop a block, and return as soon as the database shows it.
+
+    A command the agent did not read is sent once more: re-sending puts the same
+    command in the one slot, so it cannot run twice. On a second miss, notify as well
+    as exit, since a run from Alfred has no terminal to show the error: on 20 Nov 2026
+    a switch to comms left research running and Messages blocked without a word."""
+    args = ("-start" if on else "-stop", name)
+    if ct_apply(args, block_is(name, on)) or ct_apply(args, block_is(name, on)):
+        return
+    verb = "start" if on else "stop"
+    notify(f"Cold Turkey did not {verb} {name!r}. Run focus status.")
+    sys.exit(f"focus: Cold Turkey did not {verb} {name!r}: {CT_DROPPED}")
+
+
+def stop_other_modes(keep: str | None) -> None:
+    """Stop every unlocked mode block that runs besides `keep` (a block name, or None
+    for no mode), read fresh from the database. A switch ends with this so that two
+    modes never stay on together, whatever list of running modes it began from."""
+    for n, b in mode_blocks(read_blocks()).items():
+        if n != keep and b.get("enabled") == "true" and not is_locked(b):
+            switch(n, on=False)
 
 
 def mode_blocks(blocks: dict) -> dict:
@@ -1409,6 +1425,9 @@ def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
             clear_capped()
     for name in running:
         switch(name, on=False)
+    # The list above was read before the gate and the reason prompt, which can take a
+    # while; a mode a waiter or the tick started meanwhile would otherwise stay on.
+    stop_other_modes(target)
     if session:  # any mode ends a session, which the gate above approved
         write_only({**session, "until": 0, "back": []})
         end_only(cfg, announce=False)

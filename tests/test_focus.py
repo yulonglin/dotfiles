@@ -3202,3 +3202,55 @@ def test_a_window_close_that_fails_is_retried(capped_env, tmp_path, monkeypatch)
     assert ct.window_end(cfg) is False
     assert ct.window_end(cfg) is True
     assert ct.window_end(cfg) is False and results == []  # done: no third write
+
+
+def test_a_dropped_stop_is_sent_again_and_the_old_mode_ends(cfg, monkeypatch):
+    # 20 Nov 2026: a switch to comms left research running, so Messages stayed blocked.
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    calls = fake_cold_turkey(monkeypatch, blocks)
+    send = ct.ct_send
+    dropped = []
+
+    def drop_first_stop(*args):
+        if args[0] == "-stop" and not dropped:
+            dropped.append(args)  # the agent never read it
+            return
+        send(*args)
+
+    monkeypatch.setattr(ct, "ct_send", drop_first_stop)
+    ct.cmd_start(cfg, "writing")
+    assert blocks["mode: research"]["enabled"] == "false"
+    assert dropped and calls[-1][:2] == ("-stop", "mode: research")
+
+
+def test_a_stop_that_never_lands_notifies_as_well_as_exits(cfg, monkeypatch):
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks, refuse={"mode: research"})
+    told = []
+    monkeypatch.setattr(ct, "notify", told.append)
+    with pytest.raises(SystemExit, match="did not stop 'mode: research'"):
+        ct.cmd_start(cfg, "writing")
+    assert told and "mode: research" in told[0]
+
+
+def test_a_mode_started_during_the_switch_is_stopped_too(cfg, monkeypatch):
+    # The running list is read before the gate and the reason prompt; a mode a waiter
+    # or the tick starts in between must not stay on beside the new one.
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+
+    def prepare():
+        blocks["mode: research"]["enabled"] = "true"
+
+    ct.cmd_start(cfg, "writing", prepare=prepare)
+    assert blocks["mode: writing"]["enabled"] == "true"
+    assert blocks["mode: research"]["enabled"] == "false"
