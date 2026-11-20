@@ -26,6 +26,21 @@ directory mtime):
    not a live one. Jobs still pinned after pass 1, the job dir of the invoking
    session ($CLAUDE_JOB_DIR) and dirs without state.json are never reaped.
 
+`done` means a job's last turn ended, not that its work landed. So in every
+mode a job is kept while its worktree branch (state.json worktreeBranch) is not
+an ancestor of the repo's default branch, or its worktree (worktreePath) has
+uncommitted changes: that row is the reminder to merge. A branch or repo that
+no longer exists has nothing left to merge and is not protected. Worktrees a
+job created are left in place; the view's own delete key reaps those.
+
+--finished (or --states done,failed,stopped) narrows the reap to jobs in a
+terminal state. That is how the `claude()` wrapper hides finished rows from
+the agents view before it opens: `--finished --hours 0 --keep-pins
+--archive-to ~/.claude/jobs-archive`. The view is compiled into the CLI and has
+no hide toggle, and its list is the set of dirs under ~/.claude/jobs, so moving
+the dir out is the only lever. `blocked` (the "Needs you" row) is not a
+terminal state and survives that filter whatever the grace.
+
 Both thresholds default from CLAUDE_JOBS_REAP_UNPIN_DAYS / CLAUDE_JOBS_REAP_DAYS
 so a machine can override them without editing the hook that runs this.
 """
@@ -41,8 +56,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-ACTIVE_STATES = {"running", "working", "starting"}
+ACTIVE_STATES = {"running", "working", "starting", "idle", "queued"}
 ACTIVE_GRACE_DAYS = 30.0
+# The states the agents view files under its done bucket. Failed rows sit
+# there too, so hiding only `done` would leave the list half-cleared.
+FINISHED_STATES = ("done", "failed", "stopped")
 # Claude Code locks pins.json with proper-lockfile: a `pins.json.lock` directory
 # whose mtime older than this is treated as stale and removed (CLI 2.1.261).
 PIN_LOCK_STALE_SECONDS = 5.0
@@ -85,6 +103,69 @@ def dir_size_mb(path: Path) -> float:
         except OSError:
             continue
     return total / 1_000_000
+
+
+def git(cwd: str, *args: str) -> tuple[int, str]:
+    """Return (exit code, stdout). Any failure to run git at all reads as an error code."""
+    try:
+        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return 255, ""
+    return r.returncode, r.stdout.strip()
+
+
+def default_branch(repo: str) -> str:
+    rc, ref = git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if rc == 0 and ref.startswith("origin/"):
+        return ref[len("origin/") :]
+    for name in ("main", "master"):
+        if git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{name}")[0] == 0:
+            return name
+    return "main"
+
+
+def unmerged_reason(data: dict) -> str | None:
+    """Why a job's work is still open on disk, or None when nothing is pending.
+
+    The branch a job worked on can still be unmerged, and its worktree can
+    still hold uncommitted changes. Either keeps the job. A git failure also
+    keeps it: when in doubt, do not move the reminder away.
+    """
+    worktree = data.get("worktreePath")
+    if isinstance(worktree, str) and worktree and Path(worktree).is_dir():
+        # --no-optional-locks: the reaper runs at every `claude agents` launch,
+        # and a "done" session can be live and mid-commit in that worktree. A
+        # plain status refreshes the index under index.lock and would make that
+        # session's commit fail with a lock error nobody could attribute.
+        rc, out = git(worktree, "--no-optional-locks", "status", "--porcelain")
+        if rc != 0:
+            return f"git status failed in {worktree}"
+        if out:
+            first = out.splitlines()[0].strip()
+            return f"worktree {worktree} has uncommitted changes ({first})"
+    branch = data.get("worktreeBranch")
+    if not isinstance(branch, str) or not branch:
+        return None
+    repo = data.get("originCwd") or data.get("cwd")
+    if not isinstance(repo, str) or not repo or not Path(repo).is_dir():
+        return None
+    if git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}")[0] != 0:
+        return None
+    base = default_branch(repo)
+    rc, _ = git(repo, "merge-base", "--is-ancestor", branch, base)
+    if rc == 0:
+        return None
+    # A PR merged on the remote counts even before the local base is pulled.
+    remote_base = f"refs/remotes/origin/{base}"
+    if (
+        rc == 1
+        and git(repo, "rev-parse", "--verify", "-q", remote_base)[0] == 0
+        and git(repo, "merge-base", "--is-ancestor", branch, remote_base)[0] == 0
+    ):
+        return None
+    if rc == 1:
+        return f"branch {branch} not merged into {base}"
+    return f"git merge-base failed for {branch}"
 
 
 def read_pins(pins_file: Path) -> list[str]:
@@ -198,8 +279,19 @@ def main() -> int:
     parser.add_argument(
         "--days",
         type=float,
-        default=env_days("CLAUDE_JOBS_REAP_DAYS", 7.0),
-        help="reap jobs inactive longer than this (env CLAUDE_JOBS_REAP_DAYS)",
+        default=None,
+        help="reap jobs inactive longer than this (default: env CLAUDE_JOBS_REAP_DAYS, else 7)",
+    )
+    parser.add_argument("--hours", type=float, default=None, help="like --days, in hours; the two are exclusive")
+    parser.add_argument(
+        "--states",
+        metavar="A,B",
+        help="only reap jobs whose recorded state is one of these (comma-separated); every other state is kept",
+    )
+    parser.add_argument(
+        "--finished",
+        action="store_true",
+        help=f"shorthand for --states {','.join(FINISHED_STATES)}: the agents view's done bucket",
     )
     parser.add_argument(
         "--unpin-days",
@@ -213,11 +305,36 @@ def main() -> int:
     parser.add_argument("--trash", action="store_true", help="move to system trash (via `trash` CLI) instead of deleting")
     parser.add_argument("--archive-to", type=Path, metavar="DIR", help="move reaped dirs into DIR instead of deleting")
     parser.add_argument("-v", "--verbose", action="store_true", help="list each job and the decision made")
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="print the summary only when something was unpinned, reaped or failed"
+    )
     args = parser.parse_args()
 
+    if args.days is not None and args.hours is not None:
+        print("--days and --hours are mutually exclusive", file=sys.stderr)
+        return 2
+    if args.hours is not None:
+        args.days = args.hours / 24.0
+    elif args.days is None:
+        args.days = env_days("CLAUDE_JOBS_REAP_DAYS", 7.0)
     for name, value in (("--days", args.days), ("--unpin-days", args.unpin_days)):
         if not math.isfinite(value) or value < 0:
             print(f"{name} must be a non-negative finite number, got {value}", file=sys.stderr)
+            return 2
+    if args.finished and args.states:
+        print("--finished and --states are mutually exclusive", file=sys.stderr)
+        return 2
+    only_states: set[str] | None = None
+    if args.finished:
+        only_states = set(FINISHED_STATES)
+    elif args.states is not None:
+        only_states = {s.strip() for s in args.states.split(",") if s.strip()}
+        if not only_states:
+            print("--states needs at least one state", file=sys.stderr)
+            return 2
+        if only_states & ACTIVE_STATES:
+            names = ", ".join(sorted(only_states & ACTIVE_STATES))
+            print(f"--states must not name an active state ({names})", file=sys.stderr)
             return 2
     if not args.jobs_dir.is_dir():
         print(f"jobs dir not found: {args.jobs_dir}", file=sys.stderr)
@@ -244,7 +361,7 @@ def main() -> int:
         )
 
     reaped, reaped_mb, kept_recent, kept_active, kept_unreadable, kept_pinned = 0, 0.0, 0, 0, 0, 0
-    errors = 0
+    kept_other, kept_unmerged, errors = 0, 0, 0
 
     for job_dir in sorted(args.jobs_dir.iterdir()):
         if not job_dir.is_dir() or job_dir.name.endswith(".lock"):
@@ -268,9 +385,19 @@ def main() -> int:
 
         try:
             data = json.loads(state_file.read_text())
-            state = data.get("state", "") if isinstance(data, dict) else ""
+            if not isinstance(data, dict):
+                data = {}
         except (json.JSONDecodeError, OSError):
+            data = {}
+        state = data.get("state", "")
+        if not isinstance(state, str):
             state = ""
+
+        if only_states is not None and state not in only_states:
+            kept_other += 1
+            if args.verbose:
+                print(f"keep {job_dir.name}: state={state or '?'} not in {','.join(sorted(only_states))}")
+            continue
 
         age_days = (now - last_activity_epoch(job_dir)) / 86400
         threshold = max(args.days, ACTIVE_GRACE_DAYS) if state in ACTIVE_STATES else args.days
@@ -282,6 +409,14 @@ def main() -> int:
                 kept_recent += 1
             if args.verbose:
                 print(f"keep {job_dir.name}: state={state or '?'} age={age_days:.1f}d < {threshold:g}d")
+            continue
+
+        # Checked after the age test, so a recent job costs no git calls.
+        reason = unmerged_reason(data)
+        if reason is not None:
+            kept_unmerged += 1
+            if args.verbose or args.dry_run:
+                print(f"keep {job_dir.name}: state={state or '?'} {reason}")
             continue
 
         size_mb = dir_size_mb(job_dir)
@@ -310,11 +445,13 @@ def main() -> int:
 
     unpin_verb, reap_verb = ("would unpin", "would reap") if args.dry_run else ("unpinned", "reaped")
     unpin_note = "unpin skipped (locked)" if lock_skipped else f"{unpin_verb} {unpinned}"
-    print(
-        f"{unpin_note}; {reap_verb} {reaped} job(s), {reaped_mb:.0f}MB; "
-        f"kept {kept_recent} recent, {kept_active} active, {kept_pinned} pinned, "
-        f"{kept_unreadable} unreadable; {errors} error(s)"
-    )
+    if not args.quiet or unpinned or reaped or errors or lock_skipped:
+        other = f", {kept_other} other-state" if only_states is not None else ""
+        print(
+            f"{unpin_note}; {reap_verb} {reaped} job(s), {reaped_mb:.0f}MB; "
+            f"kept {kept_recent} recent, {kept_active} active, {kept_pinned} pinned, "
+            f"{kept_unmerged} unmerged, {kept_unreadable} unreadable{other}; {errors} error(s)"
+        )
     return 1 if errors else 0
 
 

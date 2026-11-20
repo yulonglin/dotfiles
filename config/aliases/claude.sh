@@ -335,6 +335,34 @@ claude() {
         done
     fi
 
+    # `claude agents`: hide finished rows before the view mounts. The view is
+    # compiled into the CLI and has no hide toggle, and its list is the set of
+    # dirs under ~/.claude/jobs, so a done/failed/stopped job stops appearing
+    # once its dir moves to ~/.claude/jobs-archive. Moved, not deleted:
+    # state.json keeps the result text and name, the transcript under
+    # ~/.claude/projects is untouched, and reap_jobs.sh purges the archive at
+    # 30 days. Never touched: blocked ("Needs you") and working rows, pinned
+    # rows (--keep-pins also leaves pins.json alone, so this never contends for
+    # its lock as the view starts), and a done job whose worktree branch is
+    # unmerged or whose worktree is dirty — `done` only means the turn ended.
+    # CLAUDE_AGENTS_HIDE_FINISHED=0 opts out; CLAUDE_AGENTS_FINISHED_GRACE_HOURS
+    # (default 0) keeps rows that finished more recently than that.
+    if [[ "$_first_positional" == "agents" && "${CLAUDE_AGENTS_HIDE_FINISHED:-1}" != "0" ]]; then
+        local _agents_help=false _h
+        for _h in "${args[@]}"; do
+            case "$_h" in
+                --) break ;;
+                -h|--help) _agents_help=true; break ;;
+            esac
+        done
+        if [[ "$_agents_help" == false ]] && command -v claude-jobs-reap >/dev/null 2>&1; then
+            # Never blocks the launch: a reaper failure prints and the view opens.
+            claude-jobs-reap --finished --keep-pins --quiet \
+                --hours "${CLAUDE_AGENTS_FINISHED_GRACE_HOURS:-0}" \
+                --archive-to "$HOME/.claude/jobs-archive" || true
+        fi
+    fi
+
     activate_venv
     # Last command in each branch, so its exit status is the function's —
     # nothing to restore. `env` execs the binary from PATH, so this does not

@@ -90,6 +90,10 @@ Verified on Claude Code 2.1.237 (2026-08-20): a **bare-word** entry compiles to 
 
 Note `git pull`/`merge`/`stash` still need `dangerouslyDisableSandbox: true` despite `git:*` — that is the runtime `denyWithinAllow` in the table below, not a matcher problem. If `systemd --user` is unavailable: `loginctl enable-linger $(whoami)`. If memory limits are silently ignored: `sudo systemctl set-property user-$(id -u).slice Delegate=yes`.
 
+## Finished sessions leave `claude agents` by moving to `~/.claude/jobs-archive`
+
+The agents view is compiled into the CLI and has no hide toggle, and its list is the set of dirs under `~/.claude/jobs`. So the `claude()` wrapper runs `claude-jobs-reap --finished --keep-pins --quiet --hours 0 --archive-to ~/.claude/jobs-archive` right before the view mounts: every `done`, `failed` or `stopped` job moves to the archive and its row goes. `blocked` ("Needs you"), working and pinned rows are never touched, and `--keep-pins` leaves `pins.json` alone so the wrapper never contends for its lock. **`done` means the last turn ended, not that the work landed**, so in every reaper mode — this one and the daily 7-day delete — a job stays while its `worktreeBranch` is not merged into the default branch (local or `origin/`) or its `worktreePath` has uncommitted changes. A job that ran in the main checkout has no branch to check and is hidden on state alone. The transcript under `~/.claude/projects` is untouched, so `claude --resume <session-id>` still works; `state.json` in the archive keeps the result text until `reap_jobs.sh` purges it 30 days after the job's last activity. `CLAUDE_AGENTS_HIDE_FINISHED=0` opts out for one launch; `CLAUDE_AGENTS_FINISHED_GRACE_HOURS=6` keeps rows that finished in the last six hours.
+
 ## Sandbox failure modes
 
 | Symptom | Reality | Fix |
