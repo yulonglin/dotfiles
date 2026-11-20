@@ -4,9 +4,9 @@
 # external display. Free stand-in for BetterDisplay's "disconnect" and Lunar's
 # BlackOut, both paid. Logic lives in tools/builtin-display/main.swift; this
 # wrapper compiles it on first run (or when the source is newer) and execs it.
-# It also owns `auto on|off|status`, the login agent that runs `watch`.
+# It also owns `auto on|off|status`: the login agents that run `watch` and `heal`.
 #
-#   builtin-display status | off | on | toggle | try [SECONDS] | auto on|off|status | --help
+#   builtin-display status | off | on | toggle | try [SECONDS] | heal | auto on|off|status | --help
 set -euo pipefail
 
 if [[ $OSTYPE != darwin* ]]; then
@@ -27,28 +27,32 @@ say() {  # say <colour> <text>: coloured only on a terminal without NO_COLOR
     if [[ -t 1 && -z ${NO_COLOR:-} ]]; then print -P "%F{$1}$2%f"; else print -r -- "$2"; fi
 }
 
-agent_loaded() { launchctl print "${DOMAIN}/${LABEL}" >/dev/null 2>&1; }
+# Two agents: the watcher reacts to plug events at once; the heal job is a
+# fresh process every 10 s that turns the built-in back on if no external is
+# present, in case the long-lived watcher misses an unplug (it did, 2026-11-20).
+HEAL_LABEL="com.user.builtin-display-heal"
+HEAL_PLIST="${HOME}/Library/LaunchAgents/${HEAL_LABEL}.plist"
 
-auto_on() {
-    mkdir -p "${PLIST:h}" "${LOG:h}"
-    cat > "$PLIST" <<EOF
+agent_loaded() { launchctl print "${DOMAIN}/$1" >/dev/null 2>&1; }
+
+write_plist() {  # write_plist <path> <label> <subcommand> <extra plist keys>
+    cat > "$1" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>${LABEL}</string>
+    <string>$2</string>
     <key>ProgramArguments</key>
     <array>
         <string>${SELF}</string>
-        <string>watch</string>
+        <string>$3</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>ThrottleInterval</key>
-    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+$4
     <key>StandardOutPath</key>
     <string>${LOG}</string>
     <key>StandardErrorPath</key>
@@ -56,23 +60,43 @@ auto_on() {
 </dict>
 </plist>
 EOF
-    plutil -lint "$PLIST" >/dev/null
-    launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
-    launchctl bootstrap "$DOMAIN" "$PLIST"
-    say green "auto: on — the built-in screen turns off whenever an external display connects"
+    plutil -lint "$1" >/dev/null
+    launchctl bootout "${DOMAIN}/$2" 2>/dev/null || true
+    launchctl bootstrap "$DOMAIN" "$1"
+}
+
+remove_agent() {  # remove_agent <label> <plist>
+    launchctl bootout "${DOMAIN}/$1" 2>/dev/null || true
+    if [[ -f $2 ]]; then
+        if command -v trash >/dev/null 2>&1; then trash "$2"; else rm -f "$2"; fi
+    fi
+}
+
+auto_on() {
+    mkdir -p "${PLIST:h}" "${LOG:h}"
+    write_plist "$PLIST" "$LABEL" watch \
+        "    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>"
+    write_plist "$HEAL_PLIST" "$HEAL_LABEL" heal \
+        "    <key>StartInterval</key>
+    <integer>10</integer>"
+    say green "auto: on — the built-in screen turns off whenever an external display connects, and back on within ~10 s of the last one going"
     print "  undo with: builtin-display auto off    log: $LOG"
 }
 
 auto_off() {
-    launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
-    if [[ -f $PLIST ]]; then
-        if command -v trash >/dev/null 2>&1; then trash "$PLIST"; else rm -f "$PLIST"; fi
-    fi
-    say yellow "auto: off — agent removed; the screen stays as it is now (builtin-display on to restore)"
+    remove_agent "$LABEL" "$PLIST"
+    remove_agent "$HEAL_LABEL" "$HEAL_PLIST"
+    say yellow "auto: off — agents removed; the screen stays as it is now (builtin-display on to restore)"
 }
 
 auto_status() {
-    if agent_loaded; then say green "auto: on (${LABEL} loaded)"; else say yellow "auto: off"; fi
+    local label
+    for label in "$LABEL" "$HEAL_LABEL"; do
+        if agent_loaded "$label"; then say green "  ${label}: loaded"; else say yellow "  ${label}: not loaded"; fi
+    done
     [[ -f $LOG ]] && { print "  last log lines:"; tail -n 3 "$LOG" | sed 's/^/    /'; }
     return 0
 }
