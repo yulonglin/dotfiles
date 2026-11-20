@@ -893,11 +893,15 @@ def need_terminal(what: str) -> None:
 
 
 REASON_DIALOG = """on run argv
-    display dialog ("Why " & item 1 of argv & "? One line:") default answer "" \
+    set promptText to "Why " & item 1 of argv & "? One line:"
+    if (count of argv) > 1 then set promptText to item 2 of argv & return & return & promptText
+    display dialog promptText default answer "" \
         with title "focus" buttons {"Cancel", "Go on"} default button "Go on" \
         cancel button "Cancel" giving up after 300
+    if gave up of result then error number -128
     return text returned of result
 end run"""
+BLANK_REASON = "A reason cannot be empty or only spaces. Type one line"
 
 
 def can_show_dialog() -> bool:
@@ -917,18 +921,31 @@ def need_reason_input(what: str) -> None:
 
 def ask_reason(what: str) -> str:
     """A one-line reason, typed at the terminal or, without one, into a macOS dialog
-    (Alfred); refuse without one."""
+    (Alfred). An empty or blank answer is refused with an error and asked again
+    (Yulong, 2026-11-20); only Ctrl-C, end of input, Cancel or the dialog's timeout
+    give up, and then nothing changes."""
+    gave_up = "focus: no reason given; nothing changed"
     if sys.stdin.isatty():
-        reason = input(f"Why {what}? One line: ").strip()
-    else:
-        need_reason_input(what)
+        while True:
+            try:
+                reason = input(f"Why {what}? One line: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print(file=sys.stderr)
+                sys.exit(gave_up)
+            if reason:
+                return reason
+            print(f"focus: {BLANK_REASON}, or Ctrl-C to cancel.", file=sys.stderr)
+    need_reason_input(what)
+    args = [what]
+    while True:
         r = subprocess.run(
-            ["osascript", "-e", REASON_DIALOG, what], capture_output=True, text=True
+            ["osascript", "-e", REASON_DIALOG, *args], capture_output=True, text=True
         )
-        reason = r.stdout.strip() if r.returncode == 0 else ""
-    if not reason:
-        sys.exit("focus: no reason given; nothing changed")
-    return reason
+        if r.returncode != 0:  # Cancel, or no answer within 300 s
+            sys.exit(gave_up)
+        if reason := r.stdout.strip():
+            return reason
+        args = [what, f"{BLANK_REASON}, or Cancel."]
 
 
 def loosening_reason(what: str, command: str, **extra) -> None:

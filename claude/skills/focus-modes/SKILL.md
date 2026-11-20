@@ -56,7 +56,7 @@ The note's optional `strong_lock_blocks: [<block>, ...]` lists Cold Turkey block
 
 The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fallback: <mode>}}` caps a mode. `focus <mode> [MINUTES]` runs it for at most `minutes`, then switches back to the mode that ran before it, or to `fallback` if none did, with a notification. A detached waiter and the launchd tick (`focus install-agent`) end it, so it ends after a restart too.
 
-- **Renewal:** allowed at once, with no cooldown. Every start of the mode after the first of the local day asks for a one-line reason: at the terminal, or without one (Alfred) in a macOS dialog; an agent gets no dialog and is refused. Cancel or an empty reason changes nothing. Each reason goes to `~/.local/state/focus/commit-log.jsonl` with the time and the command.
+- **Renewal:** allowed at once, with no cooldown. Every start of the mode after the first of the local day asks for a one-line reason: at the terminal, or without one (Alfred) in a macOS dialog; an agent gets no dialog and is refused. An empty or blank reason is refused with an error and asked again; Ctrl-C or Cancel changes nothing. Each reason goes to `~/.local/state/focus/commit-log.jsonl` with the time and the command.
 - **Day budget:** `--day [MINUTES]` runs one longer stretch from `day_minutes`, asking the reason once. A day stretch left early gives its unused minutes back; later starts that day are normal stretches.
 - **The mode before is kept:** a renewal keeps it, and a break or only session started during a stretch returns to it, never to the capped mode without its cap. A switch to another mode by hand ends the stretch.
 - **One worker at a time:** a start, a renewal and an expiry each hold `~/.local/state/focus/capped.lock` from reading the record to the last switch and write, and re-read it once they hold it, so an expiry never ends a stretch renewed meanwhile. The committed block does the same with `commit.lock`. A reason prompt holds the lock while Yulong types.
@@ -77,7 +77,7 @@ The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fall
 
 ## A person who loosens types a reason
 
-Since 20 Nov 2026 every loosening by hand asks a one-line reason, at the terminal or in a macOS dialog (Alfred), and an empty reason or Cancel changes nothing. Reasons go to `~/.local/state/focus/commit-log.jsonl`.
+Since 20 Nov 2026 every loosening by hand asks a one-line reason, at the terminal or in a macOS dialog (Alfred), and an empty or blank reason is refused with an error and asked again; Ctrl-C, Cancel or the dialog timing out changes nothing. Reasons go to `~/.local/state/focus/commit-log.jsonl`.
 
 - **What asks:** `focus break`, `focus off`, an only session that replaces a running mode, adding picks to or extending a session, and a mode switch that loosens. A switch loosens when the target is a capped mode or opens an app a running mode blocks. Sites are not compared, so research to writing, and any capped mode back to research, ask nothing.
 - **What does not:** starting a mode from no mode, tightening, ending a session for a mode that is not capped, and the launchd job's own starts (default, scheduled, break and stretch ends).

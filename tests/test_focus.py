@@ -2238,15 +2238,58 @@ def test_renewing_straight_away_keeps_the_mode_from_before(capped_env, monkeypat
     assert on(blocks) == ["mode: research"]
 
 
-def test_an_empty_reason_changes_nothing(capped_env, monkeypatch):
+def test_a_blank_reason_is_refused_and_asked_again(capped_env, monkeypatch, capsys):
     cfg, blocks, clock, *_ = capped_env
     ct.cmd_capped(cfg, "writing", [])
     clock.advance(30)
     ct.end_capped(cfg)
-    at_terminal(monkeypatch, ["  "])
+    prompts = at_terminal(monkeypatch, ["", "  \t ", "the draft is due"])
+    ct.cmd_capped(cfg, "writing", [])
+    assert len(prompts) == 3
+    assert capsys.readouterr().err.count("cannot be empty or only spaces") == 2
+    (entry,) = log_lines()
+    assert entry["reason"] == "the draft is due"
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_ctrl_c_at_the_reason_prompt_changes_nothing(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    answers = ["  "]
+    at_terminal(monkeypatch, answers)
+
+    def give_up(prompt=""):
+        if answers:
+            return answers.pop(0)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", give_up)
     with pytest.raises(SystemExit, match="no reason"):
         ct.cmd_capped(cfg, "writing", [])
     assert on(blocks) == ["mode: research"] and log_lines() == []
+
+
+def test_a_blank_dialog_answer_shows_the_dialog_again_with_an_error(
+    capped_env, monkeypatch
+):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: True)
+    answers, calls = [" \n", "email the landlord\n"], []
+
+    def fake_run(cmd, **k):
+        calls.append(cmd)
+        return ct.subprocess.CompletedProcess(cmd, 0, stdout=answers.pop(0))
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_run)
+    ct.cmd_capped(cfg, "writing", [])
+    assert calls[0][-1] == "writing again today"
+    assert "cannot be empty" in calls[1][-1]
+    assert log_lines()[0]["reason"] == "email the landlord"
 
 
 def test_a_new_day_starts_free_again(capped_env):
@@ -3287,11 +3330,10 @@ def test_a_switch_that_opens_an_app_needs_a_reason(cfg, reasons, monkeypatch):
     assert on(reasons) == ["mode: writing"]
 
 
-def test_an_empty_reason_leaves_the_mode_running(cfg, reasons, monkeypatch):
-    at_terminal(monkeypatch, [""])
-    with pytest.raises(SystemExit, match="no reason given"):
-        ct.cmd_start(cfg, "writing")
-    assert on(reasons) == ["mode: research"] and log_lines() == []
+def test_a_blank_switch_reason_is_asked_again(cfg, reasons, monkeypatch):
+    prompts = at_terminal(monkeypatch, [" ", "need to message the editor"])
+    ct.cmd_start(cfg, "writing")
+    assert len(prompts) == 2 and on(reasons) == ["mode: writing"]
 
 
 def test_a_switch_that_opens_no_app_asks_nothing(cfg, reasons, monkeypatch):
