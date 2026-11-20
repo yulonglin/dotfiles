@@ -1827,7 +1827,9 @@ def test_an_app_token_without_spaces_names_an_ungrouped_app(
         ct.resolve_pick(only_cfg, "app:Telegram")  # grouped, so not offered as an app
 
 
-def test_alfred_only_piles_picks_into_the_query(only_cfg, tmp_path, capsys, monkeypatch):
+def test_alfred_only_piles_picks_into_the_query(
+    only_cfg, tmp_path, capsys, monkeypatch
+):
     fake_app(tmp_path, "Zotero")
     fake_app(tmp_path, "iPhone Mirroring")
     monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
@@ -3063,3 +3065,37 @@ def test_alfred_starts_from_the_defaults_and_no_drops_one(picks_cfg, capsys):
     assert rows[0]["arg"] == "only app:Zotero no:bear 30"
     back = next(r for r in rows if r["title"] == "bear")
     assert back["autocomplete"] == "only "  # picking it again drops the no: word
+
+
+def test_screenzen_leaves_out_apps_the_running_mode_blocks_in_cold_turkey(
+    tmp_path, monkeypatch
+):
+    note = tmp_path / "note.md"
+    note.write_text(
+        "```yaml\ngroups:\n  chat: {apps: [WhatsApp]}\n  maps: {apps: [Maps]}\n"
+        "modes:\n  research: {allow: [], block: [chat]}\n"
+        "blocklists:\n  screenzen:\n    '🚫 x': {block: [chat, maps]}\n```\n"
+    )
+    cfg = ct.load_config(note)
+    group = {"groupName": "🚫 x", "isDisabled": False, "customSites": [], "apps": []}
+    allow = {
+        "groupName": "✅ focus: research",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+        "id": "A",
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: b"")
+    monkeypatch.setattr(ct, "sz_groups", lambda raw: [group, allow])
+    monkeypatch.setattr(
+        ct, "sz_app", lambda name, t: {**t, "appName": name, "appBundle": f"id.{name}"}
+    )
+    held = {"enabled": "true", "apps": ["app:WhatsApp.app:id.WhatsApp"]}
+    monkeypatch.setattr(ct, "read_blocks", lambda: {ct.PREFIX + "research": held})
+    loosen = ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert [a["appName"] for a in group["apps"]] == ["Maps"]
+    assert not any("WhatsApp" in x for x in loosen)
+    # With no mode Cold Turkey holds nothing, so ScreenZen pauses both again.
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
+    assert [a["appName"] for a in group["apps"]] == ["WhatsApp", "Maps"]

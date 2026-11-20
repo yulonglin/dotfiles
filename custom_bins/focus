@@ -2182,6 +2182,24 @@ def sz_only_block(cfg: dict, groups: list[dict], modes: list[str]) -> list[str]:
     return [f"{SZ_ONLY_BLOCK}: on, {len(group['apps'])} apps get a pause screen"]
 
 
+def ct_held_bundles(modes: list[str]) -> set[str]:
+    """Bundle ids of the apps that the Cold Turkey blocks of these modes hold and block
+    now. ScreenZen leaves them out of its 🚫 groups: a pause screen in front of an app
+    Cold Turkey will block anyway is only noise (Yulong, 2026-11-20). Read from Cold
+    Turkey, not the note, since the CLI cannot add apps and a block can lag the note.
+    Any failure to read gives the empty set, so ScreenZen keeps its entries."""
+    try:
+        blocks = read_blocks()
+    except (OSError, ValueError, TypeError, sqlite3.Error):
+        return set()
+    held: set[str] = set()
+    for m in modes:
+        b = blocks.get(PREFIX + m) or {}
+        if b.get("enabled") == "true":
+            held |= {a.rsplit(":", 1)[-1] for a in b.get("apps") or [] if ":" in a}
+    return held
+
+
 def sz_mode_group(mode: str | None) -> str:
     """Name of the ScreenZen allow group focus owns for a mode (None: no mode runs)."""
     return f"{SZ_MODE_PREFIX}{mode or 'shared'}"
@@ -2257,6 +2275,7 @@ def cmd_screenzen(
     if "only" in cfg:
         report_lines.extend(sz_only_block(cfg, groups, modes))
 
+    held = ct_held_bundles([m for m in modes if m != ONLY])
     for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items():
         group = by_name.get(name)
         if group is None:
@@ -2267,13 +2286,16 @@ def cmd_screenzen(
             s.replace("*", "") for s in group_items(cfg, bl.get("block") or [], "sites")
         ]
         added, removed = sz_set_sites(group, [s for s in sites if s], "block")
-        want_apps, missing = [], []
+        want_apps, missing, covered = [], [], []
         for app in group_items(cfg, bl.get("block") or [], "apps"):
             old = next((a for a in group["apps"] if a["appName"] == app), None)
             # Re-read the installed app each time: an update can change its bundle id
             # (Open Grind went from org.opengrind to org.opengrind.app), and ScreenZen
             # matches by id, so a stale entry silently stops blocking.
             entry = sz_app(app, old or APP_TEMPLATE) or old
+            if entry and entry["appBundle"] in held:
+                covered.append(app)  # the running mode's Cold Turkey block has it
+                continue
             (want_apps.append(entry) if entry else missing.append(app))
             if old and entry and old.get("appBundle") != entry["appBundle"]:
                 added.append(f"app {app} (now {entry['appBundle']})")
@@ -2285,7 +2307,10 @@ def cmd_screenzen(
             f"app {n}" for n in have_apps if n not in [a["appName"] for a in want_apps]
         ]
         group["apps"] = want_apps
-        loosen.extend(f"{name}:-{x}" for x in removed)
+        # Leaving out an app Cold Turkey blocks now loosens nothing.
+        loosen.extend(
+            f"{name}:-{x}" for x in removed if x.removeprefix("app ") not in covered
+        )
         # A 🚫 group can stand aside while certain modes run (off_in), e.g. messaging
         # apps during admin; it is back on for every other mode and for no mode.
         was_off = group["isDisabled"]
