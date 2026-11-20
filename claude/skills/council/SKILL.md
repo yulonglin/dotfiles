@@ -22,7 +22,7 @@ Question 1 picks the block. The five text-only rungs reason over text they are h
 |---|---|---|---|---|---|
 | **advisor** | `advisor()` | 1 | — | seconds | About work it can already see. No brief to write — always try this first |
 | **one family** | `openrouter-cli ask <alias> "…"` | 1 | $0.01–0.08 | seconds | Bounded, and you want one genuinely different prior on it |
-| **two advisors** | `openrouter-cli council advise "…"` | 2 | ~$0.09 | seconds | Real but not contested: the two strongest models, both answers, no synthesis |
+| **advisors** | `openrouter-cli council advise "…"` | 3 | ~$0.14 | seconds | Real but not contested: Gemini 4 Neon plus the two strongest models, every answer, no synthesis |
 | **agentic** | `codex-companion` (GPT), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
 | **agentic council** | Workflow tool with `council.workflow.js` in this skill's directory, or the Agent tool by hand — *Running an agentic council* | many per seat, ×2 with `rank` | varies | minutes | Only answerable by running things **and** contested — a diff, a hook, a test suite where competent reviewers would reach different verdicts |
 | **council** | `openrouter-cli council ask "…"` | 1 request, 9 models | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
@@ -30,7 +30,14 @@ Question 1 picks the block. The five text-only rungs reason over text they are h
 
 Latencies are rough single-run observations, not measurements. Costs are **floors** for a short question, and scale with the brief. `--dry-run` prints an estimate on every rung, but it counts no **reasoning tokens** — those are billed as output and can exceed the visible answer, so treat the estimate as a lower bound rather than a quote. Measured on a two-sentence council question: the chair's synthesis call alone cost **$0.10** with 699 reasoning tokens. Above roughly $100 propose and wait; nothing here comes close.
 
-**`advise` is the rung to reach for by default**, and usually the right answer to "get a second opinion". It asks whoever currently holds the anthropic and openai seats — run `openrouter-cli council roster` to see who that is — and prints both answers with **no synthesis**. Two strong disagreeing priors settle most questions, and with only two answers the disagreement *is* the signal; a chair would average it away for the price of another call.
+**`advise` is the rung to reach for by default**, and usually the right answer to "get a second opinion". It asks whoever holds the google, anthropic and openai seats (`advisor_families` in `config/openrouter-models.toml`; run `openrouter-cli council roster` to see who that is) and prints every answer with **no synthesis**. A few strong disagreeing priors settle most questions, and with so few answers the disagreement *is* the signal; a chair would average it away for the price of another call.
+
+**Gemini 4 Neon goes first** (Yulong, 2026-11-20: "really good and great at inferring intent"). This is his report, not a measurement: Epoch has not scored Neon yet, and the index alone would seat Gemini 4 Carbon, so the google seat is a hand pin (`[council].pinned`, basis `pinned`). In practice:
+
+- **One family:** `openrouter-cli ask gemini` is the default pick, ahead of the other aliases. It is strongest where the question is "what did the brief actually mean" — an underspecified request, a spec to read for intent, a draft to check against its goal.
+- **Advisors:** Neon answers first of the three.
+- **Agentic council:** the `gemini` agent is always a seat, and it is the last seat to drop when trimming to fit the Workflow size guideline.
+- **Carbon** stays addressable as `openrouter-cli ask carbon` (and the `gemini-4-carbon` route); it keeps a slight lead on long-horizon agent tasks.
 
 **A bare "council" names no rung.** When Yulong says only "council", or invokes this skill with no further instruction, the model running the session picks the rung, the seats and whether to rank, using the two questions above; no phrase maps to a rung mechanically. Say in one line which rung was picked and why, so a wrong pick costs one reply to correct.
 
@@ -109,7 +116,7 @@ The mitigation is local, so **it covers `--rank` only**: the ranking and chair p
 
 ### Everything you send goes to eight vendors
 
-`council ask` broadcasts your brief — including every file passed with `--context` — to eight separate providers under their own retention and training policies. Redact before sending: credentials, customer data, unpublished results, anything under NDA. The cheaper rungs narrow the blast radius (`advise` reaches two vendors, `ask` one), which is another reason not to climb reflexively.
+`council ask` broadcasts your brief — including every file passed with `--context` — to eight separate providers under their own retention and training policies. Redact before sending: credentials, customer data, unpublished results, anything under NDA. The cheaper rungs narrow the blast radius (`advise` reaches three vendors, `ask` one), which is another reason not to climb reflexively.
 
 **On the agentic council the blast radius is what each seat chooses to read, not what you pasted.** A routed seat reaches the whole checkout it is launched in, and every routed seat carries what it reads to its provider — OpenAI for the Codex-routed seat, the OpenRouter provider for the rest. Redaction is therefore a property of the tree, not of the brief: do not dispatch a seat into a checkout holding credentials, customer data or unpublished results.
 
@@ -188,7 +195,7 @@ Workflow({
   scriptPath: "/Users/yulong/.claude/skills/council/council.workflow.js",
   args: {
     brief: "<self-contained brief, repo-relative paths>",
-    seats: ["sol", "glm", "grok", "kimi", "qwen", "deepseek", "muse",
+    seats: ["gemini", "sol", "glm", "grok", "kimi", "qwen", "muse",
             {agentType: "general-purpose", model: "fable", label: "anthropic"}],
     rank: false,
     nonce: "<openssl rand -hex 8, required when rank is true>"
