@@ -46,6 +46,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
     monkeypatch.setattr(ct, "DEFAULT_FILE", tmp_path / "default.json")
     monkeypatch.setattr(ct, "SCHEDULED_FILE", tmp_path / "scheduled.json")
+    monkeypatch.setattr(ct, "WINDOW_FILE", tmp_path / "window.json")
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
@@ -1827,7 +1828,9 @@ def test_an_app_token_without_spaces_names_an_ungrouped_app(
         ct.resolve_pick(only_cfg, "app:Telegram")  # grouped, so not offered as an app
 
 
-def test_alfred_only_piles_picks_into_the_query(only_cfg, tmp_path, capsys, monkeypatch):
+def test_alfred_only_piles_picks_into_the_query(
+    only_cfg, tmp_path, capsys, monkeypatch
+):
     fake_app(tmp_path, "Zotero")
     fake_app(tmp_path, "iPhone Mirroring")
     monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
@@ -3063,3 +3066,139 @@ def test_alfred_starts_from_the_defaults_and_no_drops_one(picks_cfg, capsys):
     assert rows[0]["arg"] == "only app:Zotero no:bear 30"
     back = next(r for r in rows if r["title"] == "bear")
     assert back["autocomplete"] == "only "  # picking it again drops the no: word
+
+
+def test_screenzen_leaves_out_apps_the_running_mode_blocks_in_cold_turkey(
+    tmp_path, monkeypatch
+):
+    note = tmp_path / "note.md"
+    note.write_text(
+        "```yaml\ngroups:\n  chat: {apps: [WhatsApp]}\n  maps: {apps: [Maps]}\n"
+        "modes:\n  research: {allow: [], block: [chat]}\n"
+        "blocklists:\n  screenzen:\n    '🚫 x': {block: [chat, maps]}\n```\n"
+    )
+    cfg = ct.load_config(note)
+    group = {"groupName": "🚫 x", "isDisabled": False, "customSites": [], "apps": []}
+    allow = {
+        "groupName": "✅ focus: research",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+        "id": "A",
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: b"")
+    monkeypatch.setattr(ct, "sz_groups", lambda raw: [group, allow])
+    monkeypatch.setattr(
+        ct, "sz_app", lambda name, t: {**t, "appName": name, "appBundle": f"id.{name}"}
+    )
+    held = {"enabled": "true", "apps": ["app:WhatsApp.app:id.WhatsApp"]}
+    monkeypatch.setattr(ct, "read_blocks", lambda: {ct.PREFIX + "research": held})
+    loosen = ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert [a["appName"] for a in group["apps"]] == ["Maps"]
+    assert not any("WhatsApp" in x for x in loosen)
+    # With no mode Cold Turkey holds nothing, so ScreenZen pauses both again.
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
+    assert [a["appName"] for a in group["apps"]] == ["WhatsApp", "Maps"]
+    # In an open window with no mode, every focus group in ScreenZen is off.
+    cfg["windows"] = ["00:00-23:59"]
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
+    assert group["isDisabled"] and allow["isDisabled"]
+    # A mode started by hand in a window still gets its usual groups.
+    ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert not allow["isDisabled"]
+
+
+WINDOWS = 'windows: ["12:30-13:00"]'
+
+
+def test_a_window_stops_the_mode_until_it_ends_then_the_mode_comes_back(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, notes = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    assert ct.window_start(cfg, dt.datetime(2026, 11, 17, 12, 29)) is None
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    assert ct.window_start(cfg, at) == "12:30-13:00"
+    assert on(blocks) == [] and "open until 13:00" in notes[-1]
+    assert ct.in_off_hours(cfg, at)  # 'focus off' works in a window
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]  # the break the window took has ended
+    # once a day: a mode started by hand later in the window stays on
+    assert ct.window_start(cfg, at + dt.timedelta(minutes=5)) is None
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_commitment_keeps_the_window_closed(capped_env, tmp_path):
+    _, blocks, _, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    ct.write_commit(
+        {"mode": "research", "until": 2_000_000_000, "locked_to": 0, "pending": []}
+    )
+    assert ct.window_start(cfg, dt.datetime(2026, 11, 17, 12, 45)) is None
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_bad_window_is_refused(tmp_path):
+    with pytest.raises(SystemExit, match="windows"):
+        ct.load_config(note_with(tmp_path, 'windows: ["12:30"]'))
+
+
+def test_a_window_ends_a_capped_stretch_and_comes_back_to_the_mode_before_it(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    clock.now = dt.datetime(2026, 11, 17, 12, 15).timestamp()
+    ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: writing"]
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    ct.window_start(cfg, at)
+    assert on(blocks) == [] and ct.read_capped() is None
+    assert ct.read_break()["modes"] == ["research"]
+    # whichever runs first at the end, writing never comes back without its cap
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.end_capped(cfg)
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_break_that_ends_inside_a_window_is_stretched_to_its_end(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, WINDOWS))
+    ct.switch("mode: research", on=False)
+    end_of_break = dt.datetime(2026, 11, 17, 12, 40).timestamp()
+    ct.BREAK_FILE.write_text(json.dumps({"modes": ["research"], "until": end_of_break}))
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    ct.window_start(cfg, at)
+    assert ct.read_break()["until"] == dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    clock.now = end_of_break
+    ct.catch_up(cfg)
+    assert on(blocks) == []  # still open at 12:40
+
+
+def test_automatic_starts_wait_for_an_open_window(capped_env, tmp_path):
+    _, blocks, _, _, _ = capped_env
+    sched = 'scheduled_mode: {mode: writing, start: "12:00", until: "13:30"}'
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS + "\n" + sched))
+    assert ct.scheduled_start(cfg, dt.datetime(2026, 11, 17, 12, 45)) is None
+    assert on(blocks) == ["mode: research"]
+    assert ct.read_state(ct.SCHEDULED_FILE) is None  # the day is not used up
+
+
+def test_a_window_close_that_fails_is_retried(capped_env, tmp_path, monkeypatch):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, WINDOWS))
+    ct.switch("mode: research", on=False)
+    ct.write_state(ct.WINDOW_FILE, {"key": "k", "until": clock.now - 1})
+    results = [False, True]
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: results.pop(0))
+    assert ct.window_end(cfg) is False
+    assert ct.window_end(cfg) is True
+    assert ct.window_end(cfg) is False and results == []  # done: no third write

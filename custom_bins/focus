@@ -420,9 +420,15 @@ def load_config(path: Path) -> dict:
         "commit_text_chars",
         "default_mode",
         "scheduled_mode",
+        "windows",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
+    for span in cfg.get("windows") or []:
+        if not re.fullmatch(
+            r"([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d", str(span)
+        ):
+            problems.append(f"windows: {span!r} is not 'HH:MM-HH:MM'")
     ov = cfg.get("overlaps")
     if ov is not None and not (
         isinstance(ov, dict) and all(isinstance(v, str) and v for v in ov.values())
@@ -800,6 +806,7 @@ DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 WEEKDAYS = DAY_NAMES[:5]
 DEFAULT_MODE_TIMES = (("start", "09:00"), ("until", "12:00"))
 SCHEDULED_FILE = PENDING.parent / "scheduled.json"  # the day the scheduled mode fired
+WINDOW_FILE = PENDING.parent / "window.json"  # the open window: its key and end time
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
@@ -950,15 +957,27 @@ def end_break(cfg: dict) -> bool:
     return True
 
 
-def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
-    """Whether now falls in one of the note's off_hours spans ('22:00-23:15')."""
-    now = now or dt.datetime.now()
-    t = now.strftime("%H:%M")
-    for span in cfg.get("off_hours") or []:
+def span_now(spans: list | None, now: dt.datetime | None = None) -> str | None:
+    """The first 'HH:MM-HH:MM' span that now falls in, or None."""
+    t = (now or dt.datetime.now()).strftime("%H:%M")
+    for span in spans or []:
         start, end = str(span).split("-")
         if (start <= t < end) if start <= end else (t >= start or t < end):
-            return True
-    return False
+            return str(span)
+    return None
+
+
+def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
+    """Whether now falls in one of the note's off_hours spans ('22:00-23:15') or in
+    one of its open windows, where 'focus off' is allowed too."""
+    return bool(span_now(cfg.get("off_hours"), now) or in_window(cfg, now))
+
+
+def in_window(cfg: dict, now: dt.datetime | None = None) -> str | None:
+    """The note's open window ('12:30-13:00') that now falls in, or None. In a window
+    with no mode running, focus pauses nothing: ScreenZen has every focus group off, so
+    only Cold Turkey's always-on blocks hold (Yulong, 2026-11-20)."""
+    return span_now(cfg.get("windows"), now)
 
 
 def spawn_self(*args: str) -> None:
@@ -1401,11 +1420,12 @@ def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
     print(f"started {target!r}")
 
 
-def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
+def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> bool:
     """Point ScreenZen's allow list at the running modes. Cold Turkey has already switched,
-    so a ScreenZen failure is reported without undoing that."""
+    so a ScreenZen failure is reported without undoing that. Return whether the write
+    was made or handed to the background writer."""
     if not Path(f"{SZ_DOMAIN}.plist").exists():
-        return  # ScreenZen is not installed here
+        return True  # ScreenZen is not installed here
     # A person is never gated, so nothing needs the answer before focus returns, and the
     # relaunch takes over a second. An agent stays in the foreground: it has to see the
     # gate's result.
@@ -1417,7 +1437,7 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
                 f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen", "32"
             )
         )
-        return
+        return True
     try:
         loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
         # When the mode really changed, allowing its own sites is what the switch already
@@ -1452,10 +1472,12 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
                 print(
                     "ScreenZen not updated yet; run 'focus screenzen' after the wait."
                 )
-                return
+                return False
         cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
+        return True
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+        return False
 
 
 def cmd_sz_apply(cfg: dict) -> None:
@@ -1500,7 +1522,7 @@ def cmd_off(cfg: dict) -> None:
     # Leaving every mode is for off hours only; otherwise a break, which ends by itself,
     # so 'off' is not a way past everything (Yulong, 2026-10-30).
     if cfg.get("off_hours") and not in_off_hours(cfg):
-        hours = ", ".join(cfg["off_hours"])
+        hours = ", ".join((cfg.get("off_hours") or []) + (cfg.get("windows") or []))
         sys.exit(
             f"focus: 'off' works only in {hours}. Take 'focus break 15' instead, "
             f"or switch to another mode."
@@ -2182,6 +2204,24 @@ def sz_only_block(cfg: dict, groups: list[dict], modes: list[str]) -> list[str]:
     return [f"{SZ_ONLY_BLOCK}: on, {len(group['apps'])} apps get a pause screen"]
 
 
+def ct_held_bundles(modes: list[str]) -> set[str]:
+    """Bundle ids of the apps that the Cold Turkey blocks of these modes hold and block
+    now. ScreenZen leaves them out of its 🚫 groups: a pause screen in front of an app
+    Cold Turkey will block anyway is only noise (Yulong, 2026-11-20). Read from Cold
+    Turkey, not the note, since the CLI cannot add apps and a block can lag the note.
+    Any failure to read gives the empty set, so ScreenZen keeps its entries."""
+    try:
+        blocks = read_blocks()
+    except (OSError, ValueError, TypeError, sqlite3.Error):
+        return set()
+    held: set[str] = set()
+    for m in modes:
+        b = blocks.get(PREFIX + m) or {}
+        if b.get("enabled") == "true":
+            held |= {a.rsplit(":", 1)[-1] for a in b.get("apps") or [] if ":" in a}
+    return held
+
+
 def sz_mode_group(mode: str | None) -> str:
     """Name of the ScreenZen allow group focus owns for a mode (None: no mode runs)."""
     return f"{SZ_MODE_PREFIX}{mode or 'shared'}"
@@ -2232,8 +2272,12 @@ def cmd_screenzen(
     loosen: list[str] = []  # allows gained, blocks lost
     report_lines: list[str] = []
 
+    # In an open window with no mode, every focus group is off: nothing is paused.
+    open_window = not modes and bool(in_window(cfg))
     # One allow group per mode, plus the no-mode group; keep each list current.
     want_on = {sz_mode_group(m) for m in modes} or {sz_mode_group(None)}
+    if open_window:
+        want_on = set()
     for mode in [None, *cfg["modes"], *([ONLY] if "only" in cfg else [])]:
         name = sz_mode_group(mode)
         group = by_name.get(name)
@@ -2257,6 +2301,7 @@ def cmd_screenzen(
     if "only" in cfg:
         report_lines.extend(sz_only_block(cfg, groups, modes))
 
+    held = ct_held_bundles([m for m in modes if m != ONLY])
     for name, bl in (cfg.get("blocklists") or {}).get("screenzen", {}).items():
         group = by_name.get(name)
         if group is None:
@@ -2267,13 +2312,16 @@ def cmd_screenzen(
             s.replace("*", "") for s in group_items(cfg, bl.get("block") or [], "sites")
         ]
         added, removed = sz_set_sites(group, [s for s in sites if s], "block")
-        want_apps, missing = [], []
+        want_apps, missing, covered = [], [], []
         for app in group_items(cfg, bl.get("block") or [], "apps"):
             old = next((a for a in group["apps"] if a["appName"] == app), None)
             # Re-read the installed app each time: an update can change its bundle id
             # (Open Grind went from org.opengrind to org.opengrind.app), and ScreenZen
             # matches by id, so a stale entry silently stops blocking.
             entry = sz_app(app, old or APP_TEMPLATE) or old
+            if entry and entry["appBundle"] in held:
+                covered.append(app)  # the running mode's Cold Turkey block has it
+                continue
             (want_apps.append(entry) if entry else missing.append(app))
             if old and entry and old.get("appBundle") != entry["appBundle"]:
                 added.append(f"app {app} (now {entry['appBundle']})")
@@ -2285,11 +2333,14 @@ def cmd_screenzen(
             f"app {n}" for n in have_apps if n not in [a["appName"] for a in want_apps]
         ]
         group["apps"] = want_apps
-        loosen.extend(f"{name}:-{x}" for x in removed)
+        # Leaving out an app Cold Turkey blocks now loosens nothing.
+        loosen.extend(
+            f"{name}:-{x}" for x in removed if x.removeprefix("app ") not in covered
+        )
         # A 🚫 group can stand aside while certain modes run (off_in), e.g. messaging
         # apps during admin; it is back on for every other mode and for no mode.
         was_off = group["isDisabled"]
-        group["isDisabled"] = sz_group_off(bl, modes)
+        group["isDisabled"] = open_window or sz_group_off(bl, modes)
         if group["isDisabled"] and not was_off:
             loosen.append(f"{name}:off")
         if group["isDisabled"] != was_off:
@@ -2310,9 +2361,8 @@ def cmd_screenzen(
     )
     changed = groups != before
     if not quiet:
-        print(
-            f"ScreenZen follows: {', '.join(modes) or 'no mode'}; on: {', '.join(sorted(want_on))}"
-        )
+        on = ", ".join(sorted(want_on)) or "nothing (open window)"
+        print(f"ScreenZen follows: {', '.join(modes) or 'no mode'}; on: {on}")
         print("\n".join(f"  {line}" for line in report_lines) or "  no changes")
     if dry_run or not changed:
         return loosen
@@ -4031,6 +4081,7 @@ def main() -> None:
             catch_up(cfg)
             default_start(cfg)
             scheduled_start(cfg)
+            window_start(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
         case "allow":
@@ -4094,7 +4145,7 @@ def catch_up(cfg: dict) -> None:
     capped stretch; else stay silent. The lock goes first because it is the one that
     lapses. Each step runs on its own, so one that fails (switch() exits) skips no
     other."""
-    for step in (commit_tick, end_break, end_only, end_capped):
+    for step in (commit_tick, end_break, end_only, end_capped, window_end):
         try:
             step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
@@ -4119,6 +4170,8 @@ def default_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         return None
     if not start <= now.strftime("%H:%M") < until:
         return None
+    if in_window(cfg, now):  # an open window wins; the day is not marked, so the
+        return None  # default can still start after the window, inside its span
     today = now.strftime("%Y-%m-%d")
     if (read_state(DEFAULT_FILE) or {}).get("date") == today:
         return None
@@ -4151,6 +4204,8 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         return None
     if not str(d["start"]) <= now.strftime("%H:%M") < str(d["until"]):
         return None
+    if in_window(cfg, now):  # an open window wins, as for default_start
+        return None
     today = now.strftime("%Y-%m-%d")
     if (read_state(SCHEDULED_FILE) or {}).get("date") == today:
         return None
@@ -4168,6 +4223,67 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         )
     notify(f"focus: {mode} until {d['until']}, then no mode")
     return mode
+
+
+def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
+    """Open the note's window on its first tick each day: stop the unlocked modes as a
+    break that ends with the window, so they start again by themselves, and point
+    ScreenZen at no mode, which in a window pauses nothing. A committed block or an only
+    session keeps the window closed that day. Only the launchd tick calls it, as for
+    default_start; return the window opened, else None."""
+    now = now or dt.datetime.now()
+    span = in_window(cfg, now)
+    if not span:
+        return None
+    key = f"{now:%Y-%m-%d} {span}"
+    if (read_state(WINDOW_FILE) or {}).get("key") == key:
+        return None
+    hh, mm = (int(x) for x in span.split("-")[1].split(":"))
+    end = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if end <= now:  # a span past midnight ends tomorrow
+        end += dt.timedelta(days=1)
+    write_state(WINDOW_FILE, {"key": key, "until": end.timestamp()})
+    if read_commit() or read_only():
+        return None
+    # A capped stretch ends here: the window comes back to where the stretch would have
+    # gone, so the capped mode never returns without its cap.
+    swap: dict[str, str | None] = {}
+    if c := read_capped():
+        swap[c["mode"]] = capped_target(cfg, c)
+        clear_capped()
+    blocks = read_blocks()
+    running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
+    b = read_break()
+    if running or (b and time.time() < b["until"]):
+        b = b or {"modes": [], "until": 0}
+        back = [swap.get(m, m) for m in b["modes"] + running]
+        modes = list(dict.fromkeys(m for m in back if m))
+        # An earlier break that ends inside the window is stretched to its end.
+        until = max(b["until"], end.timestamp())
+        BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        BREAK_FILE.write_text(json.dumps({"modes": modes, "until": until}))
+        for m in running:
+            switch(PREFIX + m, on=False)
+        running = modes
+    sz_follow(cfg, running_modes(cfg), switched=True)
+    back = f"; {', '.join(running)} starts again then" if running else ""
+    notify(f"focus: open until {end:%H:%M}{back}")
+    return span
+
+
+def window_end(cfg: dict) -> bool:
+    """After a window, point ScreenZen back at what runs, so the pauses return even
+    when no mode comes back (one that does was already followed by end_break)."""
+    w = read_state(WINDOW_FILE) or {}
+    until = w.get("until")
+    if not isinstance(until, (int, float)) or time.time() < until or w.get("done"):
+        return False
+    # Marked done only once ScreenZen has been pointed back, so a failed read or a
+    # failed write is retried by the next tick (catch_up reports the error).
+    if not running_modes(cfg) and not sz_follow(cfg, [], switched=True):
+        return False
+    write_state(WINDOW_FILE, {**w, "done": True})
+    return True
 
 
 if __name__ == "__main__":
