@@ -96,8 +96,17 @@ func onlineBuiltinID() -> CGDirectDisplayID? {
 
 func builtinIsOn() -> Bool { onlineBuiltinID() != nil }
 
+// With the built-in disabled and the last real monitor unplugged, WindowServer
+// does not report zero displays: it brings up a placeholder whose vendor and
+// model read as ASCII "unkn" / "virt" (0x756E6B6E / 0x76697274), serial 0. It
+// shows nothing, so it must not count as an external, or the watcher never sees
+// "last external gone" and leaves the screen dark (seen 2026-11-19, macOS 26).
+func isPlaceholder(_ id: CGDirectDisplayID) -> Bool {
+    CGDisplayVendorNumber(id) == 0x756E_6B6E && CGDisplayModelNumber(id) == 0x7669_7274
+}
+
 func externals() -> [CGDirectDisplayID] {
-    onlineDisplays().filter { CGDisplayIsBuiltin($0) == 0 }
+    onlineDisplays().filter { CGDisplayIsBuiltin($0) == 0 && !isPlaceholder($0) }
 }
 
 // A closed lid also takes the built-in screen offline; read it so "off" is honest.
