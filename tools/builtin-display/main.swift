@@ -272,8 +272,9 @@ func trial(seconds: UInt32) {
 // Run by the login agent (`builtin-display auto on`). It acts only on two
 // transitions, so a manual choice sticks until the next plug event:
 //   - an external display that was not connected before appears -> screen off
-//   - the last external display goes away -> screen back on, so you are never
-//     left with no visible screen
+//   - no external display is present (lid open, built-in off) -> screen back
+//     on. This one is checked on every poll, not only on the unplug event, so
+//     you are never left with no visible screen
 // `builtin-display on` while the Studio Display stays connected is therefore
 // left alone. Reconfiguration events arrive in bursts, so each burst is handled
 // once, 2 s after it settles.
@@ -313,11 +314,18 @@ func reconcile() {
         } else {
             log("external display \(added.sorted()) connected; built-in screen off")
         }
-    } else if now.isEmpty, !knownExternals.isEmpty, !builtinIsOn(), !lidClosed(), let id = savedBuiltinID() {
+    } else if now.isEmpty, !builtinIsOn(), !lidClosed() {
+        // A state rule, not a transition: whenever no real external is present,
+        // the lid is open and the built-in is off, turn it on. The 2 s poll
+        // re-checks it, so a missed unplug event, a placeholder display, an
+        // agent restart while unplugged, or a failed enable all heal on the
+        // next tick instead of leaving the screen dark. ID 1 is the built-in's
+        // usual ID on Apple silicon, a fallback only if the state file is gone.
+        let id = savedBuiltinID() ?? 1
         if let error = trySetEnabled(id, true) {
-            log("last external display gone; turning built-in on FAILED: \(error)")
+            log("no external display; turning built-in on FAILED (retrying next poll): \(error)")
         } else {
-            log("last external display gone; built-in screen on")
+            log("no external display; built-in screen on")
         }
     }
 }
