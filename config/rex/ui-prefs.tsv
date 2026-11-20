@@ -3,6 +3,9 @@
 # `rex-prefs apply` writes these rows into Rex (deploy.sh --rex runs capture, then apply).
 # Change a setting in Rex Settings and it reaches git on the next sync; a row deleted here is not unset in Rex.
 # key	type	value
+activityGrouping	string	priority
+activityGroupingResetToPriority	bool	true
+animationStyle	string	snappy
 appIconVisibility	string	dockAndMenuBar
 darkThemeID	string	static-noir
 inactivePaneFadeMode	string	both
@@ -18,7 +21,8 @@ tabStyle	string	horizontal
 tabsFillAvailableSpace	bool	false
 terminalCopyOnSelect	bool	true
 terminalCursorStyle	string	bar
-terminalFontPointSize	float	13
+terminalFontPointSize	float	16
+terminalFontSmoothing	bool	false
 terminalPaddingColor	string	extend-always
 terminalPaddingX	float	10
 terminalPaddingY	float	10

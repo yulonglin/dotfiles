@@ -187,7 +187,7 @@
       },
       {
         "model": "gemini",
-        "label": "Gemini 4 Carbon",
+        "label": "Gemini 4 Neon",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -989,7 +989,7 @@
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
     "gpt-6.2-astra": {
       "autoCompactWindow": 258400
@@ -1009,10 +1009,13 @@
     "gpt-6-astra-fast": {
       "autoCompactWindow": 258400
     },
-    "gemini-4-carbon": {
+    "gemini-4-neon": {
       "autoCompactWindow": 1000000
     },
     "gemini": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini-4-carbon": {
       "autoCompactWindow": 1000000
     },
     "gemini-4-argon": {
@@ -1132,6 +1135,7 @@
     "enabled": true,
     "mode": "hold"
   },
+  "prefersReducedMotion": false,
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
@@ -1146,8 +1150,9 @@
   "theme": "auto",
   "editorMode": "normal",
   "verbose": false,
+  "autoCompactEnabled": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": false,
+  "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
