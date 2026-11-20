@@ -1420,11 +1420,12 @@ def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
     print(f"started {target!r}")
 
 
-def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
+def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> bool:
     """Point ScreenZen's allow list at the running modes. Cold Turkey has already switched,
-    so a ScreenZen failure is reported without undoing that."""
+    so a ScreenZen failure is reported without undoing that. Return whether the write
+    was made or handed to the background writer."""
     if not Path(f"{SZ_DOMAIN}.plist").exists():
-        return  # ScreenZen is not installed here
+        return True  # ScreenZen is not installed here
     # A person is never gated, so nothing needs the answer before focus returns, and the
     # relaunch takes over a second. An agent stays in the foreground: it has to see the
     # gate's result.
@@ -1436,7 +1437,7 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
                 f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen", "32"
             )
         )
-        return
+        return True
     try:
         loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
         # When the mode really changed, allowing its own sites is what the switch already
@@ -1471,10 +1472,12 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> None:
                 print(
                     "ScreenZen not updated yet; run 'focus screenzen' after the wait."
                 )
-                return
+                return False
         cmd_screenzen(cfg, dry_run=False, gated=False, modes=modes, quiet=True)
+        return True
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         print(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+        return False
 
 
 def cmd_sz_apply(cfg: dict) -> None:
@@ -4167,6 +4170,8 @@ def default_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         return None
     if not start <= now.strftime("%H:%M") < until:
         return None
+    if in_window(cfg, now):  # an open window wins; the day is not marked, so the
+        return None  # default can still start after the window, inside its span
     today = now.strftime("%Y-%m-%d")
     if (read_state(DEFAULT_FILE) or {}).get("date") == today:
         return None
@@ -4198,6 +4203,8 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if DAY_NAMES[now.weekday()] not in (d.get("days") or DAY_NAMES):
         return None
     if not str(d["start"]) <= now.strftime("%H:%M") < str(d["until"]):
+        return None
+    if in_window(cfg, now):  # an open window wins, as for default_start
         return None
     today = now.strftime("%Y-%m-%d")
     if (read_state(SCHEDULED_FILE) or {}).get("date") == today:
@@ -4238,16 +4245,26 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     write_state(WINDOW_FILE, {"key": key, "until": end.timestamp()})
     if read_commit() or read_only():
         return None
+    # A capped stretch ends here: the window comes back to where the stretch would have
+    # gone, so the capped mode never returns without its cap.
+    swap: dict[str, str | None] = {}
+    if c := read_capped():
+        swap[c["mode"]] = capped_target(cfg, c)
+        clear_capped()
     blocks = read_blocks()
     running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
-    if running:
-        b = read_break() or {"modes": [], "until": 0}
-        modes = list(dict.fromkeys(b["modes"] + running))
+    b = read_break()
+    if running or (b and time.time() < b["until"]):
+        b = b or {"modes": [], "until": 0}
+        back = [swap.get(m, m) for m in b["modes"] + running]
+        modes = list(dict.fromkeys(m for m in back if m))
+        # An earlier break that ends inside the window is stretched to its end.
         until = max(b["until"], end.timestamp())
         BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
         BREAK_FILE.write_text(json.dumps({"modes": modes, "until": until}))
         for m in running:
             switch(PREFIX + m, on=False)
+        running = modes
     sz_follow(cfg, running_modes(cfg), switched=True)
     back = f"; {', '.join(running)} starts again then" if running else ""
     notify(f"focus: open until {end:%H:%M}{back}")
@@ -4261,9 +4278,11 @@ def window_end(cfg: dict) -> bool:
     until = w.get("until")
     if not isinstance(until, (int, float)) or time.time() < until or w.get("done"):
         return False
+    # Marked done only once ScreenZen has been pointed back, so a failed read or a
+    # failed write is retried by the next tick (catch_up reports the error).
+    if not running_modes(cfg) and not sz_follow(cfg, [], switched=True):
+        return False
     write_state(WINDOW_FILE, {**w, "done": True})
-    if not running_modes(cfg):
-        sz_follow(cfg, [], switched=True)
     return True
 
 

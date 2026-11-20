@@ -3144,3 +3144,61 @@ def test_a_commitment_keeps_the_window_closed(capped_env, tmp_path):
 def test_a_bad_window_is_refused(tmp_path):
     with pytest.raises(SystemExit, match="windows"):
         ct.load_config(note_with(tmp_path, 'windows: ["12:30"]'))
+
+
+def test_a_window_ends_a_capped_stretch_and_comes_back_to_the_mode_before_it(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    clock.now = dt.datetime(2026, 11, 17, 12, 15).timestamp()
+    ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: writing"]
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    ct.window_start(cfg, at)
+    assert on(blocks) == [] and ct.read_capped() is None
+    assert ct.read_break()["modes"] == ["research"]
+    # whichever runs first at the end, writing never comes back without its cap
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.end_capped(cfg)
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_break_that_ends_inside_a_window_is_stretched_to_its_end(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, WINDOWS))
+    ct.switch("mode: research", on=False)
+    end_of_break = dt.datetime(2026, 11, 17, 12, 40).timestamp()
+    ct.BREAK_FILE.write_text(json.dumps({"modes": ["research"], "until": end_of_break}))
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    ct.window_start(cfg, at)
+    assert ct.read_break()["until"] == dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    clock.now = end_of_break
+    ct.catch_up(cfg)
+    assert on(blocks) == []  # still open at 12:40
+
+
+def test_automatic_starts_wait_for_an_open_window(capped_env, tmp_path):
+    _, blocks, _, _, _ = capped_env
+    sched = 'scheduled_mode: {mode: writing, start: "12:00", until: "13:30"}'
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS + "\n" + sched))
+    assert ct.scheduled_start(cfg, dt.datetime(2026, 11, 17, 12, 45)) is None
+    assert on(blocks) == ["mode: research"]
+    assert ct.read_state(ct.SCHEDULED_FILE) is None  # the day is not used up
+
+
+def test_a_window_close_that_fails_is_retried(capped_env, tmp_path, monkeypatch):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, WINDOWS))
+    ct.switch("mode: research", on=False)
+    ct.write_state(ct.WINDOW_FILE, {"key": "k", "until": clock.now - 1})
+    results = [False, True]
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: results.pop(0))
+    assert ct.window_end(cfg) is False
+    assert ct.window_end(cfg) is True
+    assert ct.window_end(cfg) is False and results == []  # done: no third write
