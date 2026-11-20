@@ -14,6 +14,7 @@ _meta:
 default:
 - shortcut: fm.jog
   phrase: turning off my video to head to the office. internet might be patchy, but will check in at the end!
+  uid: 4860CC16-E0BA-4E64-9D83-CE5C9DA813AC
 - shortcut: omw
   phrase: on my way
   uid: 785E7704-6FA7-437C-A1CE-25402841A249

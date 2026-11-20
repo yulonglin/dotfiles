@@ -77,11 +77,35 @@ if [ -n "$LOCKFILE_CHANGED" ]; then
     fi
 
     # pip-audit (Python lockfiles)
-    if command -v pip-audit &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^(uv\.lock|poetry\.lock|Pipfile\.lock)'; then
-        if ! pip-audit 2>/dev/null; then
-            echo "Pre-commit: pip-audit found vulnerabilities. Review above."
-            echo "  To bypass: git commit --no-verify"
-            exit 1
+    # Audit the repo's uv.lock, not the environment pip-audit runs in — a bare
+    # `pip-audit` audits its own tool venv, so it flagged the same urllib3 in
+    # every repo. Exit 1 means findings and blocks; any other failure (sandboxed
+    # cache dir, network, export error) is a broken tool run, so warn and skip,
+    # as the socket block above does.
+    if command -v pip-audit &>/dev/null && command -v uv &>/dev/null && echo "$LOCKFILE_CHANGED" | grep -qE '^uv\.lock'; then
+        PA_REQ=$(mktemp "${TMPDIR:-/tmp}/pip-audit-req.XXXXXX")
+        if uv export -q --frozen --no-hashes --no-emit-project --all-extras --all-groups --format requirements-txt -o "$PA_REQ" 2>/dev/null; then
+            # Explicit status capture: a failing command substitution would abort under `set -e`.
+            PA_OUT=$(pip-audit -r "$PA_REQ" --no-deps --disable-pip --progress-spinner off \
+                --cache-dir "${XDG_CACHE_HOME:-$HOME/.cache}/pip-audit" 2>&1) && PA_RC=0 || PA_RC=$?
+            rm -f "$PA_REQ"
+            # Only a finding with a fix version blocks: one with no fix yet would
+            # block every uv.lock commit in the repo with nothing to upgrade to.
+            PA_FIXABLE=$(sed -n '/^-------/,$p' <<<"$PA_OUT" | awk 'NR>1 && NF>=4')
+            if [ $PA_RC -eq 1 ] && grep -qE '^Name +Version +ID' <<<"$PA_OUT"; then
+                echo "$PA_OUT" | sed -n '/^Name /,$p'
+                if [ -n "$PA_FIXABLE" ]; then
+                    echo "Pre-commit: pip-audit found vulnerabilities with fixes in uv.lock. Review above."
+                    echo "  To bypass: git commit --no-verify"
+                    exit 1
+                fi
+                echo "Pre-commit: pip-audit findings above have no fix release yet — not blocking."
+            elif [ $PA_RC -ne 0 ]; then
+                echo "Pre-commit: pip-audit did not run cleanly on uv.lock (exit $PA_RC) — skipping. Last line: $(echo "$PA_OUT" | tail -1)"
+            fi
+        else
+            rm -f "$PA_REQ"
+            echo "Pre-commit: 'uv export --frozen' failed on uv.lock — skipping pip-audit."
         fi
     fi
 fi
@@ -459,6 +483,75 @@ _check_markdown_hard_wrap() {
     return 1
 }
 
+# === ALWAYS-ON GUARD TESTS ===
+#
+# The bundled-skills check and this repo's CLAUDE.md budget ran only in CI, where
+# a red run on a direct push to main blocks nothing. Main stayed red for 19 days
+# (2026-10-15 to 2026-11-03), so every later failure was invisible too. Running
+# them here stops the commit that breaks them, on the machine that made the
+# edit, including dotfiles-sync's automatic commits. (The global tier's total
+# byte ceiling was removed the same day; Claude Code's startup warning owns size.)
+#
+# Repo-scoped: a no-op unless the repo carries these test files. It judges the
+# STAGED content: CLAUDE.md, settings.json and the tests are copied out of the
+# index into a temp tree and the tests run there. A missing runner is a
+# failure, not a skip: a guard that silently stops running looks like a pass.
+
+_check_always_on_guards() {
+    local repo_root="$1"
+    local budget_test="tests/test_memory_tier_budget.py"
+    local settings_test="tests/test_validate_claude_settings.py"
+    [ -f "${repo_root}/${budget_test}" ] || return 0
+
+    local staged
+    staged=$(git diff --cached --name-only 2>/dev/null || true)
+    local nodes=()
+    if printf '%s\n' "${staged}" | grep -qxE "CLAUDE\.md|${budget_test}"; then
+        nodes+=("${budget_test}::test_repo_claude_md_total")
+    fi
+    if [ -f "${repo_root}/${settings_test}" ] \
+        && printf '%s\n' "${staged}" | grep -qxE "claude/settings\.json|${settings_test}"; then
+        nodes+=("${settings_test}::test_bundled_skills_enabled_but_claude_api_off")
+    fi
+    [ ${#nodes[@]} -eq 0 ] && return 0
+
+    local -a runner
+    if command -v uv &>/dev/null; then
+        runner=(uv run --quiet --no-project --with pytest python -m pytest)
+    elif python3 -c 'import pytest' &>/dev/null; then
+        runner=(python3 -m pytest)
+    else
+        echo ""
+        echo "⛔  Pre-commit: the always-on guard tests need pytest and nothing can run it."
+        echo "    Install uv (preferred) or pytest for python3, then commit again."
+        echo ""
+        return 1
+    fi
+
+    local snap
+    snap=$(mktemp -d "${TMPDIR:-/tmp}/always-on-guards.XXXXXX")
+    # A pathspec that matches nothing in the index makes ls-files print nothing,
+    # which is fine: the glob in the test then sees no file there.
+    git ls-files -z -- claude/settings.json CLAUDE.md "${budget_test}" "${settings_test}" \
+        | git checkout-index -z --stdin --prefix="${snap}/"
+    local out rc=0
+    out=$(cd "${snap}" && "${runner[@]}" -q -p no:cacheprovider "${nodes[@]}" 2>&1) || rc=$?
+    rm -rf "${snap}"
+    [ ${rc} -eq 0 ] && return 0
+
+    echo ""
+    echo "⛔  Pre-commit: an always-on guard failed on the staged content"
+    printf '%s\n' "${out}" | grep -E "^(E |FAILED)" | head -30 | sed 's/^/    /'
+    echo ""
+    echo "    Repo CLAUDE.md over budget: its Learnings take transient state only;"
+    echo "    move anything durable to the file that owns the topic."
+    echo "    Re-run: python -m pytest ${nodes[*]}"
+    echo ""
+    echo "    To bypass: git commit --no-verify"
+    echo ""
+    return 1
+}
+
 # === ZSH SYNTAX CHECK ===
 #
 # ShellCheck cannot parse zsh (SC1071), so a zsh file's only static check is
@@ -525,6 +618,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 
 if [ -n "$REPO_ROOT" ]; then
     _check_markdown_hard_wrap "$REPO_ROOT" || exit 1
+    _check_always_on_guards "$REPO_ROOT" || exit 1
 
     # Check for pre-commit framework config
     if [ -f "$REPO_ROOT/.pre-commit-config.yaml" ] && command -v pre-commit &> /dev/null; then

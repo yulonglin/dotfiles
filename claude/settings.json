@@ -162,6 +162,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "opus",
   "modelPicker": {
     "options": [
       {
@@ -170,8 +171,8 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-fable-5-1",
-        "label": "Fable 5.1",
+        "model": "claude-fable-5-2",
+        "label": "Fable 5.2",
         "description": "Claude subscription"
       },
       {
@@ -180,23 +181,23 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-opus-4-6",
-        "label": "Opus 4.6",
-        "description": "Claude subscription"
-      },
-      {
         "model": "astra",
-        "label": "GPT-6 Astra",
+        "label": "GPT-6.2 Astra",
         "description": "ChatGPT subscription (Codex)"
       },
       {
+        "model": "gemini",
+        "label": "Gemini 4 Carbon",
+        "description": "OpenRouter, pay per token"
+      },
+      {
         "model": "sol",
-        "label": "GPT-6.1 Sol",
+        "label": "GPT-6.2 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
         "model": "kimi",
-        "label": "Kimi K3",
+        "label": "Kimi K3.1 Pro",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -215,11 +216,6 @@
         "description": "OpenRouter, pay per token"
       },
       {
-        "model": "gemini",
-        "label": "Gemini 4 Argon",
-        "description": "OpenRouter, pay per token"
-      },
-      {
         "model": "qwen",
         "label": "Qwen3.8 Max",
         "description": "OpenRouter, pay per token"
@@ -229,11 +225,19 @@
         "label": "DeepSeek V4.1 Flash",
         "description": "OpenRouter, pay per token"
       }
-    ],
-    "replaceBuiltInOptions": true
+    ]
   },
   "skillOverrides": {
-    "claude-api": "off"
+    "claude-api": "off",
+    "learn-quiz": "off",
+    "deslop": "off",
+    "docs-search": "off",
+    "review-pr-queue": "off",
+    "mv-repo": "off",
+    "setup-channel": "off",
+    "ship": "off",
+    "auto-mode-probe": "off",
+    "update-auto-mode": "off"
   },
   "disableBundledSkills": false,
   "hooks": {
@@ -248,7 +252,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run permissions.approval-classifier -- $HOME/.claude/hooks/with-anthropic-key.sh python3 $HOME/.claude/hooks/approval_classifier.py",
             "timeout": 30
           }
         ]
@@ -638,6 +642,12 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.context-review -- $HOME/.claude/hooks/nudge_context_review.zsh",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.dotfiles-sync -- $HOME/.claude/hooks/nudge_dotfiles_sync.sh",
             "timeout": 5,
             "async": true
@@ -672,6 +682,15 @@
             "command": "python3 \"$HOME/.claude/hooks/check_model_router_update.py\"",
             "timeout": 75,
             "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'rex __internal session-start --agent claude --feature-session-naming=false 2>/dev/null || true'",
+            "timeout": 5
           }
         ]
       }
@@ -754,24 +773,31 @@
     "codex@codex-plugin-cc": true,
     "core@ai-safety-plugins": false,
     "dev-browser@dev-browser-marketplace": false,
-    "hookify@claude-plugins-official": true,
+    "hookify@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
     "model-router@alignment-hive": true,
-    "playground@claude-plugins-official": true,
+    "playground@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": false,
     "remember@claude-plugins-official": true,
     "research@ai-safety-plugins": false,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "things-mcp@productivity-tools": true,
-    "typescript-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": false,
     "viz@ai-safety-plugins": false,
     "workflow@ai-safety-plugins": false,
     "writing@ai-safety-plugins": false,
-    "frontend-design@claude-plugins-official": true,
-    "cc-plugin-you-should-know@builtin": true
+    "frontend-design@claude-plugins-official": false,
+    "cc-plugin-you-should-know@builtin": true,
+    "figma@synced": false,
+    "engineering@synced": false,
+    "exa@synced": false,
+    "pdf-viewer@synced": false,
+    "design@synced": false,
+    "product-management@synced": false,
+    "productivity@synced": false
   },
   "extraKnownMarketplaces": {
     "alignment-hive": {
@@ -815,6 +841,8 @@
         "github.com",
         "api.github.com",
         "raw.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com",
         "mcp.linear.app",
         "export.arxiv.org",
         "arxiv.org",
@@ -963,40 +991,106 @@
     "claude-opus-5-5": {
       "effortLevel": "high"
     },
-    "gpt-6-astra": {
+    "gpt-6.2-astra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-astra-fast": {
       "autoCompactWindow": 258400
     },
     "astra": {
       "autoCompactWindow": 258400
     },
+    "astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-astra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gemini-4-carbon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
     "gpt-6.1-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol": {
       "autoCompactWindow": 258400
     },
+    "sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-terra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-terra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "terra": {
+      "autoCompactWindow": 258400
+    },
+    "terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol6": {
       "autoCompactWindow": 258400
     },
+    "sol6-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-terra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-5.6-terra-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-luna": {
       "autoCompactWindow": 258400
     },
-    "kimi-k3": {
+    "gpt-5.6-luna-fast": {
+      "autoCompactWindow": 258400
+    },
+    "kimi-k3.1-pro": {
       "autoCompactWindow": 250000
     },
     "kimi": {
+      "autoCompactWindow": 250000
+    },
+    "kimi-k3": {
       "autoCompactWindow": 250000
     },
     "glm-5.3": {
@@ -1016,12 +1110,6 @@
     },
     "grok": {
       "autoCompactWindow": 500000
-    },
-    "gemini-4-argon": {
-      "autoCompactWindow": 1000000
-    },
-    "gemini": {
-      "autoCompactWindow": 1000000
     },
     "qwen3.8-max": {
       "autoCompactWindow": 1000000
@@ -1057,7 +1145,7 @@
   ],
   "theme": "auto",
   "editorMode": "normal",
-  "verbose": true,
+  "verbose": false,
   "teammateMode": "in-process",
   "remoteControlAtStartup": false,
   "inputNeededNotifEnabled": true,

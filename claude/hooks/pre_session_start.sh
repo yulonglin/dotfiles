@@ -71,57 +71,64 @@ export PATH
 classify_ok=true
 classify_warnings=""
 
-if [[ ! -f "$CLASSIFY_RULES" ]]; then
-    classify_ok=false
-    classify_warnings+="approval classifier rules missing: $CLASSIFY_RULES"$'\n'
-fi
+# Skip the probe while the classifier is switched off in features.conf
+# (permissions.approval-classifier): its warnings would describe a hook that
+# never runs. hook_feature.py exits 1 only for an explicit off.
+classifier_rc=0
+python3 "$SCRIPT_DIR/hook_feature.py" enabled permissions.approval-classifier >/dev/null 2>&1 || classifier_rc=$?
+if [[ "$classifier_rc" -ne 1 ]]; then
+    if [[ ! -f "$CLASSIFY_RULES" ]]; then
+        classify_ok=false
+        classify_warnings+="approval classifier rules missing: $CLASSIFY_RULES"$'\n'
+    fi
 
-# Check if API key is available (same logic as with-anthropic-key.sh).
-# The helper can exit 0 having resolved nothing, so a zero status is NOT
-# evidence of a key — require actual output. Its stderr carries the reason
-# (ambiguous env name, stale cache, no BWS token), so keep it and surface it
-# below instead of discarding it: a probe that says "no key" without saying why
-# is what made this take days to diagnose.
-has_key=false
-key_error=""
-if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-    has_key=true
-elif [[ -x "$SECRETS_HELPER" ]]; then
-    # This hook runs under `set -e`, so a bare mktemp that fails would abort the
-    # WHOLE SessionStart hook — no degraded-classifier warning, no stale-doc
-    # checks — and $TMPDIR is genuinely unwritable under the Claude Code sandbox.
-    # Try the plausible dirs, and if none works, still probe: losing the reason
-    # is acceptable, losing every other session warning is not.
-    key_probe_err=""
-    for _probe_dir in "${TMPDIR:-/tmp}" /tmp "$HOME/.cache/claude"; do
-        [[ -d "$_probe_dir" ]] || continue
-        if key_probe_err=$(mktemp "$_probe_dir/claude-keyprobe.XXXXXX" 2>/dev/null); then
-            break
-        fi
+    # Check if API key is available (same logic as with-anthropic-key.sh).
+    # The helper can exit 0 having resolved nothing, so a zero status is NOT
+    # evidence of a key — require actual output. Its stderr carries the reason
+    # (ambiguous env name, stale cache, no BWS token), so keep it and surface it
+    # below instead of discarding it: a probe that says "no key" without saying why
+    # is what made this take days to diagnose.
+    has_key=false
+    key_error=""
+    if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+        has_key=true
+    elif [[ -x "$SECRETS_HELPER" ]]; then
+        # This hook runs under `set -e`, so a bare mktemp that fails would abort the
+        # WHOLE SessionStart hook — no degraded-classifier warning, no stale-doc
+        # checks — and $TMPDIR is genuinely unwritable under the Claude Code sandbox.
+        # Try the plausible dirs, and if none works, still probe: losing the reason
+        # is acceptable, losing every other session warning is not.
         key_probe_err=""
-    done
-    if [[ -n "$key_probe_err" ]]; then
-        if [[ -n "$("$SECRETS_HELPER" shell ANTHROPIC_API_KEY 2>"$key_probe_err")" ]]; then
+        for _probe_dir in "${TMPDIR:-/tmp}" /tmp "$HOME/.cache/claude"; do
+            [[ -d "$_probe_dir" ]] || continue
+            if key_probe_err=$(mktemp "$_probe_dir/claude-keyprobe.XXXXXX" 2>/dev/null); then
+                break
+            fi
+            key_probe_err=""
+        done
+        if [[ -n "$key_probe_err" ]]; then
+            if [[ -n "$("$SECRETS_HELPER" shell ANTHROPIC_API_KEY 2>"$key_probe_err")" ]]; then
+                has_key=true
+            else
+                key_error=$(tr '\n' ' ' < "$key_probe_err" | cut -c1-300)
+            fi
+            rm -f "$key_probe_err"
+        elif [[ -n "$("$SECRETS_HELPER" shell ANTHROPIC_API_KEY 2>/dev/null)" ]]; then
             has_key=true
         else
-            key_error=$(tr '\n' ' ' < "$key_probe_err" | cut -c1-300)
+            key_error="(no writable temp dir to capture the reason — run: dotfiles-secrets shell ANTHROPIC_API_KEY)"
         fi
-        rm -f "$key_probe_err"
-    elif [[ -n "$("$SECRETS_HELPER" shell ANTHROPIC_API_KEY 2>/dev/null)" ]]; then
-        has_key=true
-    else
-        key_error="(no writable temp dir to capture the reason — run: dotfiles-secrets shell ANTHROPIC_API_KEY)"
     fi
-fi
 
-if ! $has_key; then
-    classify_ok=false
-    # Not a dead end any more: without a key the classifier falls back to the
-    # Claude subscription (`claude -p`), which still auto-approves but takes
-    # ~9s per call instead of ~1s. Still worth a warning — it is a real
-    # slowdown, and the fallback fails too if the CLI is not logged in.
-    classify_warnings+="approval classifier has NO API key — falling back to the slower subscription backend (~9s/call). Fix: secrets-use ANTHROPIC_API_KEY <key> (NOT setup-envrc — a repo .envrc binding leaks the key into every session launched there and disables the claude.ai connectors)"$'\n'
-    [[ -n "$key_error" ]] && classify_warnings+="  reason: $key_error"$'\n'
+    if ! $has_key; then
+        classify_ok=false
+        # Not a dead end any more: without a key the classifier falls back to the
+        # Claude subscription (`claude -p`), which still auto-approves but takes
+        # ~9s per call instead of ~1s. Still worth a warning — it is a real
+        # slowdown, and the fallback fails too if the CLI is not logged in.
+        classify_warnings+="approval classifier has NO API key — falling back to the slower subscription backend (~9s/call). Fix: secrets-use ANTHROPIC_API_KEY <key> (NOT setup-envrc — a repo .envrc binding leaks the key into every session launched there and disables the claude.ai connectors)"$'\n'
+        [[ -n "$key_error" ]] && classify_warnings+="  reason: $key_error"$'\n'
+    fi
 fi
 
 # --- Collect warnings ---

@@ -27,10 +27,12 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Add an interactive menu or picker to a script | Short known list → `claude-tools select --items FILE` (`group\|name\|description\|checked`, `--single` for one pick); long list you type to narrow → `fzf`. Never pipe items on stdin: that makes fd 0 a pipe and forces crossterm onto its `/dev/tty` fallback. Conventions in [`docs/tui-tools.md`](docs/tui-tools.md) |
 | Add an encrypted secret | `secrets edit` (interactive fzf editor) |
 | Add, remove or switch off a foreign model (picker row, agent, route), or put an older Claude model in `/model` (`provider = "anthropic"`) | Edit `config/model-router.toml` → `model-router-wire apply` (renders router config, picker rows and `claude/agents/` files; `status` shows drift) → `tests/test_model_router_gateway.sh` |
+| Show or hide `/model` rows, or keep/replace Claude Code's built-in lineup | `model-router-wire picker` (checkbox menu; `--on ID`, `--off ID`, `--built-in on\|off` without a terminal). Writes `picker = false` lines in `config/model-router.toml` and applies |
 | Start or adopt a research project hub (`~/projects/<name>/{code,paper,data,runs,…}`) | `project-hub new <name>`, `project-hub adopt <name> code=<path>`, `project-hub tier <name>/code logs`, `project-hub doctor` — layout in the `server-storage-tiering` skill |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
 | Load less global memory (rules, CLAUDE.md) | `claude-memory minimal\|none\|full`; bare `claude-memory` shows sizes — [`docs/terminal-and-dev-tools.md`](docs/terminal-and-dev-tools.md) |
 | Check or repair hard-wrapped Markdown | `md-unwrap --check claude/` (gated in pre-commit and CI); `md-unwrap --fix <path>` |
+| Find unused Mac apps and formulae | `app-usage [--days N] [--json]` (read-only; run in a terminal, outside the sandbox) |
 | Find a cloud resource left running | `cloud-spend-check --days 14` (daily timer + session nudge; flags flat daily spend) — [`docs/cloud-spend-check.md`](docs/cloud-spend-check.md) |
 | Commit / commit + push + PR | `/commit` skill or `/commit-push-sync` |
 | Merge worktree → parent branch | `cwmerge` (or `git merge <branch>` from the parent if the branch isn't `worktree-` prefixed) |

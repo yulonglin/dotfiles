@@ -10,7 +10,7 @@ Invoke via `uv run` (`--no-sync` when deps are unchanged); read `.eval` logs wit
 
 **Parallelize embarrassingly parallel loops by default** — background N independent iterations and wait (`asyncio.gather`, `Promise.all`, `cmd & … wait`). Sequential only for real ordering dependencies, shared mutable state, or OS-level exclusivity.
 
-**Deliver as commit → push → PR → review → merge.** The `pr_after_push` hook opens a draft PR. **Review is 1–2 rounds**: must-fix changes a real output (a label, a number, what a user or monitor sees) or is a real security risk, shown on real data; a constructed attack is a follow-up listed in the PR. Merge it yourself when simple (docs, rules, one file, tests green, nothing under settings, hooks or secrets), else ask. Merges never block results.
+**Deliver as commit → push → PR → review → merge.** The `pr_after_push` hook opens a draft PR. **Review is 1–2 rounds**: must-fix changes a real output (a label, a number, what a user or monitor sees) or is a real security risk, shown on real data; a constructed attack is a follow-up listed in the PR. Merge it yourself when simple (docs, rules, one file, tests green, nothing under settings, hooks or secrets), else ask. **Mark the draft ready (`gh pr ready <n>`) before merging or handing it to Yulong** — a PR left in draft reads as unfinished. Merges never block results.
 
 **Shell scripts are zsh** (`#!/usr/bin/env zsh`): modern everywhere without Homebrew, unlike bash 5 on a Mac. Existing bash converts when touched; the cloud bootstrap stays bash since it installs zsh. `shellcheck` bash files; it cannot parse zsh, so a zsh file gets `zsh -n` (pre-commit runs it), never a `# shellcheck shell=bash` line. Idioms agents get wrong:
 

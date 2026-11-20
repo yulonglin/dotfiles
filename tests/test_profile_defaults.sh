@@ -348,7 +348,8 @@ test_no_scheduled_jobs_in_ephemeral_profiles() {
     local scheduled=(DEPLOY_CLEANUP DEPLOY_CLAUDE_CLEANUP DEPLOY_AI_UPDATE
                      DEPLOY_BREW_UPDATE DEPLOY_USAGE_PING DEPLOY_TMUX_RESUME
                      DEPLOY_MCP_SYNC DEPLOY_DEP_AUDIT DEPLOY_STALE_CLAIMS
-                     DEPLOY_SECRETS DEPLOY_DOTFILES_SYNC DEPLOY_ALFRED)
+                     DEPLOY_SECRETS DEPLOY_DOTFILES_SYNC DEPLOY_ALFRED
+                     DEPLOY_FOCUS)
     for profile in standard agent bare; do
         local bad=""
         for var in "${scheduled[@]}"; do

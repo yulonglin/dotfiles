@@ -88,8 +88,9 @@ def load_endpoint() -> tuple[str, str]:
 def codex_routes() -> list[str]:
     """Routing ids served by the Codex provider, most specific first.
 
-    The generated config puts Codex routes in top-level [[models]]; the openai-providers
-    block is OpenRouter and is unaffected by this failure.
+    The generated config puts Codex routes in top-level [[model-overrides]] (the
+    deprecated [[models]] form until 2026-11-17, still read here); the
+    openai-providers block is OpenRouter and is unaffected by this failure.
     """
     config = Path(
         os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
@@ -99,7 +100,8 @@ def codex_routes() -> list[str]:
             data = tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise CheckError("could not read the router config.") from exc
-    routes = [m["routing-id"] for m in data.get("models", []) if m.get("routing-id")]
+    entries = [*data.get("model-overrides", []), *data.get("models", [])]
+    routes = [m["routing-id"] for m in entries if m.get("routing-id")]
     if not routes:
         raise CheckError("no Codex routes configured; nothing to check.")
     return routes

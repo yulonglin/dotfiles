@@ -83,6 +83,31 @@ SELECT_JS = """() => {
 
 POP_OPEN = "() => getComputedStyle(document.getElementById('anPop')).display === 'block'"
 
+# The layer starts off, so a reader who never touched the switch gets no box.
+# Nearly every test here is about the box, so their pages start as if the
+# reader had switched it on: the first read of each `an-on:` key stores "1".
+# The seeding happens once per key, so a later switch-off (which removes the
+# key) survives a reload and the off-state tests stay honest. The default
+# itself is tested on a bare context in
+# `test_the_layer_starts_off_until_the_reader_switches_it_on`.
+LAYER_ON_BY_DEFAULT = """(() => {
+  const get = Storage.prototype.getItem;
+  Storage.prototype.getItem = function(k){
+    k = String(k);
+    if (k.startsWith("an-on:") && get.call(this, "test-seeded:" + k) === null) {
+      this.setItem("test-seeded:" + k, "1");
+      this.setItem(k, "1");
+    }
+    return get.call(this, k);
+  };
+})();"""
+
+
+def layer_on_context(browser, **kwargs):
+    ctx = browser.new_context(**kwargs)
+    ctx.add_init_script(LAYER_ON_BY_DEFAULT)
+    return ctx
+
 
 @pytest.fixture(scope="module")
 def site(tmp_path_factory) -> str:
@@ -156,7 +181,7 @@ def browser():
 
 @pytest.fixture
 def page(browser, site):
-    ctx = browser.new_context()
+    ctx = layer_on_context(browser)
     try:
         p = ctx.new_page()
         p.goto(site)
@@ -482,7 +507,7 @@ def test_a_half_typed_note_survives_a_forced_refresh(page) -> None:
 
 
 def test_copy_all_puts_markdown_on_the_clipboard(browser, site) -> None:
-    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    ctx = layer_on_context(browser, permissions=["clipboard-read", "clipboard-write"])
     try:
         p = ctx.new_page()
         p.goto(site)
@@ -640,7 +665,7 @@ def test_delete_all_works_where_the_viewer_suppresses_modals(browser, sandboxed_
     counter below is the load-bearing assertion: it must stay empty, because a
     dialog appearing again means the guard went back to being a modal.
     """
-    ctx = browser.new_context()
+    ctx = layer_on_context(browser)
     try:
         page = ctx.new_page()
         dialogs: list[str] = []
@@ -1099,6 +1124,30 @@ def test_the_badge_and_the_count_include_edits(page) -> None:
 # the reader can switch this layer off. Off hides; it must never lose work.
 
 
+def test_the_layer_starts_off_until_the_reader_switches_it_on(browser, site) -> None:
+    """Off is the default: the viewer's own comments answer the select-text
+    gesture until a reader asks for this layer, and that choice then sticks."""
+    ctx = browser.new_context()  # bare: no LAYER_ON_BY_DEFAULT
+    try:
+        page = ctx.new_page()
+        page.goto(site)
+        expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "false")
+        expect(page.locator("#anToggle")).to_have_text("Highlights off")
+        assert page.evaluate("() => document.documentElement.classList.contains('an-off')")
+        page.evaluate(SELECT_JS)
+        page.wait_for_timeout(400)  # absence: past the debounce
+        assert not page.evaluate(POP_OPEN)
+        page.evaluate("() => getSelection().removeAllRanges()")
+        page.click("#anToggle")
+        expect(page.locator("#anToggle")).to_have_text("Highlights on")
+        page.reload()
+        expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "true")
+        page.evaluate(SELECT_JS)
+        page.wait_for_function(POP_OPEN, timeout=3000)
+    finally:
+        ctx.close()
+
+
 def test_switched_off_a_selection_opens_no_box_and_highlights_go_quiet(page) -> None:
     add_comment(page, SELECT_SECOND_JS, "kept while off")
     page.click("#anToggle")
@@ -1131,7 +1180,7 @@ def test_the_switch_survives_a_reload_and_switches_back_on(page) -> None:
     expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "false")
     page.click("#anToggle")
     expect(page.locator("#anToggle")).to_have_attribute("aria-pressed", "true")
-    assert page.evaluate("() => localStorage.getItem('an-off:review-sample')") is None
+    assert page.evaluate("() => localStorage.getItem('an-on:review-sample')") == "1"
     page.evaluate(SELECT_JS)
     page.wait_for_function(POP_OPEN, timeout=3000)
 
@@ -1152,7 +1201,7 @@ def test_a_stored_draft_waits_out_the_off_state(page) -> None:
     page.wait_for_function(POP_OPEN, timeout=3000)
     page.fill("#anTxt", "drafted before switching off")
     page.dispatch_event("#anTxt", "input")
-    page.evaluate("() => localStorage.setItem('an-off:review-sample', '1')")
+    page.evaluate("() => localStorage.removeItem('an-on:review-sample')")
     page.reload()
     page.wait_for_timeout(400)
     assert not page.evaluate(POP_OPEN)
@@ -1178,7 +1227,7 @@ def test_a_panel_edit_while_off_cannot_lose_the_waiting_draft(page) -> None:
     page.evaluate(
         "() => { localStorage.setItem('review-sample', JSON.stringify("
         "  [{id: 7, where: 'x', quote: 'text gone after a republish', note: 'orphan'}]));"
-        "  localStorage.setItem('an-off:review-sample', '1'); }"
+        "  localStorage.removeItem('an-on:review-sample'); }"
     )
     page.reload()
     page.click("#anList .anbtn:has-text('edit')")
@@ -1203,7 +1252,7 @@ def test_a_panel_edit_of_the_comment_being_revised_keeps_the_revision(page, anch
         page.wait_for_function(POP_OPEN, timeout=3000)
         page.fill("#anTxt", "revised but not saved")
         page.dispatch_event("#anTxt", "input")
-        page.evaluate("() => localStorage.setItem('an-off:review-sample', '1')")
+        page.evaluate("() => localStorage.removeItem('an-on:review-sample')")
     else:
         # Off first: an on page's pagehide save would delete a draft planted
         # under its closed box before the reload ever reads it.
@@ -1227,7 +1276,7 @@ def test_a_panel_edit_of_the_comment_being_revised_keeps_the_revision(page, anch
 
 
 def test_the_export_carries_a_suggested_edits_section(browser, site) -> None:
-    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    ctx = layer_on_context(browser, permissions=["clipboard-read", "clipboard-write"])
     try:
         p = ctx.new_page()
         p.goto(site)
@@ -1249,7 +1298,7 @@ def test_the_export_carries_a_suggested_edits_section(browser, site) -> None:
 
 
 def test_a_deletion_exports_as_a_deletion(browser, site) -> None:
-    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    ctx = layer_on_context(browser, permissions=["clipboard-read", "clipboard-write"])
     try:
         p = ctx.new_page()
         p.goto(site)
@@ -1289,7 +1338,7 @@ def test_suggest_edit_works_where_the_viewer_suppresses_modals(
     ever asking in a frame with no `allow-modals`, which is how three controls
     shipped dead.
     """
-    ctx = browser.new_context()
+    ctx = layer_on_context(browser)
     try:
         page = ctx.new_page()
         dialogs: list[str] = []
@@ -1435,7 +1484,7 @@ def test_a_local_copy_downloads_itself(page) -> None:
 
 def test_download_shows_disabled_when_the_capability_is_not_granted(browser, site) -> None:
     """A public-link viewer sees the button, disabled, pointing at Copy HTML."""
-    ctx = browser.new_context(accept_downloads=True)
+    ctx = layer_on_context(browser, accept_downloads=True)
     try:
         p = ctx.new_page()
         downloads: list[object] = []
@@ -1462,7 +1511,7 @@ def test_download_saves_the_clean_page_without_the_readers_marks(browser, site) 
     the restore, or the next reader's quote anchors land inside this reader's
     insertions.
     """
-    ctx = browser.new_context()
+    ctx = layer_on_context(browser)
     try:
         p = ctx.new_page()
         p.add_init_script(DOWNLOADS_STUB)
@@ -1504,7 +1553,7 @@ def test_download_saves_the_clean_page_without_the_readers_marks(browser, site) 
 
 
 def test_copy_html_puts_the_page_on_the_clipboard(browser, site) -> None:
-    ctx = browser.new_context(permissions=["clipboard-read", "clipboard-write"])
+    ctx = layer_on_context(browser, permissions=["clipboard-read", "clipboard-write"])
     try:
         p = ctx.new_page()
         p.goto(site)

@@ -131,7 +131,7 @@ review_days = 14
 
 # Stamped by `council refresh --apply`. A date in the past by more than
 # `review_days` is what makes the nudge fire.
-reviewed = "2026-10-14"
+reviewed = "2026-11-16"
 
 # Everything between the markers is REWRITTEN mechanically by
 # `openrouter-cli council refresh --apply`. Edit by hand only to force a seat;
@@ -151,14 +151,14 @@ reviewed = "2026-10-14"
 #
 # BEGIN council-auto
 seats = [
-  { alias = "opus", slug = "anthropic/claude-opus-5.5", family = "anthropic", score = 1.0, basis = "eci" },
-  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 0.95, basis = "eci" },
-  { alias = "gemini", slug = "google/gemini-4-argon", family = "google", score = 0.92, basis = "eci" },
-  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 0.9, basis = "aa-only" },
-  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 0.75, basis = "eci" },
-  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 0.74, basis = "newest-within-ci" },
-  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 0.74, basis = "eci" },
-  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 0.73, basis = "eci" },
+  { alias = "opus", slug = "anthropic/claude-fable-5.2", family = "anthropic", score = 173.44, basis = "eci" },
+  { alias = "gemini", slug = "google/gemini-4-carbon", family = "google", score = 169.76, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6.2-astra", family = "openai", score = 0.0, basis = "newest-in-line" },
+  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 161.68, basis = "eci" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3.1-pro", family = "moonshotai", score = 161.37, basis = "eci" },
+  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 157.1, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 156.18, basis = "newest-within-ci" },
+  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.97, basis = "eci" },
 ]
 # END council-auto
 
@@ -198,6 +198,25 @@ alias = "deepseek-flash"
 [[models]]
 slug = "anthropic/claude-fable-5.1"
 alias = "fable"
+
+# XIAOMI MIMO. New family, released 2026-09-21: MiMo-V2.6-Pro is a 1.02T
+# omni-modal reasoning flagship (1M ctx, MIT, $0.43/$0.87). Addressable but NOT
+# seated: the council is capped at 8 families and every current seat is still
+# its family's newest flagship, so no seat is displaced to make room. Reach it
+# explicitly: `openrouter-cli ask mimo "..."`. A `-flash` tier (309B-A15B) also
+# exists; the Pro is the flagship and the one worth a ninth opinion.
+[[models]]
+slug = "xiaomi/mimo-v2.6-pro"
+alias = "mimo"
+
+# MINIMAX. New family: MiniMax-M3 (released 2026-06, 1M ctx, multimodal,
+# $0.30/$1.20, 80.5% SWE-bench per vendor). Addressable but NOT seated for the
+# same 8-family cap reason. M2 was never seated. Reach it: `openrouter-cli ask
+# minimax "..."`. A newer M3.1-Flash exists (2026-10-19) but only as a `:free`
+# tier, so the Pro-line M3 is the addressable one.
+[[models]]
+slug = "minimax/minimax-m3"
+alias = "minimax"
 
 # GPT-6.1 SOL. Scores 166.1 against the seated gpt-6-astra's 166.4 at a fifth of
 # the price ($2/$10 vs $10/$50); the seat goes by score, so astra keeps it.

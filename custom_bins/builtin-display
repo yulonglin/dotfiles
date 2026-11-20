@@ -1,0 +1,95 @@
+#!/usr/bin/env zsh
+# builtin-display — turn the MacBook's built-in screen off and on while the lid
+# stays open, so the built-in keyboard and trackpad keep working with an
+# external display. Free stand-in for BetterDisplay's "disconnect" and Lunar's
+# BlackOut, both paid. Logic lives in tools/builtin-display/main.swift; this
+# wrapper compiles it on first run (or when the source is newer) and execs it.
+# It also owns `auto on|off|status`, the login agent that runs `watch`.
+#
+#   builtin-display status | off | on | toggle | try [SECONDS] | auto on|off|status | --help
+set -euo pipefail
+
+if [[ $OSTYPE != darwin* ]]; then
+    print -u2 "builtin-display: macOS only"
+    exit 1
+fi
+
+SELF="${0:A}"
+DOT_DIR="${SELF:h:h}"
+SRC="${DOT_DIR}/tools/builtin-display/main.swift"
+BIN="${DOT_DIR}/tools/builtin-display/builtin-display"
+LABEL="com.user.builtin-display"
+PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+LOG="${HOME}/Library/Logs/builtin-display.log"
+DOMAIN="gui/$(id -u)"
+
+say() {  # say <colour> <text>: coloured only on a terminal without NO_COLOR
+    if [[ -t 1 && -z ${NO_COLOR:-} ]]; then print -P "%F{$1}$2%f"; else print -r -- "$2"; fi
+}
+
+agent_loaded() { launchctl print "${DOMAIN}/${LABEL}" >/dev/null 2>&1; }
+
+auto_on() {
+    mkdir -p "${PLIST:h}" "${LOG:h}"
+    cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${SELF}</string>
+        <string>watch</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>${LOG}</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG}</string>
+</dict>
+</plist>
+EOF
+    plutil -lint "$PLIST" >/dev/null
+    launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+    launchctl bootstrap "$DOMAIN" "$PLIST"
+    say green "auto: on — the built-in screen turns off whenever an external display connects"
+    print "  undo with: builtin-display auto off    log: $LOG"
+}
+
+auto_off() {
+    launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+    if [[ -f $PLIST ]]; then
+        if command -v trash >/dev/null 2>&1; then trash "$PLIST"; else rm -f "$PLIST"; fi
+    fi
+    say yellow "auto: off — agent removed; the screen stays as it is now (builtin-display on to restore)"
+}
+
+auto_status() {
+    if agent_loaded; then say green "auto: on (${LABEL} loaded)"; else say yellow "auto: off"; fi
+    [[ -f $LOG ]] && { print "  last log lines:"; tail -n 3 "$LOG" | sed 's/^/    /'; }
+    return 0
+}
+
+if [[ ${1:-} == auto ]]; then
+    case ${2:-status} in
+        on) auto_on ;;
+        off) auto_off ;;
+        status) auto_status ;;
+        *) print -u2 "usage: builtin-display auto on|off|status"; exit 2 ;;
+    esac
+    exit 0
+fi
+
+if [[ ! -x $BIN || $SRC -nt $BIN ]]; then
+    command -v swiftc >/dev/null 2>&1 || { print -u2 "builtin-display: swiftc not found (xcode-select --install)"; exit 1; }
+    swiftc -O -o "$BIN" "$SRC" || { print -u2 "builtin-display: compile failed"; exit 1; }
+fi
+
+exec "$BIN" "$@"

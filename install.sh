@@ -81,7 +81,7 @@ SELECTIVE INSTALLATION:
 COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
-    --ai-tools        Enable AI CLI tools (Claude, Codex, OpenCode, Antigravity)
+    --ai-tools        Enable AI CLI tools (Claude, Codex)
     --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
@@ -337,22 +337,17 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
     # Bun is the global JS CLI package manager on BOTH platforms. Codex follows
-    # config/codex-install.conf; OpenCode can fall back to bun, and Socket CLI
-    # uses `bun add -g` everywhere.
+    # config/codex-install.conf, and Socket CLI uses `bun add -g` everywhere.
     install_bun || true
 
     if is_macos; then
         # brew has a global lock — sequential
         install_claude_code
         install_codex_cli
-        install_opencode
-        install_antigravity_cli   # official Gemini CLI successor (cask, macOS)
     else
         run_parallel "Installing AI CLI tools" \
             "claude|install_claude_code" \
-            "codex|install_codex_cli" \
-            "opencode|install_opencode" \
-            "antigravity|install_antigravity_cli"
+            "codex|install_codex_cli"
     fi
 
     # MCP servers (sequential — unclear if concurrent-safe)
