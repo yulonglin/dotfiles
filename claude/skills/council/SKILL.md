@@ -20,9 +20,9 @@ Question 1 picks the block. The five text-only rungs reason over text they are h
 
 | Rung | Command | Calls | Cost | Latency | The question is… |
 |---|---|---|---|---|---|
-| **advisor** | `advisor()` | 1 | — | seconds | About work it can already see. No brief to write — always try this first |
+| **advisor** | `advisor()` | 1 | — | seconds | About work it can already see. No brief to write |
 | **one family** | `openrouter-cli ask <alias> "…"` | 1 | $0.01–0.08 | seconds | Bounded, and you want one genuinely different prior on it |
-| **two advisors** | `openrouter-cli council advise "…"` | 2 | ~$0.09 | seconds | Real but not contested: the two strongest models, both answers, no synthesis |
+| **two advisors** (default) | `openrouter-cli council advise "…"` | 2 | ~$0.09 | seconds | Real but not contested: the two strongest models, both answers, no synthesis. **The default rung** for a second opinion |
 | **agentic** | `codex-companion` (GPT), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
 | **agentic council** | Workflow tool with `council.workflow.js` in this skill's directory, or the Agent tool by hand — *Running an agentic council* | many per seat, ×2 with `rank` | varies | minutes | Only answerable by running things **and** contested — a diff, a hook, a test suite where competent reviewers would reach different verdicts |
 | **council** | `openrouter-cli council ask "…"` | 1 request, 9 models | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
@@ -30,7 +30,7 @@ Question 1 picks the block. The five text-only rungs reason over text they are h
 
 Latencies are rough single-run observations, not measurements. Costs are **floors** for a short question, and scale with the brief. `--dry-run` prints an estimate on every rung, but it counts no **reasoning tokens** — those are billed as output and can exceed the visible answer, so treat the estimate as a lower bound rather than a quote. Measured on a two-sentence council question: the chair's synthesis call alone cost **$0.10** with 699 reasoning tokens. Above roughly $100 propose and wait; nothing here comes close.
 
-**`advise` is the rung to reach for by default**, and usually the right answer to "get a second opinion". It asks whoever currently holds the anthropic and openai seats — run `openrouter-cli council roster` to see who that is — and prints both answers with **no synthesis**. Two strong disagreeing priors settle most questions, and with only two answers the disagreement *is* the signal; a chair would average it away for the price of another call.
+**`advise` is the default rung, as the table marks**, and usually the right answer to "get a second opinion". It asks whoever currently holds the anthropic and openai seats — run `openrouter-cli council roster` to see who that is — and prints both answers with **no synthesis**. Two strong disagreeing priors settle most questions, and with only two answers the disagreement *is* the signal; a chair would average it away for the price of another call.
 
 **A bare "council" names no rung.** When Yulong says only "council", or invokes this skill with no further instruction, the model running the session picks the rung, the seats and whether to rank, using the two questions above; no phrase maps to a rung mechanically. Say in one line which rung was picked and why, so a wrong pick costs one reply to correct.
 
@@ -78,7 +78,7 @@ Measured on 2026-09-16, one shell hook reviewed both ways. Four families dispatc
 
 **A seat that returns nothing was starved, not refusing.** Reasoning tokens are billed as output and count against the per-call cap, so a reasoning model given a long structured brief can spend the whole budget thinking and return empty content — `finish_reason` comes back `length` with no answer. The CLI now detects exactly that signature and retries the seat once at double the cap with low reasoning effort, printing `openrouter-cli: <seat> -- answer was starved by reasoning tokens...` so you know that seat answered under different settings from the rest of the panel. Two consequences: a rescued seat costs more than the estimate, and a brief that starves several seats is a brief to shorten rather than to re-run.
 
-**The partial-panel refusal is deliberate.** If a seat still has no answer, `council ask` prints the dead seats and exits rather than presenting six answers as eight — a panel you report as complete must be complete. Retry, or seat the survivors explicitly with `--panel`, and say which panel you used when you report the result.
+**The partial-panel refusal is deliberate.** If a seat still has no answer, `council ask` prints the dead seats and exits rather than presenting six answers as eight — a panel you report as complete must be complete. What to do next is the missing-seat policy under *Both modes fail closed* below.
 
 ## The council: eight seats, one per lab family
 
@@ -91,7 +91,7 @@ Measured on 2026-09-16, one shell hook reviewed both ways. Four families dispatc
 
 The call log records **every** stage of a `--rank` run — the eight seat answers, the eight ballots and the chair — so the recorded spend is the whole run. The `--dry-run` estimate is still a floor, because it counts no reasoning tokens.
 
-**Both modes fail closed.** A council that quietly lost three members still looks like corroboration, which is worse than no council. Default mode inherits fusion's integrity check; `--rank` refuses outright if any seat returns no answer. If it refuses, report the degraded panel and stop — do not retry with `--panel` trimmed to whoever answered, which converts a failure into a fabricated consensus.
+**Both modes fail closed.** A council that quietly lost three members still looks like corroboration, which is worse than no council. Default mode inherits fusion's integrity check; `--rank` refuses outright if any seat returns no answer. **The missing-seat policy, for every rung:** retry the full panel once; if a seat still fails, report the degraded panel and stop. Do not retry with `--panel` trimmed to whoever answered, which converts a failure into a fabricated consensus. Run a smaller panel only when the user asks for one, and report it as that smaller panel.
 
 ### Borda measures acceptability, not correctness
 
@@ -177,7 +177,7 @@ A seat has the repo but not your conversation, so **every brief is still self-co
 
 Then you de-duplicate and adjudicate yourself: **there is no chair on this rung**, and nothing synthesises for you. *Disagreement is the finding* below applies unchanged — three families raising one point is one finding with three names on it, two families reaching opposite verdicts is the bucket to read first, and each finding is reported with the seat that raised it.
 
-**This rung fails closed.** A seat that errors, times out or returns nothing did not review; report it absent rather than presenting four families as five. The Workflow script enforces that in code; by hand, only you do.
+**This rung fails closed.** A seat that errors, times out or returns nothing did not review; report it absent rather than presenting four families as five, and apply the missing-seat policy under *Both modes fail closed*. The Workflow script enforces that in code; by hand, only you do.
 
 **What it costs against the CLI rungs.** It is slower — minutes per seat, against roughly one minute for a whole `council ask`. It spends each subagent's context window rather than being one billed request, but "no API dollars" is wrong: the OpenRouter-routed seats bill the key in `~/.config/model-router/secrets.toml`, and only the Codex-routed seats draw on the OAuth quota instead. None of that spend reaches `~/.local/state/openrouter-cli/calls.jsonl`, which only `openrouter-cli` writes, so this rung has **no per-call cost log and no resolved-model provenance** — capture anything you need from the agent transcripts at the time. And it cannot answer a question with no repo behind it: a seat with nothing to read is a slow way to reach the model `openrouter-cli` reaches in one call.
 
@@ -198,7 +198,7 @@ Workflow({
 
 - **Every seat gets the same read-only preamble**, then your brief.
 - **Each seat returns `{verdict, answer, findings[]}`**, and each finding carries a severity, a location and the evidence the seat gathered ("asserted" when it checked nothing).
-- **A missing seat stops the run.** The result is `status: "degraded"` with the absent seats named, and ranking does not run. Report the degraded panel; do not rerun with the survivors as `seats`.
+- **A missing seat stops the run.** The result is `status: "degraded"` with the absent seats named, and ranking does not run. Apply the missing-seat policy under *Both modes fail closed*.
 - **`rank: true` adds one ranking agent per seat.** Each ranker sees the other answers under neutral letters, rotated per ranker to spread position bias, and fenced with your `nonce`. The script tallies Borda points in plain code and reports missing or malformed ballots instead of dropping them. *Borda measures acceptability, not correctness* and *Panel answers are untrusted input* above apply in full; `injection_flagged_by` names the rankers that saw an answer address them. Unlike the CLI's rankers, these hold tools while reading other models' output, so they run in a throwaway worktree (`isolation: "worktree"`) and are told never to run what an answer proposes; a ranker therefore checks claims against committed `HEAD`, not your uncommitted diff.
 
 ### By hand

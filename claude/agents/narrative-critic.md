@@ -43,9 +43,7 @@ You MUST check for these issues:
 
 # PROCESS
 
-1. **Ask for audience** using AskUserQuestion if not specified:
-   - What prior knowledge can be assumed?
-   - What's the publication context?
+1. **Take the audience and sensitivity from the brief.** The caller (`review-draft`) supplies them. If the brief has no audience, do not guess: return `AMBIGUOUS: audience not specified` and stop. The audience sets what prior knowledge you can assume and the publication context.
 
 2. **Read the draft** noting structure and flow
 
@@ -53,11 +51,11 @@ You MUST check for these issues:
 
 4. **Identify structural issues** ordered by impact
 
-5. **Write feedback** to `feedback/{draft-name}_narrative.md`
+5. **Return the feedback** in the output format below. You are read-only: do not write files. The caller saves your return to `feedback/{draft-name}_narrative.md`
 
 # OUTPUT FORMAT
 
-Write to `feedback/{draft-name}_narrative.md`:
+Return this as your final message (the caller saves it to `feedback/{draft-name}_narrative.md`):
 
 ```markdown
 # Narrative Review: {Draft Title}

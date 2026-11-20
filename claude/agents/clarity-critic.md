@@ -44,19 +44,17 @@ You MUST check for these issues:
 
 # PROCESS
 
-1. **Ask for audience** using AskUserQuestion if not specified:
-   - ML researchers, general technical audience, LessWrong readers, etc.
-   - This affects jargon tolerance
+1. **Take the audience and sensitivity from the brief.** The caller (`review-draft`) supplies them. If the brief has no audience, do not guess: return `AMBIGUOUS: audience not specified` and stop. The audience sets jargon tolerance.
 
 2. **Read the draft** carefully, noting line numbers
 
 3. **Identify issues** ordered by impact, then sequentially through document
 
-4. **Write feedback** to `feedback/{draft-name}_clarity.md`
+4. **Return the feedback** in the output format below. You are read-only: do not write files. The caller saves your return to `feedback/{draft-name}_clarity.md`
 
 # OUTPUT FORMAT
 
-Write to `feedback/{draft-name}_clarity.md`:
+Return this as your final message (the caller saves it to `feedback/{draft-name}_clarity.md`):
 
 ```markdown
 # Clarity Review: {Draft Title}
