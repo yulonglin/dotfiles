@@ -1,6 +1,6 @@
 name: Settings guards
 
-# Answers "when does this test run?" for tests/test_no_attribution_optout.sh. This repo has no suite runner, so each test names its own trigger; this is that test's. The pre-commit hook in config/git-hooks/pre-commit runs the same test locally on a staged settings.json, and CI is the leg that survives --no-verify and a second machine.
+# Answers "when does this test run?" for tests/test_no_attribution_optout.sh. Shell tests have no suite runner (Python tests do: python-tests.yml), so each names its own trigger; this is that test's. The pre-commit hook in config/git-hooks/pre-commit runs the same test locally on a staged settings.json, and CI is the leg that survives --no-verify and a second machine.
 #
 # Only first-party actions (actions/*), matching this repo's supply-chain posture (no third-party GHA actions).
 

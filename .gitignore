@@ -56,6 +56,12 @@ claude/loop.md
 
 # Codex runtime state (local operational artifacts)
 .codex
+# scripts/setup/sync_codex_hooks.py backs up AGENTS.md here before each rewrite
+codex/backups/
+
+# Server-pushed Claude Code stamps: they re-sync themselves, so tracking them is churn
+claude/policy-limits.json.stamp.json
+claude/remote-settings.json.synced-at
 
 # npm artifacts (not used - this repo uses system package managers)
 package.json
@@ -554,6 +560,8 @@ claude/*.local.md
 custom_bins/claude-tools
 tools/set-default-app/set-default-app
 tools/window-exposure/window-exposure
+tools/builtin-display/builtin-display
+tools/av-prefer/av-prefer
 tools/mats-slack-keychain/mats-slack-keychain
 
 # Misplaced .claude/ dirs (created when CWD != git root)

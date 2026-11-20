@@ -99,7 +99,7 @@ gtheme() {
 }
 
 # Quick theme aliases - 10 dark themes, diverse backgrounds + cursors
-# Default (ghostty.conf): Catppuccin Mocha — pastel purple-blue, pink cursor
+# Default (ghostty.conf): TokyoNight Black — TokyoNight palette on pure black, blends with the notch
 # Run `ghostty +list-themes` for full list, or `gtheme <name>` for any theme
 g0() { gtheme "TokyoNight" --title "${1:+$1 | }🌙 [g0] TokyoNight"; }             # Deep blue bg, blue cursor — neon city
 g1() { gtheme "Dracula" --title "${1:+$1 | }🧛 [g1] Dracula"; }                 # Purple-grey bg, white cursor — vibrant classic

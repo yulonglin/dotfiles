@@ -101,8 +101,16 @@ def get_json(url: str, headers: dict | None = None, timeout: int = 60) -> dict:
         die(f"cannot reach {url}: {e.reason}")
 
 
+# Every chat completion is STREAMED and reassembled into the non-streamed shape.
+# A non-streamed request sends no bytes until the whole answer exists, and
+# OpenRouter's edge closes a connection that stays silent for 60 s: on
+# 2026-11-01 a two-seat fusion over a 4 KB brief died at exactly 60.0 s with
+# RemoteDisconnected, while the same request streamed finished in 112 s, kept
+# open by ~240 ": OPENROUTER PROCESSING" comment lines. Fusion runs the panel,
+# the analyst and the chair inside one request, so any non-trivial brief passes
+# 60 s. The timeout below is per socket read, so those comments reset it.
 def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
-    body = json.dumps(payload).encode()
+    body = json.dumps({**payload, "stream": True}).encode()
     req = urllib.request.Request(
         url,
         data=body,
@@ -113,13 +121,66 @@ def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
             "X-OpenRouter-Title": "openrouter-cli (dotfiles)",
         },
     )
+    started = datetime.datetime.now()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r)
+            return assemble_stream(r)
     except urllib.error.HTTPError as e:
         die(f"HTTP {e.code}: {e.read()[:500].decode('utf-8', 'replace')}")
     except urllib.error.URLError as e:
         die(f"cannot reach {url}: {e.reason}")
+    except (http.client.HTTPException, ConnectionError, TimeoutError) as e:
+        # Not retried: the server may still finish, and bill, the first call.
+        secs = (datetime.datetime.now() - started).total_seconds()
+        die(f"connection lost after {secs:.0f}s ({type(e).__name__}: {e}); "
+            "the call may still be billed - check openrouter.ai/activity before retrying")
+
+
+def assemble_stream(lines) -> dict:
+    """Fold an SSE chat-completion stream into the non-streamed response shape.
+
+    Callers read `id`, `model`, `usage`, `error` and choices[0]'s
+    `finish_reason`, `native_finish_reason`, `error` and `message.content` /
+    `message.reasoning_details`. Fusion's record is one
+    `reasoning.server_tool_call` entry in a delta; reasoning entries that
+    arrive in fragments share an `index` and are joined back together.
+    """
+    resp: dict = {}
+    content: list[str] = []
+    details: list[dict] = []
+    choice: dict = {}
+    for raw in lines:
+        line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else raw.strip()
+        if not line.startswith("data:"):
+            continue  # blank separators and ": OPENROUTER PROCESSING" keep-alives
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        ev = json.loads(data)
+        for k in ("id", "model", "provider", "usage", "error"):
+            if ev.get(k):
+                resp[k] = ev[k]
+        for ch in ev.get("choices") or []:
+            delta = ch.get("delta") or {}
+            if delta.get("content"):
+                content.append(delta["content"])
+            for d in delta.get("reasoning_details") or []:
+                prev = details[-1] if details else None
+                if (prev is not None and "index" in d and prev.get("index") == d["index"]
+                        and prev.get("type") == d.get("type")):
+                    for f in ("text", "summary", "result"):
+                        if isinstance(d.get(f), str):
+                            prev[f] = (prev.get(f) or "") + d[f]
+                else:
+                    details.append(dict(d))
+            for k in ("finish_reason", "native_finish_reason", "error"):
+                if ch.get(k):
+                    choice[k] = ch[k]
+    message: dict = {"content": "".join(content)}
+    if details:
+        message["reasoning_details"] = details
+    resp["choices"] = [{**choice, "message": message}] if (content or details or choice) else []
+    return resp
 
 
 # Append-only provenance log. Every billed call records which concrete model
@@ -359,6 +420,23 @@ def parse_panel(spec: str | None, cfg: dict) -> list[str]:
     return panel
 
 
+# Fusion is asked for, not forced. `tool_choice: "required"` is what OpenRouter
+# documents for forcing fusion, but Anthropic rejects forced tool use on its
+# current flagships: claude-opus-5.5 and claude-fable-5.1 both answer
+# `tool_choice: type "tool" and "any" are not supported for this model.`
+# (measured 2026-11-01; claude-haiku-4.5 still accepts it). Inside fusion that
+# upstream 400 surfaces only as an opaque "Model call failed: invalid request
+# (400)" with no model named, and it broke every `fusion` and default `council
+# ask` from the day Opus 5.5 took the chair. A system instruction plus "auto"
+# works on every chair tried; if the chair ever skips the tool anyway,
+# fusion_result() fails closed, so compliance is checked rather than assumed.
+FUSION_INSTRUCTION = (
+    "Before answering, call the openrouter:fusion tool exactly once with the "
+    "user's request, then write your final answer from its result. Do not "
+    "answer without calling it."
+)
+
+
 def fusion_result(resp: dict) -> dict:
     """The structured fusion outcome, recorded as a server tool call in
     reasoning_details. Without it the panel cannot be verified, so its
@@ -370,7 +448,10 @@ def fusion_result(resp: dict) -> dict:
                 return json.loads(d["result"])
             except ValueError:
                 die("fusion tool result is not valid JSON")
-    die("response carries no openrouter:fusion tool result - cannot verify the panel ran")
+    # The usual cause since tool_choice became "auto": the chair answered
+    # directly and never called the tool. The answer is not a panel answer.
+    die("response carries no openrouter:fusion tool result - the chair likely "
+        "answered without calling fusion, so no panel ran; retry")
 
 
 def check_fusion_integrity(result: dict, panel: list[str]) -> list[str]:
@@ -503,19 +584,28 @@ AA_RECORD = re.compile(
     r'(?=\{"id":"[0-9a-f-]{36}","slug"|$)', re.S)
 
 
-def aa_page_scores(html: str) -> dict[str, float]:
-    """Best intelligence index per release, keyed by normalised release slug
-    (`grok-4-6` -> `grok46`, which is also norm() of OpenRouter's `grok-4.6`).
-    Estimated scores are skipped: they are AA's guess, not a measurement."""
-    out: dict[str, float] = {}
+# Releases whose AA score in the last fetch_aa_pages() is an estimate, because
+# AA had not measured them yet. pick_seat() labels such a seat "aa-estimated".
+AA_ESTIMATED: set[str] = set()
+
+
+def aa_page_records(html: str) -> tuple[dict[str, float], dict[str, float]]:
+    """(measured, estimated): the best intelligence index per release, keyed by
+    normalised release slug (`grok-4-6` -> `grok46`, which is also norm() of
+    OpenRouter's `grok-4.6`). AA publishes an estimate for a release it has not
+    measured on the current suite, which can be a new model's only AA signal for
+    its first days; estimates are kept apart so a measurement always wins."""
+    meas: dict[str, float] = {}
+    est: dict[str, float] = {}
     for m in AA_RECORD.finditer(html.replace('\\"', '"')):
         body = m.group(1)[:6000]
         rel = re.search(r'"release":\{"slug":"([a-z0-9.-]+)"', body)
         ii = re.search(r'"intelligenceIndex":([0-9.]+),"intelligenceIndexIsEstimated":(true|false)', body)
-        if rel and ii and ii.group(2) == "false":
+        if rel and ii:
+            d = est if ii.group(2) == "true" else meas
             k = norm(rel.group(1))
-            out[k] = max(out.get(k, 0.0), float(ii.group(1)))
-    return out
+            d[k] = max(d.get(k, 0.0), float(ii.group(1)))
+    return meas, est
 
 
 def get_page(url: str) -> str | None:
@@ -540,16 +630,20 @@ def fetch_aa_pages(candidates: list[str]) -> dict[str, float]:
     candidate not on that list is looked up on its own page, /models/<slug>,
     which still carries its record (and the full catalogue, so one lookup
     usually covers the rest)."""
-    out = aa_page_scores(get_page(AA_PAGE) or "")
+    meas, est = aa_page_records(get_page(AA_PAGE) or "")
     lookups = 0
     for tail in candidates:
-        if norm(tail) in out or lookups >= 40:
+        if norm(tail) in meas or lookups >= 40:
             continue
         lookups += 1
         html = get_page(f"{AA_PAGE}/{tail.lower().replace('.', '-')}")
         if html:
-            out.update({k: v for k, v in aa_page_scores(html).items() if k not in out})
-    return out
+            m2, e2 = aa_page_records(html)
+            meas.update({k: v for k, v in m2.items() if k not in meas})
+            est.update({k: v for k, v in e2.items() if k not in est})
+    AA_ESTIMATED.clear()
+    AA_ESTIMATED.update(set(est) - set(meas))
+    return {**est, **meas}
 
 
 def fetch_aa(candidates: list[str] | None = None) -> dict[str, float]:
@@ -917,7 +1011,10 @@ def cmd_fusion(args, cfg) -> None:
     payload = {
         # The outer voice that writes the final prose.
         "model": chair_of(cfg),
-        "messages": [{"role": "user", "content": args.prompt}],
+        "messages": [
+            {"role": "system", "content": FUSION_INSTRUCTION},
+            {"role": "user", "content": args.prompt},
+        ],
         "tools": [{
             "type": "openrouter:fusion",
             "parameters": {
@@ -931,7 +1028,8 @@ def cmd_fusion(args, cfg) -> None:
                 "max_completion_tokens": caps.get("max_completion_tokens", 16000),
             },
         }],
-        "tool_choice": "required",
+        # "auto", not "required": see FUSION_INSTRUCTION for why forcing fails.
+        "tool_choice": "auto",
     }
     if args.dry_run:
         print(json.dumps(payload, indent=2))
@@ -1080,7 +1178,8 @@ def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float],
 def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
               cap: float, in_cap: float = float("inf"),
               cis: dict[str, tuple[float, float]] | None = None,
-              aa_only: set[str] | None = None) -> dict | None:
+              aa_only: set[str] | None = None,
+              aa_estimated: set[str] | None = None) -> dict | None:
     """The best seat for one family under both price caps, or None.
 
     Both caps, not just output: the `--rank` round sends every seat the other
@@ -1128,7 +1227,9 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
         cand, cs = max(tied, key=lambda rs: rs[0]["created"])
         return {**cand, "score": round(cs, 2), "basis": "newest-within-ci"}
     aa_only = AA_ONLY if aa_only is None else aa_only
-    basis = "aa-only" if norm(best["tail"]) in aa_only else "eci"
+    aa_estimated = AA_ESTIMATED if aa_estimated is None else aa_estimated
+    key = norm(best["tail"])
+    basis = "eci" if key not in aa_only else "aa-estimated" if key in aa_estimated else "aa-only"
     return {**best, "score": round(score, 2), "basis": basis}
 
 

@@ -44,7 +44,7 @@ install() {
     # Create a wrapper script for the scheduler (needs full paths and uv)
     local wrapper="$DOT_DIR/custom_bins/sync-text-replacements"
     cat > "$wrapper" <<WRAPPER
-#!/bin/bash
+#!/usr/bin/env bash
 # Auto-generated wrapper for scheduled text replacements sync
 set -euo pipefail
 
