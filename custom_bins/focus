@@ -931,6 +931,30 @@ def ask_reason(what: str) -> str:
     return reason
 
 
+def loosening_reason(what: str, command: str, **extra) -> None:
+    """A person who loosens blocking types why, or nothing changes; the reason goes to
+    COMMIT_LOG (Yulong, 2026-11-20). An agent is held by gate()'s delay instead: it has
+    no terminal or dialog, and a reason it wrote itself would prove nothing."""
+    if by_agent():
+        return
+    log_reason(command, ask_reason(what), **extra)
+
+
+def mode_apps(cfg: dict, mode: str) -> set[str]:
+    return {a for part in desired_apps(cfg, mode) for a in part}
+
+
+def switch_loosens(cfg: dict, from_modes: list[str], target: str) -> bool:
+    """Whether switching from these modes to target loosens enough to ask a reason:
+    the target is a capped mode, or it opens an app one of them blocks. Sites are not
+    compared: every mode is a narrow allowlist of its own, so by sites every switch
+    would loosen, and going back to research from comms would cost a reason."""
+    if target in (cfg.get("capped_modes") or {}):
+        return True
+    keep = mode_apps(cfg, target)
+    return any(not mode_apps(cfg, m) <= keep for m in from_modes if m in cfg["modes"])
+
+
 def read_break() -> dict | None:
     """The current break, {'modes': [...], 'until': epoch}, or None. A file that does
     not parse is treated as an ended break with nothing to restore, so it never blocks
@@ -1052,6 +1076,9 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
         sys.exit("focus: no mode is running, so there is nothing to take a break from")
     gate(
         cfg, f"break:{','.join(sorted(running))}:{minutes}", f"a {minutes}-minute break"
+    )
+    loosening_reason(
+        f"a {minutes}-minute break", f"focus break {minutes}", minutes=int(minutes)
     )
     until = time.time() + int(minutes) * 60
     BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1372,14 +1399,23 @@ def start_capped(
             {"mode": mode, "until": until, "back": back, "day": minutes if day else 0},
         )
 
-    cmd_start(cfg, mode, prepare=prepare)
+    cmd_start(cfg, mode, prepare=prepare, reason_asked=need_reason)
     return until, back, minutes, left
 
 
-def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
+def cmd_start(
+    cfg: dict,
+    mode: str,
+    prepare=None,
+    starter=None,
+    ask: bool = True,
+    reason_asked: bool = False,
+) -> None:
     """Start a mode and stop the others. prepare(), when given, runs once the agent gate
     has passed and before anything is switched: the place for prompts and state.
-    starter(block), when given, starts a stopped target instead of a plain '-start'."""
+    starter(block), when given, starts a stopped target instead of a plain '-start'.
+    A switch that loosens (switch_loosens) asks a person why, unless ask is False (the
+    launchd job's own starts) or the caller's prepare() asks already (reason_asked)."""
     if mode not in cfg["modes"]:
         sys.exit(f"focus: no mode {mode!r}; modes are {', '.join(cfg['modes'])}")
     refuse_if_committed(f"starting {mode!r}", mode)
@@ -1410,6 +1446,15 @@ def cmd_start(cfg: dict, mode: str, prepare=None, starter=None) -> None:
             f"switch:{','.join(sorted(here))}->{mode}",
             f"switching from {', '.join(here)} to {target!r}",
         )
+        old = [n.removeprefix(PREFIX) for n in running]
+        # Leaving a session for a mode that is not capped trades pauses for Cold
+        # Turkey's hard blocks, so only a capped target asks then.
+        if ask and not reason_asked and switch_loosens(cfg, old, mode):
+            loosening_reason(
+                f"switching from {', '.join(old or [ONLY])} to {mode}",
+                f"focus {mode}",
+                mode=mode,
+            )
     if prepare:
         prepare()
     # Start the target before stopping the others: for a moment both run, which only blocks
@@ -1547,6 +1592,7 @@ def cmd_off(cfg: dict) -> None:
             f"or switch to another mode."
         )
     gate(cfg, "off:" + ",".join(sorted(running)), f"stopping {', '.join(running)}")
+    loosening_reason("turning blocking off", "focus off")
     BREAK_FILE.unlink(missing_ok=True)
     for name in running:
         switch(name, on=False)
@@ -2989,6 +3035,12 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
             gate(cfg, "only:+" + ",".join(sorted(new)), f"allowing {', '.join(new)}")
         if minutes:
             gate(cfg, f"only-time:{minutes}", f"running the session {minutes} more min")
+        if new or minutes:
+            what = " and ".join(
+                ([f"allowing {', '.join(new)}"] if new else [])
+                + ([f"{minutes} more min of the session"] if minutes else [])
+            )
+            loosening_reason(what, "focus only " + " ".join(args))
         # Taking a pick away only tightens, so it passes no gate.
         session["groups"] = [g for g in now_groups if g not in drops] + new
         if minutes:
@@ -3016,6 +3068,12 @@ def cmd_only(cfg: dict, args: list[str]) -> None:
         f"only:{','.join(sorted(running))}->{','.join(sorted(picks))}",
         f"starting an only session of {', '.join(picks)}",
     )
+    if running:  # from no mode a session only adds pauses
+        loosening_reason(
+            f"an only session in place of {', '.join(running)}",
+            "focus only " + " ".join(picks),
+            minutes=minutes,
+        )
     until = time.time() + minutes * 60
     write_only({"groups": picks, "until": until, "back": back})
     # ScreenZen first, then Cold Turkey: if the write fails, the mode is still on.
@@ -4234,7 +4292,7 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     mode = d["mode"]
     hh, mm = (int(x) for x in str(d["until"]).split(":"))
     until = now.replace(hour=hh, minute=mm, second=0, microsecond=0).timestamp()
-    cmd_start(cfg, mode)  # clears a break and any other mode's stretch
+    cmd_start(cfg, mode, ask=False)  # clears a break and any other mode's stretch
     with capped_lock():
         write_state(
             CAPPED_FILE,

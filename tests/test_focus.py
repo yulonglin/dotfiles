@@ -22,6 +22,7 @@ def load():
 ct = load()
 REAL_CAN_SHOW_DIALOG = ct.can_show_dialog
 REAL_WAKE = ct.wake_agent  # the autouse fixture stubs ct.wake_agent
+REAL_LOOSENING_REASON = ct.loosening_reason  # stubbed too; its own tests restore it
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +52,8 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
+    # Most tests switch modes without a person to ask; the reason tests restore it.
+    monkeypatch.setattr(ct, "loosening_reason", lambda *a, **k: None)
     monkeypatch.setattr(ct, "SZ_DOMAIN", tmp_path / "no-screenzen" / "prefs")
     monkeypatch.setattr(
         ct, "sz_export", lambda: pytest.fail("test reached real ScreenZen prefs")
@@ -3254,3 +3257,75 @@ def test_a_mode_started_during_the_switch_is_stopped_too(cfg, monkeypatch):
     ct.cmd_start(cfg, "writing", prepare=prepare)
     assert blocks["mode: writing"]["enabled"] == "true"
     assert blocks["mode: research"]["enabled"] == "false"
+
+
+@pytest.fixture
+def reasons(cfg, monkeypatch):
+    """research running, the real reason prompt back in place."""
+    monkeypatch.setattr(ct, "loosening_reason", REAL_LOOSENING_REASON)
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: None)
+    return blocks
+
+
+def test_a_switch_that_opens_an_app_needs_a_reason(cfg, reasons, monkeypatch):
+    # research blocks Telegram and writing does not (Yulong, 2026-11-20).
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_start(cfg, "writing")
+    assert on(reasons) == ["mode: research"]
+    prompts = at_terminal(monkeypatch, ["need to message the editor"])
+    ct.cmd_start(cfg, "writing")
+    assert prompts == ["Why switching from research to writing? One line: "]
+    (entry,) = log_lines()
+    assert entry["command"] == "focus writing"
+    assert entry["reason"] == "need to message the editor"
+    assert on(reasons) == ["mode: writing"]
+
+
+def test_an_empty_reason_leaves_the_mode_running(cfg, reasons, monkeypatch):
+    at_terminal(monkeypatch, [""])
+    with pytest.raises(SystemExit, match="no reason given"):
+        ct.cmd_start(cfg, "writing")
+    assert on(reasons) == ["mode: research"] and log_lines() == []
+
+
+def test_a_switch_that_opens_no_app_asks_nothing(cfg, reasons, monkeypatch):
+    reasons["mode: research"]["enabled"] = "false"
+    reasons["mode: writing"]["enabled"] = "true"
+    prompts = at_terminal(monkeypatch, [])
+    ct.cmd_start(cfg, "research")  # research blocks more apps than writing
+    assert prompts == [] and on(reasons) == ["mode: research"]
+
+
+def test_a_capped_target_always_loosens(tmp_path):
+    cfg = ct.load_config(note_with(tmp_path, CAPPED))
+    assert ct.switch_loosens(cfg, ["research"], "writing")
+    assert ct.switch_loosens(cfg, [], "writing")  # leaving an only session for it
+    assert not ct.switch_loosens(cfg, ["writing"], "research")
+
+
+def test_a_break_and_off_need_a_reason(cfg, reasons, monkeypatch):
+    monkeypatch.setattr(ct, "in_off_hours", lambda cfg, now=None: True)
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_break(cfg, ["10"])
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_off(cfg)
+    assert on(reasons) == ["mode: research"]
+    at_terminal(monkeypatch, ["lunch with Mia"])
+    ct.cmd_break(cfg, ["10"])
+    assert on(reasons) == []
+    assert log_lines()[-1]["command"] == "focus break 10"
+
+
+def test_an_agent_is_delayed_not_asked(cfg, reasons, monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")
+    asked = []
+    monkeypatch.setattr(ct, "ask_reason", lambda what: asked.append(what) or "x")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_start(cfg, "writing")
+    assert e.value.code == 3 and asked == []  # queued by the gate, no prompt

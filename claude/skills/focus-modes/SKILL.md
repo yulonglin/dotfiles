@@ -75,6 +75,14 @@ The note's optional `capped_modes: {<mode>: {minutes: 30, day_minutes: 180, fall
 - **Two keepers:** the commitment starts only when `launchctl print` shows the job loaded and running this focus with this note; a plist on disk is not enough, since `launchctl` may have refused it. A detached keeper also runs the same check every 30 s until the end.
 - **Accepted limitation:** unloading the launchd job and stopping the keeper (or restarting with the job unloaded), or deleting the state file, lets the lock lapse within one wait. Never do either to get past a commitment, and never edit the state or the log.
 
+## A person who loosens types a reason
+
+Since 20 Nov 2026 every loosening by hand asks a one-line reason, at the terminal or in a macOS dialog (Alfred), and an empty reason or Cancel changes nothing. Reasons go to `~/.local/state/focus/commit-log.jsonl`.
+
+- **What asks:** `focus break`, `focus off`, an only session that replaces a running mode, adding picks to or extending a session, and a mode switch that loosens. A switch loosens when the target is a capped mode or opens an app a running mode blocks. Sites are not compared, so research to writing, and any capped mode back to research, ask nothing.
+- **What does not:** starting a mode from no mode, tightening, ending a session for a mode that is not capped, and the launchd job's own starts (default, scheduled, break and stretch ends).
+- **An agent is never asked:** it has no terminal or dialog, so the delay below holds it instead.
+
 ## Loosening waits; do not work around it
 
 When Claude runs it, `focus` delays anything that loosens blocking: stopping a mode, switching modes, a sync that allows new sites, a ScreenZen write that allows more or blocks less. **Exit code 3 means queued, not failed.** Tell Yulong the change and the time it becomes runnable, and stop. Run the same command once more after that time only if he still wants it. Never edit `~/.local/state/focus/pending.json`, `focus` or `agent_loosen_delay_minutes` to skip the wait, and never loop on the command. If he wants it now, give him the command to run himself. Starting a mode from none and anything that only tightens run at once.
