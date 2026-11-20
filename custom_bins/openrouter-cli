@@ -1233,6 +1233,26 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
     return {**best, "score": round(score, 2), "basis": basis}
 
 
+def pinned_seat(family: str, slug: str, rows: list[dict],
+                cap: float, in_cap: float = float("inf")) -> dict:
+    """The hand-pinned seat for one family, recorded as basis = "pinned".
+
+    A pin is Yulong's call overriding the index for one family, not a score.
+    It fails loudly rather than falling back: a pin that quietly reverted to
+    the index pick would look honoured while seating a different model. It
+    still obeys the family and both price caps, which are spend decisions.
+    """
+    hit = [r for r in rows if r["slug"] == slug]
+    if not hit:
+        die(f"[council].pinned {family} = {slug}: not in the OpenRouter catalogue")
+    r = hit[0]
+    if r["family"] != family:
+        die(f"[council].pinned {family} = {slug}: slug belongs to family {r['family']}")
+    if r["out"] > cap or r["in"] > in_cap:
+        die(f"[council].pinned {family} = {slug}: ${r['in']}/${r['out']} per M breaches the price caps")
+    return {**r, "score": 0.0, "basis": "pinned"}
+
+
 def alias_for(cfg: dict, family: str, slug: str) -> str:
     """Keep the alias a family already had, so `ask glm` survives a refresh."""
     for s in seats(cfg):
@@ -1263,9 +1283,16 @@ def propose_roster(cfg: dict, rows: list[dict] | None = None) -> tuple[list[dict
                    and r["out"] <= cap and r["in"] <= in_cap),
                   key=lambda r: -r["created"])
     scores, credits = index_scores([r["tail"] for r in pool])
+    pins = dict(council.get("pinned") or {})
+    stray = sorted(set(pins) - set(families))
+    if stray:
+        die(f"[council].pinned names families not on the council: {', '.join(stray)}")
     picked, gaps = [], []
     for fam in families:
-        best = pick_seat(fam, rows, scores, cap, in_cap)
+        if fam in pins:
+            best = pinned_seat(fam, pins[fam], rows, cap, in_cap)
+        else:
+            best = pick_seat(fam, rows, scores, cap, in_cap)
         if best is None:
             gaps.append(fam)
             continue
@@ -1344,7 +1371,7 @@ def cmd_council_roster(args, cfg) -> None:
     for s in current:
         # Read `basis`, never the magnitude: a normalised score can legitimately
         # be 0.0, so "score == 0 means unscored" would hide a real measurement.
-        sc = "-" if s.get("basis") == "newest-in-line" else f"{s.get('score', 0):.2f}"
+        sc = "-" if s.get("basis") in ("newest-in-line", "pinned") else f"{s.get('score', 0):.2f}"
         print(f"{s['alias']:<8} {s['slug']:<32} {sc:>6}  {s.get('basis', '?')}")
     report_picker_gaps(current)
     if not args.check:
@@ -1390,7 +1417,7 @@ def cmd_council_refresh(args, cfg) -> None:
         die("index-driven pick produced no seats - refusing to empty the roster")
     print(f"{'family':<11} {'slug':<32} {'score':>6} {'out$/M':>7}  basis")
     for s in picked:
-        sc = "-" if s["basis"] == "newest-in-line" else f"{s['score']:.2f}"
+        sc = "-" if s["basis"] in ("newest-in-line", "pinned") else f"{s['score']:.2f}"
         print(f"{s['family']:<11} {s['slug']:<32} {sc:>6} {s['out']:7.2f}  {s['basis']}")
     for fam in gaps:
         print(f"{fam:<11} (no model under the price caps)", file=sys.stderr)
@@ -1735,10 +1762,10 @@ def sum_usage(answers: dict[str, dict]) -> dict:
 
 
 def advisor_slugs(cfg: dict) -> list[str]:
-    """The two-model advisor pair, resolved from families to seated slugs.
+    """The advisors, resolved from `advisor_families` to seated slugs, in order.
 
-    Families rather than slugs so the pair follows a refresh: whoever holds the
-    anthropic and openai seats is the pair, with no second list to update.
+    Families rather than slugs so the advisors follow a refresh (or a pin):
+    whoever holds those seats advises, with no second list to update.
     """
     council = cfg.get("council") or {}
     fams = list(council.get("advisor_families") or [])
@@ -1757,9 +1784,9 @@ def advisor_slugs(cfg: dict) -> list[str]:
 
 
 def cmd_council_advise(args, cfg) -> None:
-    """Ask the two strongest families and show both answers, unsynthesised.
+    """Ask the advisor families and show every answer, unsynthesised.
 
-    No chair on purpose. With two answers the disagreement IS the signal, and a
+    No chair on purpose. With a few answers the disagreement IS the signal, and a
     synthesis would average it away for the price of another call -- the exact
     failure mode the council's bucket (d) exists to prevent.
     """

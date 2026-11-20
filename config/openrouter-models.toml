@@ -108,7 +108,26 @@ families = [
 # and openai seats after a refresh becomes the advisor pair automatically. Today
 # that is claude-opus-5.5 and gpt-6-astra, the two highest-scoring models in the
 # catalogue under the price cap.
-advisor_families = ["anthropic", "openai"]
+#
+# Google joined on 2026-11-20 and goes first (Yulong): Gemini 4 Neon was
+# reported strong at inferring intent, so it answers beside the two strongest
+# rather than only on a full council. Three answers, still no synthesis; the
+# extra seat costs about $3/$15 per M. Drop "google" to return to the pair.
+advisor_families = ["google", "anthropic", "openai"]
+
+# Hand pins: family -> slug, overriding the index pick for that family only.
+# `council refresh` honours them and records basis = "pinned", so the roster
+# never presents a pin as an index score. A pin still obeys the family and both
+# price caps, and refresh dies (rather than falling back) if the slug leaves
+# the catalogue. Keep this list short: each pin is a seat the index no longer
+# maintains.
+#
+# google = gemini-4-neon since 2026-11-20 (Yulong: "really good and great at
+# inferring intent"). The index alone keeps seating gemini-4-carbon, because
+# Epoch has not scored Neon yet and `stem()` puts neon and carbon in different
+# product lines, so the newest-in-line rule never reaches it. Revisit when
+# Epoch scores Neon; launch-week evidence is in config/model-router.toml.
+pinned = { google = "google/gemini-4-neon" }
 
 # Per-seat price ceilings in USD per million tokens. Raising either changes
 # which models can be seated, so both are spend decisions: a council run costs
@@ -152,13 +171,13 @@ reviewed = "2026-11-16"
 # BEGIN council-auto
 seats = [
   { alias = "opus", slug = "anthropic/claude-fable-5.2", family = "anthropic", score = 173.44, basis = "eci" },
-  { alias = "gemini", slug = "google/gemini-4-carbon", family = "google", score = 169.76, basis = "eci" },
   { alias = "gpt", slug = "openai/gpt-6.2-astra", family = "openai", score = 0.0, basis = "newest-in-line" },
   { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 161.68, basis = "eci" },
   { alias = "kimi", slug = "moonshotai/kimi-k3.1-pro", family = "moonshotai", score = 161.37, basis = "eci" },
   { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 157.1, basis = "eci" },
   { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 156.18, basis = "newest-within-ci" },
   { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.97, basis = "eci" },
+  { alias = "gemini", slug = "google/gemini-4-neon", family = "google", score = 0.0, basis = "pinned" },
 ]
 # END council-auto
 
@@ -191,6 +210,13 @@ alias = "deepseek"
 [[models]]
 slug = "deepseek/deepseek-v4.1-flash"
 alias = "deepseek-flash"
+
+# GEMINI 4 CARBON. The index pick for the google seat (Epoch 169.76), displaced
+# by the Neon pin on 2026-11-20. Carbon keeps a slight lead on long-horizon
+# agent tasks, so it stays addressable: `openrouter-cli ask carbon "..."`.
+[[models]]
+slug = "google/gemini-4-carbon"
+alias = "carbon"
 
 # FABLE 5.1. Held the anthropic seat until 2026-10-12, when Opus 5.5 (167.3)
 # overtook it (164.7) at under half the price ($4/$20 vs $10/$50). Kept so the
