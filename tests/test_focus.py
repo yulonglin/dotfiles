@@ -46,6 +46,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
     monkeypatch.setattr(ct, "DEFAULT_FILE", tmp_path / "default.json")
     monkeypatch.setattr(ct, "SCHEDULED_FILE", tmp_path / "scheduled.json")
+    monkeypatch.setattr(ct, "WINDOW_FILE", tmp_path / "window.json")
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
@@ -3099,3 +3100,47 @@ def test_screenzen_leaves_out_apps_the_running_mode_blocks_in_cold_turkey(
     # With no mode Cold Turkey holds nothing, so ScreenZen pauses both again.
     ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
     assert [a["appName"] for a in group["apps"]] == ["WhatsApp", "Maps"]
+    # In an open window with no mode, every focus group in ScreenZen is off.
+    cfg["windows"] = ["00:00-23:59"]
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
+    assert group["isDisabled"] and allow["isDisabled"]
+    # A mode started by hand in a window still gets its usual groups.
+    ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert not allow["isDisabled"]
+
+
+WINDOWS = 'windows: ["12:30-13:00"]'
+
+
+def test_a_window_stops_the_mode_until_it_ends_then_the_mode_comes_back(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, notes = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    assert ct.window_start(cfg, dt.datetime(2026, 11, 17, 12, 29)) is None
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    assert ct.window_start(cfg, at) == "12:30-13:00"
+    assert on(blocks) == [] and "open until 13:00" in notes[-1]
+    assert ct.in_off_hours(cfg, at)  # 'focus off' works in a window
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]  # the break the window took has ended
+    # once a day: a mode started by hand later in the window stays on
+    assert ct.window_start(cfg, at + dt.timedelta(minutes=5)) is None
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_commitment_keeps_the_window_closed(capped_env, tmp_path):
+    _, blocks, _, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    ct.write_commit(
+        {"mode": "research", "until": 2_000_000_000, "locked_to": 0, "pending": []}
+    )
+    assert ct.window_start(cfg, dt.datetime(2026, 11, 17, 12, 45)) is None
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_bad_window_is_refused(tmp_path):
+    with pytest.raises(SystemExit, match="windows"):
+        ct.load_config(note_with(tmp_path, 'windows: ["12:30"]'))

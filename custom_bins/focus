@@ -420,9 +420,15 @@ def load_config(path: Path) -> dict:
         "commit_text_chars",
         "default_mode",
         "scheduled_mode",
+        "windows",
     }
     if unknown:
         problems.append(f"unknown top-level keys: {sorted(unknown)}")
+    for span in cfg.get("windows") or []:
+        if not re.fullmatch(
+            r"([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d", str(span)
+        ):
+            problems.append(f"windows: {span!r} is not 'HH:MM-HH:MM'")
     ov = cfg.get("overlaps")
     if ov is not None and not (
         isinstance(ov, dict) and all(isinstance(v, str) and v for v in ov.values())
@@ -800,6 +806,7 @@ DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 WEEKDAYS = DAY_NAMES[:5]
 DEFAULT_MODE_TIMES = (("start", "09:00"), ("until", "12:00"))
 SCHEDULED_FILE = PENDING.parent / "scheduled.json"  # the day the scheduled mode fired
+WINDOW_FILE = PENDING.parent / "window.json"  # the open window: its key and end time
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
@@ -950,15 +957,27 @@ def end_break(cfg: dict) -> bool:
     return True
 
 
-def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
-    """Whether now falls in one of the note's off_hours spans ('22:00-23:15')."""
-    now = now or dt.datetime.now()
-    t = now.strftime("%H:%M")
-    for span in cfg.get("off_hours") or []:
+def span_now(spans: list | None, now: dt.datetime | None = None) -> str | None:
+    """The first 'HH:MM-HH:MM' span that now falls in, or None."""
+    t = (now or dt.datetime.now()).strftime("%H:%M")
+    for span in spans or []:
         start, end = str(span).split("-")
         if (start <= t < end) if start <= end else (t >= start or t < end):
-            return True
-    return False
+            return str(span)
+    return None
+
+
+def in_off_hours(cfg: dict, now: dt.datetime | None = None) -> bool:
+    """Whether now falls in one of the note's off_hours spans ('22:00-23:15') or in
+    one of its open windows, where 'focus off' is allowed too."""
+    return bool(span_now(cfg.get("off_hours"), now) or in_window(cfg, now))
+
+
+def in_window(cfg: dict, now: dt.datetime | None = None) -> str | None:
+    """The note's open window ('12:30-13:00') that now falls in, or None. In a window
+    with no mode running, focus pauses nothing: ScreenZen has every focus group off, so
+    only Cold Turkey's always-on blocks hold (Yulong, 2026-11-20)."""
+    return span_now(cfg.get("windows"), now)
 
 
 def spawn_self(*args: str) -> None:
@@ -1500,7 +1519,7 @@ def cmd_off(cfg: dict) -> None:
     # Leaving every mode is for off hours only; otherwise a break, which ends by itself,
     # so 'off' is not a way past everything (Yulong, 2026-10-30).
     if cfg.get("off_hours") and not in_off_hours(cfg):
-        hours = ", ".join(cfg["off_hours"])
+        hours = ", ".join((cfg.get("off_hours") or []) + (cfg.get("windows") or []))
         sys.exit(
             f"focus: 'off' works only in {hours}. Take 'focus break 15' instead, "
             f"or switch to another mode."
@@ -2250,8 +2269,12 @@ def cmd_screenzen(
     loosen: list[str] = []  # allows gained, blocks lost
     report_lines: list[str] = []
 
+    # In an open window with no mode, every focus group is off: nothing is paused.
+    open_window = not modes and bool(in_window(cfg))
     # One allow group per mode, plus the no-mode group; keep each list current.
     want_on = {sz_mode_group(m) for m in modes} or {sz_mode_group(None)}
+    if open_window:
+        want_on = set()
     for mode in [None, *cfg["modes"], *([ONLY] if "only" in cfg else [])]:
         name = sz_mode_group(mode)
         group = by_name.get(name)
@@ -2314,7 +2337,7 @@ def cmd_screenzen(
         # A 🚫 group can stand aside while certain modes run (off_in), e.g. messaging
         # apps during admin; it is back on for every other mode and for no mode.
         was_off = group["isDisabled"]
-        group["isDisabled"] = sz_group_off(bl, modes)
+        group["isDisabled"] = open_window or sz_group_off(bl, modes)
         if group["isDisabled"] and not was_off:
             loosen.append(f"{name}:off")
         if group["isDisabled"] != was_off:
@@ -2335,9 +2358,8 @@ def cmd_screenzen(
     )
     changed = groups != before
     if not quiet:
-        print(
-            f"ScreenZen follows: {', '.join(modes) or 'no mode'}; on: {', '.join(sorted(want_on))}"
-        )
+        on = ", ".join(sorted(want_on)) or "nothing (open window)"
+        print(f"ScreenZen follows: {', '.join(modes) or 'no mode'}; on: {on}")
         print("\n".join(f"  {line}" for line in report_lines) or "  no changes")
     if dry_run or not changed:
         return loosen
@@ -4056,6 +4078,7 @@ def main() -> None:
             catch_up(cfg)
             default_start(cfg)
             scheduled_start(cfg)
+            window_start(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
         case "allow":
@@ -4119,7 +4142,7 @@ def catch_up(cfg: dict) -> None:
     capped stretch; else stay silent. The lock goes first because it is the one that
     lapses. Each step runs on its own, so one that fails (switch() exits) skips no
     other."""
-    for step in (commit_tick, end_break, end_only, end_capped):
+    for step in (commit_tick, end_break, end_only, end_capped, window_end):
         try:
             step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
@@ -4193,6 +4216,55 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         )
     notify(f"focus: {mode} until {d['until']}, then no mode")
     return mode
+
+
+def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
+    """Open the note's window on its first tick each day: stop the unlocked modes as a
+    break that ends with the window, so they start again by themselves, and point
+    ScreenZen at no mode, which in a window pauses nothing. A committed block or an only
+    session keeps the window closed that day. Only the launchd tick calls it, as for
+    default_start; return the window opened, else None."""
+    now = now or dt.datetime.now()
+    span = in_window(cfg, now)
+    if not span:
+        return None
+    key = f"{now:%Y-%m-%d} {span}"
+    if (read_state(WINDOW_FILE) or {}).get("key") == key:
+        return None
+    hh, mm = (int(x) for x in span.split("-")[1].split(":"))
+    end = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if end <= now:  # a span past midnight ends tomorrow
+        end += dt.timedelta(days=1)
+    write_state(WINDOW_FILE, {"key": key, "until": end.timestamp()})
+    if read_commit() or read_only():
+        return None
+    blocks = read_blocks()
+    running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
+    if running:
+        b = read_break() or {"modes": [], "until": 0}
+        modes = list(dict.fromkeys(b["modes"] + running))
+        until = max(b["until"], end.timestamp())
+        BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        BREAK_FILE.write_text(json.dumps({"modes": modes, "until": until}))
+        for m in running:
+            switch(PREFIX + m, on=False)
+    sz_follow(cfg, running_modes(cfg), switched=True)
+    back = f"; {', '.join(running)} starts again then" if running else ""
+    notify(f"focus: open until {end:%H:%M}{back}")
+    return span
+
+
+def window_end(cfg: dict) -> bool:
+    """After a window, point ScreenZen back at what runs, so the pauses return even
+    when no mode comes back (one that does was already followed by end_break)."""
+    w = read_state(WINDOW_FILE) or {}
+    until = w.get("until")
+    if not isinstance(until, (int, float)) or time.time() < until or w.get("done"):
+        return False
+    write_state(WINDOW_FILE, {**w, "done": True})
+    if not running_modes(cfg):
+        sz_follow(cfg, [], switched=True)
+    return True
 
 
 if __name__ == "__main__":
