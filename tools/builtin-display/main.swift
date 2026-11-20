@@ -267,6 +267,26 @@ func trial(seconds: UInt32) {
     if !back { exit(1) }
 }
 
+// MARK: heal
+
+// One-shot safety net, run by launchd every 10 s as a fresh process (the
+// com.user.builtin-display-heal agent). It does not trust the long-lived
+// watcher: on 2026-11-20 the watcher, 17 h old, never saw an unplug and left
+// the screen dark, while a fresh `builtin-display on` read the state right at
+// once. Silent when there is nothing to do; logs only when it has to act,
+// which means the watcher missed an unplug.
+func heal() {
+    // An empty list means no WindowServer access (a sandbox), not "no display".
+    guard !onlineDisplays().isEmpty else { return }
+    guard externals().isEmpty, !builtinIsOn(), !lidClosed() else { return }
+    let id = savedBuiltinID() ?? 1
+    if let error = trySetEnabled(id, true) {
+        log("heal: no external display and built-in off; turning it on FAILED: \(error)")
+        exit(1)
+    }
+    log("heal: no external display and built-in off; built-in screen on (the watcher missed this)")
+}
+
 // MARK: watcher
 
 // Run by the login agent (`builtin-display auto on`). It acts only on two
@@ -283,6 +303,7 @@ func trial(seconds: UInt32) {
 // reconfiguration (such as re-enabling the built-in) renumbers them and makes an
 // already connected monitor look new.
 var knownExternals: Set<String> = []
+var watchActivity: NSObjectProtocol?
 var pendingCheck: DispatchWorkItem?
 
 func hardwareKey(_ id: CGDirectDisplayID) -> String {
@@ -355,6 +376,13 @@ func watch() {
     // gives the process a real WindowServer connection; the 2 s poll is a
     // backstop in case a notification is missed.
     NSApplication.shared.setActivationPolicy(.prohibited)
+    // A faceless app is a prime App Nap candidate, and App Nap throttles timers
+    // and event delivery. Suspected (not proven) cause of the 2026-11-20 miss.
+    // The activity token must live as long as the process, so it is kept global.
+    watchActivity = ProcessInfo.processInfo.beginActivity(
+        options: .userInitiatedAllowingIdleSystemSleep,
+        reason: "builtin-display watches for display plug events"
+    )
     NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
     ) { _ in scheduleReconcile() }
@@ -383,6 +411,8 @@ commands:
                   `toggle` still work while it runs; your choice holds until the
                   next plug event
   watch           what the agent runs (foreground; logs each action)
+  heal            one-shot: turn the built-in on if no external display is
+                  present and the lid is open; `auto on` runs it every 10 s
 
 Uses a private macOS API, so an update can break it. The change lasts for the
 login session: logging out or rebooting always restores the screen.
@@ -401,6 +431,7 @@ case "try":
     guard let seconds, seconds > 0 else { fail("try takes a positive number of seconds", code: 2) }
     trial(seconds: seconds)
 case "watch": watch()
+case "heal": heal()
 case "-h", "--help", "help": print(usage)
 case nil: print(usage); exit(2)
 default: fail("unknown command '\(args[0])'\n\(usage)", code: 2)
