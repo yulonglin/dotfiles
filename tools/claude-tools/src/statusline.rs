@@ -587,9 +587,63 @@ fn active_anthropic_key_label() -> Option<String> {
     None
 }
 
+/// The one toggle for the approval classifier, read from the same file as
+/// claude/hooks/hook_feature.py: `permissions.approval-classifier = off` in
+/// features.conf stops the PermissionRequest hook AND hides this segment, so the
+/// two can never disagree.
+const CLASSIFIER_FEATURE: &str = "permissions.approval-classifier";
+
+/// Mirror of hook_feature.py's `feature_enabled`: the most specific key present
+/// wins (`a.b.c`, then `a.b`, then `a`), a missing key or unreadable file means
+/// on, `#` starts a comment, and values outside the known on/off words are
+/// ignored. Pinned in tests/test_statusline_classifier.sh.
+fn hook_feature_enabled(feature: &str) -> bool {
+    let path = match std::env::var_os("CLAUDE_HOOK_FEATURES_FILE") {
+        Some(p) => std::path::PathBuf::from(p),
+        None => match std::env::var_os("HOME") {
+            Some(home) => std::path::PathBuf::from(home).join(".claude/hooks/features.conf"),
+            None => return true,
+        },
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return true;
+    };
+    let mut flags = std::collections::HashMap::new();
+    for raw in text.lines() {
+        let line = raw.split('#').next().unwrap_or("").trim();
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "on" | "true" | "yes" => flags.insert(key.to_string(), true),
+            "0" | "off" | "false" | "no" => flags.insert(key.to_string(), false),
+            _ => None,
+        };
+    }
+    let mut key = feature;
+    loop {
+        if let Some(&enabled) = flags.get(key) {
+            return enabled;
+        }
+        match key.rfind('.') {
+            Some(i) => key = &key[..i],
+            None => return true,
+        }
+    }
+}
+
 /// Which backend last served an auto-approval, and on which key.
 /// Healthy renders dim and minimal; anything else is meant to be noticed.
 fn format_classifier_str() -> Option<String> {
+    // Switched off: the hook no longer runs, so its health file only goes stale
+    // and would render a misleading `auto?` for hours.
+    if !hook_feature_enabled(CLASSIFIER_FEATURE) {
+        return None;
+    }
     let home = std::env::var("HOME").ok()?;
     let path = std::path::PathBuf::from(home)
         .join(".cache/claude/approval-classifier-health.json");
