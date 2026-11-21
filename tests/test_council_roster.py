@@ -18,6 +18,7 @@ the institutional memory of why each guard exists, so losing it to a serialiser
 round-trip would be a real defect rather than a cosmetic one.
 """
 
+import argparse
 import re
 import importlib.machinery
 import importlib.util
@@ -77,10 +78,137 @@ class TestPickSeat:
     def test_absent_family_returns_none(self):
         assert orc.pick_seat("nope", [row("x/a", 5, 100)], {}, 60.0) is None
 
+    def test_newer_sibling_within_the_interval_wins(self):
+        """The grok-4.7 / gemini-3.8-flash case: a lower point score whose
+        interval overlaps the older model's is a tie, and recency breaks it."""
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7", 6, 200)]
+        scores = {"thing46": 156.4, "thing47": 153.5}
+        cis = {"thing46": (154.5, 159.0), "thing47": (151.8, 155.9)}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis=cis)
+        assert got["slug"] == "x/thing-4.7"
+        assert got["basis"] == "newest-within-ci"
+        assert got["score"] == 153.5
+
+    def test_older_sibling_clearly_ahead_keeps_the_seat(self):
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7", 6, 200)]
+        scores = {"thing46": 160.0, "thing47": 150.0}
+        cis = {"thing46": (158.0, 162.0), "thing47": (148.0, 152.0)}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis=cis)
+        assert got["slug"] == "x/thing-4.6" and got["basis"] == "eci"
+
+    def test_overlap_with_a_different_line_does_not_win(self):
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7-flash", 1, 200)]
+        scores = {"thing46": 156.4, "thing47flash": 156.0}
+        cis = {"thing46": (154.5, 159.0), "thing47flash": (154.0, 158.0)}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis=cis)
+        assert got["slug"] == "x/thing-4.6"
+
+    def test_no_interval_for_the_best_means_no_tiebreak(self):
+        rows = [row("x/thing-4.6", 6, 100), row("x/thing-4.7", 6, 200)]
+        scores = {"thing46": 0.9, "thing47": 0.8}
+        got = orc.pick_seat("x", rows, scores, 60.0, cis={"thing47": (151.8, 155.9)})
+        assert got["slug"] == "x/thing-4.6"
+
     def test_all_unscored_falls_back_to_newest(self):
         rows = [row("x/a", 5, 100), row("x/b", 5, 300)]
         got = orc.pick_seat("x", rows, {}, 60.0)
         assert got["slug"] == "x/b" and got["basis"] == "newest-in-line"
+
+    def test_a_seat_only_aa_has_scored_says_so(self):
+        """The gemini-4-argon case: Epoch had no score, yet the seat read "eci"."""
+        rows = [row("x/new-line", 10, 200), row("x/old-flash", 4, 100)]
+        scores = {"newline": 0.9, "oldflash": 0.5}
+        got = orc.pick_seat("x", rows, scores, 60.0, aa_only={"newline"})
+        assert got["slug"] == "x/new-line" and got["basis"] == "aa-only"
+
+    def test_a_seat_resting_on_an_aa_estimate_says_so(self):
+        rows = [row("x/new-line", 10, 200), row("x/old-flash", 4, 100)]
+        scores = {"newline": 0.9, "oldflash": 0.5}
+        got = orc.pick_seat("x", rows, scores, 60.0, aa_only={"newline"}, aa_estimated={"newline"})
+        assert got["basis"] == "aa-estimated"
+
+
+class TestIndexScores:
+    def test_records_names_only_aa_scored(self, monkeypatch):
+        monkeypatch.setattr(orc, "AA_ONLY", set())
+        monkeypatch.setattr(orc, "fetch_eci", lambda: {"a": 150.0, "b": 160.0})
+        monkeypatch.setattr(orc, "fetch_aa", lambda _: {"a": 40.0, "b": 50.0, "c": 55.0})
+        orc.index_scores(["a", "b", "c"])
+        assert orc.AA_ONLY == {"c"}
+
+    def test_aa_unreachable_leaves_nothing_aa_only(self, monkeypatch):
+        monkeypatch.setattr(orc, "AA_ONLY", {"stale"})
+        monkeypatch.setattr(orc, "fetch_eci", lambda: {"a": 150.0})
+        monkeypatch.setattr(orc, "fetch_aa", lambda _: {})
+        _, credits = orc.index_scores(["a"])
+        assert len(credits) == 1 and orc.AA_ONLY == set()
+
+
+class TestPinnedSeat:
+    """A pin overrides the index for one family. It must never silently fall
+    back to the index pick, or the roster would look honoured while seating a
+    different model."""
+
+    ROWS = [row("g/carbon-4", 10, 100), row("g/neon-4", 15, 200),
+            row("g/pricey-4", 180, 300), row("o/gpt-6", 10, 100)]
+
+    def _propose(self, monkeypatch, pinned):
+        monkeypatch.setattr(orc, "index_scores",
+                            lambda tails: ({"carbon4": 170.0, "gpt6": 160.0}, ["Epoch"]))
+        cfg = {"council": {"families": ["g", "o"], "max_output_price": 60.0,
+                           "max_input_price": 15.0, "pinned": pinned}}
+        picked, gaps, _ = orc.propose_roster(cfg, rows=self.ROWS)
+        return {s["family"]: s for s in picked}, gaps
+
+    def test_pin_beats_the_index_pick(self, monkeypatch):
+        got, _ = self._propose(monkeypatch, {"g": "g/neon-4"})
+        assert got["g"]["slug"] == "g/neon-4" and got["g"]["basis"] == "pinned"
+
+    def test_unpinned_family_still_follows_the_index(self, monkeypatch):
+        got, _ = self._propose(monkeypatch, {"g": "g/neon-4"})
+        assert got["o"]["slug"] == "o/gpt-6" and got["o"]["basis"] == "eci"
+
+    def test_no_pin_keeps_the_index_pick(self, monkeypatch):
+        got, _ = self._propose(monkeypatch, {})
+        assert got["g"]["slug"] == "g/carbon-4"
+
+    def test_pin_missing_from_catalogue_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"g": "g/gone-4"})
+
+    def test_pin_over_the_price_cap_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"g": "g/pricey-4"})
+
+    def test_pin_in_the_wrong_family_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"g": "o/gpt-6"})
+
+    def test_pin_for_an_unseated_family_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"zzz": "g/neon-4"})
+
+
+class TestRefreshApplyGuard:
+    """Epoch lags releases by weeks, so an Epoch-only --apply would reseat the
+    previous generation under a confident "eci" label."""
+
+    def _apply(self, monkeypatch, epoch_only):
+        seat = {"alias": "x", "slug": "x/old", "family": "x", "score": 1.0,
+                "basis": "eci", "in": 1.0, "out": 1.0}
+        monkeypatch.setattr(orc, "propose_roster", lambda cfg: ([seat], [], ["Epoch only"]))
+        writes = []
+        monkeypatch.setattr(orc, "rewrite_seats", lambda *a: writes.append(a))
+        monkeypatch.setattr(orc, "report_picker_gaps", lambda picked: None)
+        orc.cmd_council_refresh(argparse.Namespace(apply=True, epoch_only=epoch_only), {})
+        return writes
+
+    def test_refuses_without_the_flag(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._apply(monkeypatch, epoch_only=False)
+
+    def test_writes_with_the_flag(self, monkeypatch):
+        assert len(self._apply(monkeypatch, epoch_only=True)) == 1
 
 
 class TestRenderSeats:
@@ -512,3 +640,88 @@ class TestLivenessRecord:
         monkeypatch.setattr(orc, "LIVENESS", target)
         orc.write_liveness(None)
         assert target.read_text() == "previous\n"
+
+
+def aa_record(slug, release, score, estimated=False):
+    """One model record shaped like the ones artificialanalysis.ai embeds, with
+    the escaped quotes of its streamed page payload."""
+    body = (f'{{"id":"00000000-0000-0000-0000-{abs(hash(slug)) % 10**12:012d}",'
+            f'"slug":"{slug}","name":"{slug}","release":{{"slug":"{release}","name":"x"}},'
+            f'"deprecated":false,"intelligenceIndex":{score},'
+            f'"intelligenceIndexIsEstimated":{"true" if estimated else "false"}}}')
+    return body.replace('"', '\\"')
+
+
+class TestArtificialAnalysisPages:
+    """Without a key the index comes from the public pages, and /models drops
+    superseded releases -- the 2026-10-12 miss that made Grok 4.6 and Gemini
+    3.7 Flash look unlisted while AA still scored both."""
+
+    def test_best_effort_variant_stands_for_the_release(self):
+        html = aa_record("grok-4-6", "grok-4-6", 44.3) + aa_record("grok-4-6-low", "grok-4-6", 35.1)
+        assert orc.aa_page_records(html) == ({"grok46": 44.3}, {})
+
+    def test_release_slug_normalises_onto_the_openrouter_tail(self):
+        html = aa_record("qwen3-8-max", "qwen3-8-max-0902", 45.4)
+        assert orc.norm("qwen3.8-max-0902") in orc.aa_page_records(html)[0]
+
+    def test_estimates_are_kept_apart_from_measurements(self):
+        html = aa_record("x-1", "x-1", 50.0, estimated=True) + aa_record("y-1", "y-1", 40.0)
+        assert orc.aa_page_records(html) == ({"y1": 40.0}, {"x1": 50.0})
+
+    def test_an_estimate_stands_in_only_until_aa_measures_the_release(self, monkeypatch):
+        """The case raised on 2026-10-14: AA estimates a new model before
+        measuring it, and skipping estimates left that model with no AA score."""
+        pages = {orc.AA_PAGE: aa_record("new-1", "new-1", 55.0, estimated=True)
+                 + aa_record("old-1-low", "old-1", 30.0, estimated=True)
+                 + aa_record("old-1", "old-1", 41.0)}
+        monkeypatch.setattr(orc, "get_page", lambda url: pages.get(url))
+        monkeypatch.setattr(orc, "AA_ESTIMATED", set())
+        got = orc.fetch_aa_pages(["new-1", "old-1"])
+        assert got == {"new1": 55.0, "old1": 41.0}
+        assert orc.AA_ESTIMATED == {"new1"}
+
+    def test_a_measurement_on_a_later_page_replaces_an_estimate(self, monkeypatch):
+        pages = {orc.AA_PAGE: aa_record("new-1", "new-1", 55.0, estimated=True),
+                 f"{orc.AA_PAGE}/new-1": aa_record("new-1", "new-1", 52.0)}
+        monkeypatch.setattr(orc, "get_page", lambda url: pages.get(url))
+        monkeypatch.setattr(orc, "AA_ESTIMATED", set())
+        assert orc.fetch_aa_pages(["new-1"]) == {"new1": 52.0}
+        assert orc.AA_ESTIMATED == set()
+
+    def test_a_candidate_missing_from_the_list_is_fetched_from_its_own_page(self, monkeypatch):
+        pages = {orc.AA_PAGE: aa_record("grok-4-7", "grok-4-7", 46.4),
+                 f"{orc.AA_PAGE}/grok-4-6": aa_record("grok-4-6", "grok-4-6", 44.3)}
+        asked = []
+        monkeypatch.setattr(orc, "get_page", lambda url: asked.append(url) or pages.get(url))
+        got = orc.fetch_aa_pages(["grok-4.7", "grok-4.6"])
+        assert got == {"grok47": 46.4, "grok46": 44.3}
+        assert asked == [orc.AA_PAGE, f"{orc.AA_PAGE}/grok-4-6"], "a listed model must not be refetched"
+
+
+class TestPickerFollowsCouncil:
+    ROUTER = {"models": [
+        {"id": "claude-opus-5-5", "provider": "anthropic"},
+        {"id": "gpt-6-astra", "provider": "codex"},
+        {"id": "grok-4.7", "slug": "x-ai/grok-4.7", "provider": "openrouter"},
+        {"id": "gemini-3.8-flash", "slug": "google/gemini-3.8-flash", "picker": False},
+    ]}
+
+    def test_matching_seats_report_nothing(self):
+        seated = [{"slug": "anthropic/claude-opus-5.5"}, {"slug": "openai/gpt-6-astra"},
+                  {"slug": "x-ai/grok-4.7"}]
+        assert orc.picker_gaps(seated, self.ROUTER) == []
+
+    def test_a_moved_seat_is_reported_and_a_hidden_row_is_not(self):
+        """The picker is hand-curated, so a route-only seat is not a gap."""
+        gaps = orc.picker_gaps([{"slug": "x-ai/grok-4.8"}, {"slug": "google/gemini-3.8-flash"}],
+                               self.ROUTER)
+        assert gaps == ["x-ai/grok-4.8: no route in model-router.toml"]
+
+    def test_every_live_seat_has_a_route(self):
+        """The committed configs: a refresh that moves a seat must move its route too."""
+        import tomllib
+        cfg = tomllib.loads(orc.CONFIG.read_text())
+        router = tomllib.loads(orc.ROUTER_CONFIG.read_text())
+        missing = [g for g in orc.picker_gaps(orc.seats(cfg), router) if "no route" in g]
+        assert missing == []

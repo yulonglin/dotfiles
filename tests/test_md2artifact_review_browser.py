@@ -28,6 +28,8 @@ playwright_api = pytest.importorskip("playwright.sync_api")
 sync_playwright = playwright_api.sync_playwright
 expect = playwright_api.expect
 
+from test_md2artifact_browser import layer_on_context  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 MD2ARTIFACT = ROOT / "custom_bins" / "md2artifact"
 KEY = "review-rb"
@@ -112,6 +114,9 @@ def _chromium_path() -> str | None:
     for name in ("chromium", "chromium-browser", "google-chrome"):
         if found := shutil.which(name):
             return found
+    mac_chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    if mac_chrome.is_file():
+        return str(mac_chrome)
     return None
 
 
@@ -133,7 +138,7 @@ def browser():
 
 @pytest.fixture
 def ctx(browser):
-    c = browser.new_context()
+    c = layer_on_context(browser)  # the layer starts off; these tests need it on
     try:
         yield c
     finally:

@@ -1,285 +1,277 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 # ==============================================================================
-# SYNC CLAUDE CODE TO ANTIGRAVITY CLI
-# Purpose: Ports Claude Code agents/skills into Antigravity CLI (`agy`) by symlinking.
-# Source:  ~/.claude/
-# Target:  ~/.gemini/antigravity-cli/skills/   (Antigravity reuses the ~/.gemini dir)
+# SYNC CLAUDE CODE TO ANTIGRAVITY (one-way projection)
+# Purpose: Project portable Claude Code config into Antigravity's shared global
+#          customization root (~/.gemini/config/), used by agy CLI, Antigravity
+#          2.0 App, and Antigravity IDE.
 #
-# Antigravity CLI is Google's official successor to Gemini CLI (consumer Gemini CLI
-# access ended 2026-06-18). Project instructions come from AGENTS.md (already in repo),
-# so the old GEMINI.md pointer is no longer generated here.
+# Single source of truth stays in dotfiles/claude/ and dotfiles/antigravity/:
+#   1. skills.json -> symlink to antigravity/skills.json (points at ~/.claude/skills
+#                     with exclude list for Claude-runtime-only skills)
+#   2. GEMINI.md   -> symlink to claude/CLAUDE.md (always-on, live updates)
+#   3. AGENTS.md   -> symlink to antigravity/AGENTS.md (tool-compatibility shim)
+#   4. rules/*.md  -> projected from portable claude/rules/*.md with required
+#                     `trigger: always_on` frontmatter; stale managed files are
+#                     pruned while user-authored rules are preserved
+#   5. mcp_config.json -> shared MCPs via sync_mcp_servers.py plus baseline
+#                         portable servers (context7, macOS bear) if absent
 #
-# Permission sync: Antigravity stores settings in
-# ~/.gemini/antigravity-cli/settings.json with a "permissions" object holding
-# allow/deny/ask arrays of action(target) rule strings (e.g. command(git*),
-# read_file(*)). Precedence is Deny > Ask > Allow. This script translates Claude's
-# permissions.{allow,deny,ask} into that schema and merges them into the live
-# settings.json without clobbering other user settings (marker-tracked, idempotent).
-#
-# Schema confirmed via https://antigravity.google/docs/cli-permissions (2026-06-16):
-#   - File: ~/.gemini/antigravity-cli/settings.json
-#   - permissions.allow / .deny / .ask  : arrays of "action(target)" strings
-#   - action types: command, read_file, write_file, mcp, execute_url, web_*
-#   - matching: exact by default; "*" is the per-namespace wildcard; glob/regex supported
-#
-# Only HIGH-CONFIDENCE mappings (command(), read_file()) are written to the live
-# permission arrays. Lower-confidence mappings (WebFetch/WebSearch/MCP action names,
-# regex match-mode encoding) are emitted as comments in a sidecar file rather than
-# guessed into the live config. See the "VERIFY ON A REAL MAC" notes below.
+# Hooks and permissions are intentionally NOT auto-imported from Claude Code
+# (incompatible JSON contracts, synchronous-only execution, and different tool
+# names). Curate native Antigravity hooks/permissions directly if needed.
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-HELPER="$SCRIPT_DIR/helpers/enumerate_claude_skills.sh"
-SOURCE_DIR="$HOME/.claude"
-TARGET_DIR="$HOME/.gemini/antigravity-cli/skills"
+TARGET_DIR="$HOME/.gemini/config"
+CLAUDE_DIR="$DOTFILES_DIR/claude"
+EXCLUDE_RULES=("background-jobs.md")
 
-if [ ! -f "$HELPER" ]; then
-    echo "Error: enumerate_claude_skills.sh not found at $HELPER" >&2
-    exit 1
-fi
-source "$HELPER"
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
 
-mkdir -p "$TARGET_DIR"
+Project portable Claude Code config one-way into Antigravity (~/.gemini/config).
 
-# Clean stale symlinks (broken or from old *__* pattern)
-find "$TARGET_DIR" -maxdepth 1 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
-find "$TARGET_DIR" -maxdepth 1 -type l -name '*__*' -delete 2>/dev/null || true
+Options:
+  --target-dir PATH    Target Antigravity config dir (default: ~/.gemini/config)
+  --dotfiles-dir PATH  Dotfiles repo root (default: repo containing this script)
+  --claude-dir PATH    Source Claude config dir (default: <dotfiles-dir>/claude)
+  -h, --help           Show this help
+EOF
+}
 
-echo ">>> Syncing Claude Code Skills to Antigravity CLI..."
-
-enumerate_claude_skills "$SOURCE_DIR" | while IFS=$'\t' read -r type name path; do
-    case "$type" in
-        user_skill)
-            ln -sfn "$path" "$TARGET_DIR/$name"
-            echo "  User Skill: $name"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --target-dir)
+            TARGET_DIR="$2"
+            shift 2
             ;;
-        standalone_skill)
-            mkdir -p "$TARGET_DIR/$name"
-            ln -sfn "$path" "$TARGET_DIR/$name/SKILL.md"
-            echo "  Standalone Skill: $name"
+        --dotfiles-dir)
+            DOTFILES_DIR="$2"
+            shift 2
             ;;
-        plugin_skill)
-            ln -sfn "$path" "$TARGET_DIR/$name"
-            echo "  Plugin Skill: $name"
+        --claude-dir)
+            CLAUDE_DIR="$2"
+            shift 2
             ;;
-        agent_skill)
-            mkdir -p "$TARGET_DIR/$name"
-            ln -sfn "$path" "$TARGET_DIR/$name/SKILL.md"
-            echo "  Agent Skill: $name"
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Error: unknown argument: $1" >&2
+            usage >&2
+            exit 2
             ;;
     esac
 done
 
-TOTAL=$(find "$TARGET_DIR" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ')
-echo "  Synced $TOTAL skills to $TARGET_DIR"
+ANTIGRAVITY_SRC="$DOTFILES_DIR/antigravity"
+RULES_SRC="$CLAUDE_DIR/rules"
+RULES_DST="$TARGET_DIR/rules"
+MCP_SOURCE="$DOTFILES_DIR/config/mcp-servers.json"
+MCP_SYNC_SCRIPT="$DOTFILES_DIR/scripts/helpers/sync_mcp_servers.py"
+MCP_TARGET="$TARGET_DIR/mcp_config.json"
 
-# ---------- Permissions Sync ----------
-#
-# Translate Claude Code permissions.{allow,deny,ask} -> Antigravity
-# permissions.{allow,deny,ask} (action(target) rule strings) and merge into the
-# live settings.json. The merge is marker-tracked so re-runs replace our block
-# rather than duplicating, and user-authored rules outside the block survive.
-
-echo ">>> Syncing Claude Code Permissions to Antigravity CLI..."
-
-# Prefer the in-repo source of truth; fall back to the deployed symlink target.
-CLAUDE_SETTINGS="$DOTFILES_DIR/claude/settings.json"
-[ -f "$CLAUDE_SETTINGS" ] || CLAUDE_SETTINGS="$HOME/.claude/settings.json"
-
-ANTIGRAVITY_SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
-ANTIGRAVITY_SIDECAR="$HOME/.gemini/antigravity-cli/claude_sync_unmapped.txt"
-
-if [ ! -f "$CLAUDE_SETTINGS" ]; then
-    echo "  Skipping: Claude settings not found at $CLAUDE_SETTINGS"
-elif ! command -v python3 >/dev/null 2>&1; then
-    echo "  Skipping: python3 not installed"
-else
-    mkdir -p "$(dirname "$ANTIGRAVITY_SETTINGS")"
-    python3 - "$CLAUDE_SETTINGS" "$ANTIGRAVITY_SETTINGS" "$ANTIGRAVITY_SIDECAR" <<'PY'
-import json
-import re
-import sys
-from pathlib import Path
-
-claude_path = Path(sys.argv[1])
-ag_path = Path(sys.argv[2])
-sidecar_path = Path(sys.argv[3])
-
-# Marker tags wrapping the rules we own inside each permission array, so re-runs
-# can replace our contribution while leaving user-authored rules untouched.
-BEGIN = "// BEGIN CLAUDE SYNC (auto-generated)"
-END = "// END CLAUDE SYNC"
-
-try:
-    claude = json.loads(claude_path.read_text())
-except (OSError, json.JSONDecodeError) as exc:
-    print(f"  Skipping: cannot read Claude settings ({exc})")
-    sys.exit(0)
-
-perms = claude.get("permissions", {})
-
-
-def claude_bash_to_command_target(pattern):
-    """Map a Claude `Bash(...)` permission to an Antigravity command(...) target.
-
-    Claude uses prefix-glob with a trailing ` *` (e.g. `Bash(git *)`), plus some
-    exact forms (e.g. `Bash(pueue status)`). Antigravity matches `command(...)`
-    targets exactly by default and treats `*` as a glob wildcard, so:
-        Bash(git *)         -> command(git*)     (glob: any git subcommand/args)
-        Bash(pueue status)  -> command(pueue status)  (exact)
-    Returns None for anything we can't confidently express.
-    """
-    m = re.match(r"^Bash\((.*)\)$", pattern, re.DOTALL)
-    if not m:
-        return None
-    inner = m.group(1).strip()
-    if not inner:
-        return None
-    # Trailing " *" is Claude's "this command with any args" idiom -> glob.
-    if inner.endswith(" *"):
-        stem = inner[:-2].strip()
-        if not stem:
-            return None
-        return f"command({stem}*)"
-    # Otherwise treat as an exact command string. If it still contains a glob
-    # star, Antigravity's glob matcher handles it; pass through verbatim.
-    return f"command({inner})"
-
-
-# High-confidence: tools whose Antigravity action name + target we can map
-# faithfully. Lower-confidence tools go to the sidecar instead of being guessed.
-def map_rule(item):
-    """Return (antigravity_rule, None) if confidently mapped,
-    else (None, reason) to record as unmapped."""
-    if item.startswith("Bash("):
-        target = claude_bash_to_command_target(item)
-        if target:
-            return target, None
-        return None, "unparsable Bash pattern"
-    if item == "Read":
-        return "read_file(*)", None
-    if item.startswith("Read("):
-        m = re.match(r"^Read\((.*)\)$", item, re.DOTALL)
-        if m and m.group(1).strip():
-            return f"read_file({m.group(1).strip()})", None
-        return None, "unparsable Read pattern"
-    # --- Lower-confidence / unverified action namespaces ---
-    # The following Claude tools have plausible Antigravity equivalents, but the
-    # exact action name (web_fetch vs web_search vs web) and the mcp() target
-    # encoding are NOT confirmed from docs. We deliberately do NOT write these to
-    # the live config. Best-effort guesses are recorded in the sidecar for a human
-    # to verify on a real Mac with `agy` (see /permissions output).
-    if item == "WebFetch":
-        return None, "WebFetch -> web_fetch(*)?  [action name unverified]"
-    if item.startswith("WebFetch(domain:"):
-        return None, f"{item} -> web_fetch(<domain>)?  [encoding unverified]"
-    if item == "WebSearch":
-        return None, "WebSearch -> web_search(*)?  [action name unverified]"
-    if item.startswith("mcp__"):
-        return None, f"{item} -> mcp(<server/tool>)?  [target encoding unverified]"
-    if item in ("Glob", "Grep", "Search"):
-        return None, f"{item} (Claude built-in; no Antigravity equivalent)"
-    return None, f"{item} (no mapping rule)"
-
-
-mapped = {"allow": [], "deny": [], "ask": []}
-unmapped = []
-for bucket in ("allow", "deny", "ask"):
-    for item in perms.get(bucket, []):
-        rule, reason = map_rule(item)
-        if rule is not None:
-            if rule not in mapped[bucket]:
-                mapped[bucket].append(rule)
-        else:
-            unmapped.append(f"[{bucket}] {item}  ->  {reason}")
-
-# --- Merge into the existing settings.json, preserving non-permission keys and
-#     any user-authored rules that live outside our marker block. ---
-settings = {}
-if ag_path.exists():
-    try:
-        settings = json.loads(ag_path.read_text())
-        if not isinstance(settings, dict):
-            settings = {}
-    except (OSError, json.JSONDecodeError):
-        # Don't clobber an unreadable/hand-edited file; bail loudly instead.
-        print(f"  Skipping: {ag_path} exists but is not valid JSON; "
-              "leaving it untouched.")
-        sys.exit(0)
-
-perm_obj = settings.get("permissions")
-if not isinstance(perm_obj, dict):
-    perm_obj = {}
-
-
-def merge_bucket(existing, ours):
-    """Drop any prior CLAUDE-SYNC block, keep user rules, append fresh block.
-
-    Our block is delimited by BEGIN/END sentinel strings inserted as array
-    elements. Re-runs strip the old block (between the sentinels) and re-add a
-    current one, so user-authored entries outside the block are preserved and
-    our contribution never duplicates.
-    """
-    existing = existing if isinstance(existing, list) else []
-    kept = []
-    skipping = False
-    for el in existing:
-        if el == BEGIN:
-            skipping = True
-            continue
-        if el == END:
-            skipping = False
-            continue
-        if not skipping:
-            kept.append(el)
-    if not ours:
-        return kept
-    return kept + [BEGIN] + ours + [END]
-
-
-changed_buckets = []
-for bucket in ("allow", "deny", "ask"):
-    new_list = merge_bucket(perm_obj.get(bucket), mapped[bucket])
-    perm_obj[bucket] = new_list
-    changed_buckets.append(f"{bucket}:{len(mapped[bucket])}")
-
-settings["permissions"] = perm_obj
-
-ag_path.parent.mkdir(parents=True, exist_ok=True)
-ag_path.write_text(json.dumps(settings, indent=2) + "\n")
-print(f"  Wrote {ag_path}")
-print(f"  Synced rules ({', '.join(changed_buckets)})")
-
-# Record everything we did NOT confidently map, for human verification.
-header = [
-    "# Claude -> Antigravity permission sync: UNMAPPED / UNVERIFIED entries",
-    f"# Source: {claude_path}",
-    "# These Claude permissions were NOT written to settings.json because the",
-    "# Antigravity action name or target encoding is not confirmed from docs.",
-    "# Verify against `agy` /permissions on a real Mac, then map by hand.",
-    "",
-]
-if unmapped:
-    sidecar_path.write_text("\n".join(header + sorted(set(unmapped))) + "\n")
-    print(f"  {len(set(unmapped))} unmapped/unverified entries -> {sidecar_path}")
-else:
-    # Nothing unmapped: clear any stale sidecar from a previous run.
-    if sidecar_path.exists():
-        sidecar_path.unlink()
-PY
+if [[ ! -d "$ANTIGRAVITY_SRC" ]]; then
+    echo "Error: antigravity source directory not found at $ANTIGRAVITY_SRC" >&2
+    exit 1
 fi
 
-echo ">>> Done. Antigravity CLI synchronized with Claude Code (skills + permissions)."
-echo "    (Project instructions: AGENTS.md. Unmapped perms, if any: ~/.gemini/antigravity-cli/claude_sync_unmapped.txt)"
-echo ""
-echo "    # TODO: verify Antigravity permission schema on a real Mac (no \`agy\` in CI/Linux):"
-echo "    #  - Confirm settings.json 'permissions' merges live (run \`agy\` -> /permissions)."
-echo "    #  - Confirm glob target form: does command(git*) auto-approve 'git status'?"
-echo "    #    (docs say default match is EXACT; '*' is the glob wildcard — verify the"
-echo "    #     trailing-star form is read as glob, not a literal '*' character.)"
-echo "    #  - Verify unverified action names in the sidecar: web_fetch / web_search / mcp()."
-echo "    #  - Decide whether regex rules (e.g. 'command(git (status|log).*)' with a"
-echo "    #    match-mode field) are preferable to globs; docs hint at a per-rule match"
-echo "    #    strategy (exact|glob|regex) whose JSON encoding is not yet confirmed."
+mkdir -p "$TARGET_DIR" "$RULES_DST"
+
+link_managed() {
+    local src="$1" dst="$2"
+    if [[ ! -e "$src" ]]; then
+        echo "  Warning: missing source $src — skipping $dst" >&2
+        return 0
+    fi
+    if [[ -L "$dst" ]]; then
+        if [[ "$(readlink "$dst")" == "$src" ]]; then
+            return 0
+        fi
+        rm "$dst"
+    elif [[ -e "$dst" ]]; then
+        local backup
+        backup="${dst}.backup.$(date -u +%Y-%m-%d_%H-%M-%S)"
+        mv "$dst" "$backup"
+        echo "  Backed up existing $dst -> $backup"
+    fi
+    ln -s "$src" "$dst"
+    echo "  Linked $dst -> $src"
+}
+
+echo ">>> Syncing Claude Code config to Antigravity ($TARGET_DIR)..."
+
+# 1. Skills manifest + global instruction files
+link_managed "$ANTIGRAVITY_SRC/skills.json" "$TARGET_DIR/skills.json"
+link_managed "$ANTIGRAVITY_SRC/AGENTS.md" "$TARGET_DIR/AGENTS.md"
+link_managed "$CLAUDE_DIR/CLAUDE.md" "$TARGET_DIR/GEMINI.md"
+
+if [[ ! -d "$HOME/.claude/skills" && "$TARGET_DIR" == "$HOME/.gemini/config" ]]; then
+    echo "  Note: ~/.claude/skills not found yet — run ./deploy.sh --only claude so skills.json resolves"
+fi
+
+# 2. Project portable claude/rules/*.md with Antigravity always_on frontmatter
+if [[ -d "$RULES_SRC" ]]; then
+    python3 - "$RULES_SRC" "$RULES_DST" "${EXCLUDE_RULES[@]}" <<'PY'
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+src_dir = Path(sys.argv[1])
+dst_dir = Path(sys.argv[2])
+excluded = set(sys.argv[3:])
+
+MARKER = "<!-- Generated by scripts/sync_claude_to_antigravity.sh"
+PER_FILE_LIMIT = 24_000
+
+
+def atomic_write(path: Path, text: str) -> None:
+    fd, tmp = tempfile.mkstemp(prefix=".ag-rule-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+expected: set[str] = set()
+written = 0
+unchanged = 0
+for src in sorted(src_dir.glob("*.md")):
+    if src.name in excluded:
+        continue
+    expected.add(src.name)
+    body = src.read_text(encoding="utf-8")
+    # Respect existing frontmatter if a source rule ever adopts it; otherwise
+    # prepend Antigravity's required always_on trigger block.
+    if body.startswith("---\n"):
+        rendered = (
+            f"{MARKER} from claude/rules/{src.name}; edit the source, not this file. -->\n"
+            + body
+        )
+    else:
+        rendered = (
+            "---\n"
+            "trigger: always_on\n"
+            "---\n"
+            f"{MARKER} from claude/rules/{src.name}; edit the source, not this file. -->\n\n"
+            + body
+        )
+
+    size = len(rendered.encode("utf-8"))
+    if size > PER_FILE_LIMIT:
+        print(
+            f"  Warning: {src.name} is {size} bytes (> Antigravity {PER_FILE_LIMIT}-byte per-file cap)",
+            file=sys.stderr,
+        )
+
+    dst = dst_dir / src.name
+    if dst.exists() and not dst.is_symlink() and dst.read_text(encoding="utf-8") == rendered:
+        unchanged += 1
+        continue
+    if dst.is_symlink():
+        dst.unlink()
+    atomic_write(dst, rendered)
+    written += 1
+
+pruned = 0
+for existing in sorted(dst_dir.glob("*.md")):
+    if existing.name in expected or existing.is_symlink():
+        continue
+    try:
+        head = existing.read_text(encoding="utf-8")[:512]
+    except OSError:
+        continue
+    if MARKER in head:
+        existing.unlink()
+        pruned += 1
+
+print(f"  Rules: {len(expected)} active ({written} updated, {unchanged} current, {pruned} pruned)")
+PY
+else
+    echo "  Warning: Claude rules directory not found at $RULES_SRC" >&2
+fi
+
+# 3. Shared MCP servers -> mcp_config.json (plus baseline portable servers if absent)
+if [[ -f "$MCP_SOURCE" && -f "$MCP_SYNC_SCRIPT" ]]; then
+    python3 "$MCP_SYNC_SCRIPT" \
+        --source "$MCP_SOURCE" \
+        --claude-settings "$DOTFILES_DIR/claude/settings.json" \
+        --codex-config "$DOTFILES_DIR/codex/config.toml" \
+        --antigravity-config "$MCP_TARGET" \
+        --apply >/dev/null
+fi
+
+python3 - "$MCP_TARGET" <<'PY'
+import json
+import os
+import platform
+import sys
+import tempfile
+from pathlib import Path
+
+target = Path(sys.argv[1])
+data = {"mcpServers": {}}
+if target.exists():
+    try:
+        loaded = json.loads(target.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            data = loaded
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"  Warning: {target} is not valid JSON ({exc}); leaving untouched", file=sys.stderr)
+        sys.exit(0)
+
+servers = data.setdefault("mcpServers", {})
+if not isinstance(servers, dict):
+    print(f"  Warning: {target} mcpServers is not an object; leaving untouched", file=sys.stderr)
+    sys.exit(0)
+
+added = []
+defaults = {
+    "context7": {"url": "https://mcp.context7.com/mcp"},
+}
+bearcli = "/Applications/Bear.app/Contents/MacOS/bearcli"
+if platform.system() == "Darwin" and os.access(bearcli, os.X_OK):
+    defaults["bear"] = {"command": bearcli, "args": ["mcp-server"]}
+
+for name, cfg in defaults.items():
+    if name not in servers:
+        servers[name] = cfg
+        added.append(name)
+
+if added or not target.exists():
+    target.parent.mkdir(parents=True, exist_ok=True)
+    rendered = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    fd, tmp = tempfile.mkstemp(prefix=".ag-mcp-", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(rendered)
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    if added:
+        print(f"  MCP: seeded {', '.join(added)} in {target}")
+    else:
+        print(f"  MCP: initialized {target}")
+else:
+    print(f"  MCP: {target} already up to date ({len(servers)} server(s))")
+PY
+
+# Flag legacy skill-symlink directory from the pre-2026-11 script if present
+if [[ "$TARGET_DIR" == "$HOME/.gemini/config" && -d "$HOME/.gemini/antigravity-cli/skills" ]]; then
+    legacy_links=$(find "$HOME/.gemini/antigravity-cli/skills" -maxdepth 1 -type l 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$legacy_links" -gt 0 ]]; then
+        echo "  Note: $legacy_links legacy symlink(s) remain in ~/.gemini/antigravity-cli/skills (superseded by ~/.gemini/config/skills.json)"
+    fi
+fi
+
+echo ">>> Done! Antigravity global config synchronized."

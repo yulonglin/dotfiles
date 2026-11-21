@@ -37,6 +37,8 @@ Exposure is tailnet-only, the same trust boundary as `tailscale serve` — a 100
 
 Turn on **"Use Tailscale DNS"** in the Tailscale app on the phone. Without it, every `.ts.net` name on the tailnet is unreachable, not only romp. Once it is on, `https://hetzner.taile13c17.ts.net/` works and the forwarder can be retired.
 
+**Why it was off is not recorded, and NordVPN is the suspect.** Yulong recalls turning it off because it broke something, possibly internet access with NordVPN, but no doc, commit or session transcript states the reason. A plausible mechanism: NordVPN's resolver on this Mac is `100.64.0.2`, which sits inside Tailscale's `100.64.0.0/10`, and `tailscale-route-fix` points that whole range at Tailscale's utun. Tailscale DNS forwarding non-tailnet queries to that address could then send them into the tailnet and fail. On 2026-11-02 it was turned on for the Mac (`tailscale set --accept-dns=true`) with NordVPN connected, and every check passed: public names, a fresh HTTPS fetch, Tailscale's own forwarder (`dig @100.100.100.100`), `hetzner.taile13c17.ts.net`, and Rex on hn by name. Not yet tested: NordVPN reconnecting or switching servers, sleep and wake, or the phone. If the internet dies with no other cause, run `tailscale set --accept-dns=false` first, and record here what broke.
+
 ## Health check, in the order that isolates the fault
 
 ```bash

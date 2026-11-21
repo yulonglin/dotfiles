@@ -4,6 +4,18 @@ Hooks for automating task and agent management workflows.
 
 ## Available Hooks
 
+### inject_timestamp.sh + elapsed_stamp.sh (time awareness)
+
+**Purpose:** Keep the model clock-aware. `inject_timestamp.sh` (UserPromptSubmit, flag `time.prompt-stamp`) prints `[Now: Thu 2026-08-27 02:40 PDT (UTC-07:00) · 09:40 UTC · 2h13m since your last message]`; the gap clause appears only past `CLAUDE_TIME_GAP_MIN` (10). `elapsed_stamp.sh` (PostToolUse on every tool, flag `time.elapsed-stamp`) emits `[Time check: 25m elapsed in this turn · now …]` as `additionalContext`, because plain stdout on PostToolUse never reaches Claude, at most once per `CLAUDE_TIME_STAMP_INTERVAL_MIN` (5). That in-turn stamp is the piece Ofengenden & Andriushchenko (2026) show agents need most: scrubbing timestamps roughly doubles their elapsed-time error. Shared code and rationale: `lib_time_stamp.sh`. Literature page: https://claude.ai/code/artifact/842dfe8e-e902-416d-86eb-aa7d5042b659
+
+**Zone:** `CLAUDE_LOCAL_TZ` → `TZ` → `/etc/timezone` → `/etc/localtime` → UTC; an invalid zone warns in the stamp. `config/zshrc.sh` sets `CLAUDE_LOCAL_TZ=America/Los_Angeles` on non-macOS hosts only (servers run on UTC); a Mac uses `/etc/localtime`, which follows travel.
+
+**Off switches:** `time = off` in `features.conf` (global, or `time.prompt-stamp` / `time.elapsed-stamp` singly); `touch .claude/no-time-stamps` (per repo; use it in model-organism repos, since a stated date is a backdoor-trigger surface); `CLAUDE_TIME_STAMPS=off` (per shell).
+
+**The remember plugin stamps too.** Its UserPromptSubmit hook adds `[HH:MM <zone> — <user>]` (time only, no date). This repo does not change it. For one owner of time, set `"prompt_stamp": "stable"` in `~/.remember/config.json` (keeps the username and remember's 95% context warning) or `"off"` (drops both), per machine.
+
+**Test:** `tests/test_time_stamps.zsh`.
+
 ### agent_spawned.sh
 
 **Purpose:** Reminds user to save agent IDs when agents are spawned
@@ -80,6 +92,19 @@ Hooks for automating task and agent management workflows.
 - `simplify_nudge.sh` (`Stop`) fires when a script hit `CLAUDE_SIMPLIFY_REUSE_RUNS` (default 3) runs with at least one stable run → "promote it into a permanent component" (criteria and destinations: `rules/coding-conventions.md`). Each candidate is nudged once per session.
 
 **Tests:** `test_simplify_reuse.sh`.
+
+### nudge_silent_turn.sh
+
+**Purpose:** Stop a turn from ending with no user-visible text after a human message. Thinking, tool calls and collapsed agent results are invisible to the user, so a silent turn reads as a crash (incident 2026-08-21).
+
+**Behavior:**
+- `Stop`, behind `nudges.silent-turn` in `features.conf` (explicitly on). The first stop of a silent turn returns `{"decision":"block"}` with a reason telling the model to answer, give pending status, or restate an agent result.
+- One-shot per turn: it returns at once when `stop_hook_active` is set, and a guard file keyed on (session, user message uuid, text) makes the retry pass. If the guard cannot be written, it does not block.
+- The turn starts at the last user entry that is neither a `tool_result` nor `isMeta` (skill bodies and cross-session messages land mid-turn as `isMeta`).
+- Exempt: `AskUserQuestion`, plan mode and `SendMessage` turns, slash-command, `!` shell-mode and interrupt carriers, reminder-only messages, turns with no assistant activity. Fails open on any parse error.
+- Disjoint from `nudge_bg_prose_question.sh`, which needs closing text to inspect.
+
+**Tests:** `test_nudge_silent_turn.sh` (one-shot guarantee, `stop_hook_active`, `isMeta` boundary, uuid key, exemptions, fail-open).
 
 ### fix_hook_permissions.sh / patch_ralph_loop_stop_hook.py
 

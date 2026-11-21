@@ -46,7 +46,23 @@ PLIST_PATH="/Library/LaunchDaemons/${PLIST_LABEL}.plist"
 SYSTEM_SCRIPT="/usr/local/bin/tailscale-route-fix"
 PF_ANCHOR="main/tailscale"
 PF_SIG_FILE="/var/run/tailscale-route-fix.pfsig"
+DAEMON_LOG="/var/log/tailscale-route-fix.log"
 WG_FALLBACK_PORT=41641
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+# The watch daemon reopens its log by path on every line. launchd's
+# StandardOutPath holds one descriptor for the daemon's life, so after
+# newsyslog rotated the file every line went to the rotated, then deleted,
+# inode and the live log stayed empty from 2026-10-13 on.
+LOG_TO_FILE=false
+
+log() {
+  if [[ "$LOG_TO_FILE" == true ]]; then
+    echo "$LOG_PREFIX $*" >> "$DAEMON_LOG"
+  else
+    echo "$LOG_PREFIX $*"
+  fi
+}
 
 # ─── Interface Detection ─────────────────────────────────────────────────────
 # utun interfaces are dynamically numbered — detect by IP and netmask.
@@ -106,15 +122,23 @@ nordvpn_pf_block_active() {
   pfctl -sr 2>/dev/null | grep -q '^block drop all'
 }
 
-detect_physical_if() {
-  local iface
-  # Prefer the interface Nord's own helper-whitelist rule names
-  # (e.g. "pass on en0 all user = 0 group = 101 ...")
-  iface=$(pfctl -sr 2>/dev/null | sed -n 's/^pass on \([a-z0-9]*\) all user = 0 .*/\1/p' | head -1)
-  if [[ -z "$iface" ]]; then
-    iface=$(echo "show State:/Network/Global/IPv4" | scutil 2>/dev/null | awk '/PrimaryInterface/ { print $3 }')
-  fi
-  echo "${iface:-en0}"
+detect_physical_ifs() {
+  # Every physical interface Tailscale might dial from, space-separated: the
+  # ones Nord's helper-whitelist rules name ("pass on en0 all user = 0 ..."),
+  # the primary interface, and every en* with an IPv4 address. Tunnels are
+  # dropped: with Nord up the primary interface is Nord's own utun. Tailscale
+  # keeps the egress interface it picked at startup, which need not be the one
+  # Nord whitelists: on 2026-10-27 it stayed on en0 Wi-Fi while a dock's en9
+  # came and went, and every new control-plane and DERP dial was dropped by pf
+  # until Tailscale was restarted.
+  {
+    pfctl -sr 2>/dev/null | sed -n 's/^pass on \([a-z0-9]*\) all user = 0 .*/\1/p'
+    echo "show State:/Network/Global/IPv4" | scutil 2>/dev/null | awk '/PrimaryInterface/ { print $3 }'
+    ifconfig 2>/dev/null | awk '
+      /^[a-z]/ { iface = $1; sub(/:$/, "", iface) }
+      /^[[:space:]]inet / && iface ~ /^en[0-9]+$/ { print iface }
+    '
+  } | grep -v '^utun' | sort -u | paste -sd ' ' -
 }
 
 detect_tailscale_udp_ports() {
@@ -128,7 +152,7 @@ detect_tailscale_udp_ports() {
 }
 
 pf_build_rules() {
-  local ts_if="$1" phys_if="$2"
+  local ts_if="$1" phys_if="{ $2 }"
   shift 2
   # Tailnet data + MagicDNS on Tailscale's own tunnel; SYN rule for new TCP,
   # flags-any rule so mid-stream packets still pass after an anchor reload.
@@ -152,7 +176,7 @@ check_and_fix_pf() {
     if [[ -f "$PF_SIG_FILE" ]]; then
       pfctl -a "$PF_ANCHOR" -F rules 2>/dev/null || true
       rm -f "$PF_SIG_FILE"
-      echo "$LOG_PREFIX $(date '+%Y-%m-%d %H:%M:%S') NordVPN pf firewall gone — flushed $PF_ANCHOR anchor"
+      log "$(date '+%Y-%m-%d %H:%M:%S') NordVPN pf firewall gone — flushed $PF_ANCHOR anchor"
     fi
     return 0
   fi
@@ -161,11 +185,12 @@ check_and_fix_pf() {
   ts_if=$(detect_tailscale_if || true)
   [[ -z "$ts_if" ]] && return 0  # No Tailscale — nothing to whitelist
 
-  local phys_if ports sig
-  phys_if=$(detect_physical_if)
+  local phys_ifs ports sig
+  phys_ifs=$(detect_physical_ifs)
+  [[ -z "$phys_ifs" ]] && phys_ifs="en0"
   ports=$(detect_tailscale_udp_ports)
   [[ -z "$ports" ]] && ports="$WG_FALLBACK_PORT"
-  sig="$ts_if $phys_if ${ports//$'\n'/ }"
+  sig="$ts_if $phys_ifs ${ports//$'\n'/ }"
 
   # Idempotency: skip reload when parameters unchanged and anchor still loaded
   # (pf states survive a rule reload, so reloading is cheap but noisy).
@@ -174,13 +199,13 @@ check_and_fix_pf() {
     return 0
   fi
 
-  echo "$LOG_PREFIX $(date '+%Y-%m-%d %H:%M:%S') NordVPN pf firewall active — loading $PF_ANCHOR pass rules ($sig)"
+  log "$(date '+%Y-%m-%d %H:%M:%S') NordVPN pf firewall active — loading $PF_ANCHOR pass rules ($sig)"
   # shellcheck disable=SC2086  # word splitting of port list is intentional
-  if pf_build_rules "$ts_if" "$phys_if" $ports | pfctl -q -a "$PF_ANCHOR" -f - 2>/dev/null; then
+  if pf_build_rules "$ts_if" "$phys_ifs" $ports | pfctl -q -a "$PF_ANCHOR" -f - 2>/dev/null; then
     echo "$sig" > "$PF_SIG_FILE"
-    echo "$LOG_PREFIX pf pass rules loaded into $PF_ANCHOR"
+    log "pf pass rules loaded into $PF_ANCHOR"
   else
-    echo "$LOG_PREFIX ERROR: failed to load pf rules into $PF_ANCHOR"
+    log "ERROR: failed to load pf rules into $PF_ANCHOR"
     return 1
   fi
 }
@@ -204,18 +229,18 @@ check_and_fix_routes() {
     return 0  # Already correct
   fi
 
-  echo "$LOG_PREFIX $(date '+%Y-%m-%d %H:%M:%S') Detected Tailscale=$ts_if, NordVPN=$nord_if — fixing routes"
+  log "$(date '+%Y-%m-%d %H:%M:%S') Detected Tailscale=$ts_if, NordVPN=$nord_if — fixing routes"
 
   # TOCTOU check: verify interface still exists before mutating routes
   if ! ifconfig "$ts_if" &>/dev/null; then
-    echo "$LOG_PREFIX ERROR: $ts_if disappeared — aborting"
+    log "ERROR: $ts_if disappeared — aborting"
     return 1
   fi
 
   # Delete NordVPN's /10 route, add Tailscale's (with rollback on failure)
   route delete -net "$CGNAT_NET" 2>/dev/null || true
   if ! route add -net "$CGNAT_NET" -interface "$ts_if" 2>/dev/null; then
-    echo "$LOG_PREFIX ERROR: Failed to add $CGNAT_NET route — restoring NordVPN route"
+    log "ERROR: Failed to add $CGNAT_NET route — restoring NordVPN route"
     route add -net "$CGNAT_NET" -interface "$nord_if" 2>/dev/null || true
     return 1
   fi
@@ -226,9 +251,9 @@ check_and_fix_routes() {
 
   # Post-apply verification
   if is_routing_correct "$ts_if"; then
-    echo "$LOG_PREFIX Routes verified (CGNAT + MagicDNS → $ts_if)"
+    log "Routes verified (CGNAT + MagicDNS → $ts_if)"
   else
-    echo "$LOG_PREFIX WARNING: Routes applied but verification failed"
+    log "WARNING: Routes applied but verification failed"
   fi
 }
 
@@ -309,11 +334,12 @@ cmd_once() {
 }
 
 cmd_watch() {
-  echo "$LOG_PREFIX Starting event-driven watch (route monitor + 60s heartbeat)"
+  LOG_TO_FILE=true
+  log "$(date '+%Y-%m-%d %H:%M:%S') Starting event-driven watch (route monitor + 60s heartbeat)"
 
   # Initial fix on startup (handles NordVPN already connected at boot)
-  check_and_fix_routes || echo "$LOG_PREFIX WARNING: initial route check failed, continuing"
-  check_and_fix_pf || echo "$LOG_PREFIX WARNING: initial pf check failed, continuing"
+  check_and_fix_routes || log "WARNING: initial route check failed, continuing"
+  check_and_fix_pf || log "WARNING: initial pf check failed, continuing"
 
   # Background heartbeat (defense-in-depth; also catches Nord flushing our
   # anchor without a route change)
@@ -324,12 +350,23 @@ cmd_watch() {
 
   # Primary: event-driven via route monitor (PF_ROUTE kernel socket).
   # Nord connect/disconnect always changes routes, so pf transitions are
-  # caught here too.
-  route monitor | while IFS= read -r _; do
-    # Drain burst: keep reading until quiet for 1s (integer for bash 3.2 compat)
-    while read -t 1 -r _; do :; done
-    check_and_fix_routes || echo "$LOG_PREFIX WARNING: route check failed, will retry on next event"
-    check_and_fix_pf || echo "$LOG_PREFIX WARNING: pf check failed, will retry on next event"
+  # caught here too. Only a message-type line (RTM_*) counts as an event, and
+  # RTM_MISS / RTM_GET are skipped: on a network without IPv6 the kernel emits
+  # an RTM_MISS for every failed IPv6 lookup, which ran both checks (four
+  # `tailscale` CLI calls) about 1,800 times an hour on 2026-10-27.
+  route -n monitor | while IFS= read -r line; do
+    case "$line" in
+      RTM_MISS*|RTM_GET*) continue ;;
+      RTM_*) ;;
+      *) continue ;;
+    esac
+    # Drain burst: keep reading until quiet for 1s, at most 5s, so a steady
+    # trickle of RTM_MISS cannot postpone the check forever (integer for bash
+    # 3.2 compat)
+    drain_until=$((SECONDS + 5))
+    while (( SECONDS < drain_until )) && read -t 1 -r _; do :; done
+    check_and_fix_routes || log "WARNING: route check failed, will retry on next event"
+    check_and_fix_pf || log "WARNING: pf check failed, will retry on next event"
   done
 }
 

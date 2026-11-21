@@ -1,0 +1,23 @@
+title: Rigour Checks Review
+url: https://claude.ai/artifact/BsHW8Yo2cmJLGyLEfL4XaX
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-10-12
+last_updated: 2026-10-12
+status: live
+
+public: no
+
+summary: >-
+  every rigour, reproducibility and research-integrity check the harness imposes on an experiment
+  (75, one row each with every location), rated by iteration cost, value and risk with a suggested
+  keep, automate, soften, merge or drop; 72 of 75 are text only, four built guards are unwired, the
+  five costliest are human gates, and five pairs of files contradict each other. Yulong sets a
+  decision per row in the page's shared `decisions` collection, which Claude reads back
+
+source: page.html
+built: rigour-checks.html
+builds_with: |
+  python3 build.py   # inlines checks.json into page.html, then annotate-html
+evidence: |
+  checks.json and notes.md: a Claude Opus 5.5 sweep of claude/rules, claude/checklists, skills,
+  hooks and agents at commit 96c350bd, 2026-10-12; locations link to that commit

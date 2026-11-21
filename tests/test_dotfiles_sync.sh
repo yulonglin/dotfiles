@@ -20,6 +20,8 @@
 #                     held back and the rest ships
 #   5h-5j. zed rebase : a pulled Zed change keeps the local ssh_connections; no
 #                     Zed change is byte-identical; a failed restore keeps the backup
+#   5k-5l. fetch    : a fetch failing right after a wake is retried; one that never
+#                     recovers fails with the try count and git's own error
 #   6. dry-run      : nothing changes anywhere
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -282,6 +284,50 @@ cmp -s "$ZA" "$WORK/zed-b/config/zed/settings.json" || fail "a failed restore mo
 grep -q example-host "$ZBAK" || fail "a failed restore lost the backup"
 state_field zed message | grep -q "not restored" || fail "state message does not report the failed restore: $(state_field zed message)"
 pass "a failed restore leaves the file alone and keeps the backup"
+
+# 5k-5l. a fetch that fails right after a wake is retried, and git's own error is kept
+REAL_GIT="$(command -v git)"
+mkdir -p "$WORK/shim"
+cat >"$WORK/shim/git" <<EOF
+#!/usr/bin/env bash
+# Fails the first \$FAIL_FETCHES fetches the way an offline network does, then passes through.
+for a in "\$@"; do
+    if [[ "\$a" == fetch ]]; then
+        n=\$(( \$(cat "$WORK/fetch-count" 2>/dev/null || echo 0) + 1 ))
+        echo "\$n" >"$WORK/fetch-count"
+        if (( n <= \${FAIL_FETCHES:-0} )); then
+            echo "fatal: unable to access 'https://github.com/x/y.git/': Could not resolve host: github.com" >&2
+            exit 128
+        fi
+        break
+    fi
+done
+exec "$REAL_GIT" "\$@"
+EOF
+chmod +x "$WORK/shim/git"
+
+fresh_remote wake
+echo moved >"$WORK/wake-b/file.txt"
+git -C "$WORK/wake-b" commit -qam moved
+git -C "$WORK/wake-b" push -q
+rm -f "$WORK/fetch-count"
+out="$(PATH="$WORK/shim:$PATH" FAIL_FETCHES=2 DOTFILES_SYNC_FETCH_DELAYS="0 0 0" "$SYNC" "$WORK/wake")" \
+    || fail "a run whose first two fetches fail exited non-zero: $out"
+[ "$(cat "$WORK/fetch-count")" = 3 ] || fail "expected 3 fetches, saw $(cat "$WORK/fetch-count")"
+[ "$(state_field wake status)" = ok ] || fail "state after a recovered fetch is $(state_field wake status)"
+grep -qx moved "$WORK/wake/file.txt" || fail "the recovered run did not pull the remote change"
+echo "$out" | grep -q "Could not resolve host" || fail "the retry log dropped git's error: $out"
+echo "$out" | grep -q "succeeded on retry 2" || fail "the retry log does not say which retry worked: $out"
+pass "a fetch that fails right after a wake is retried and the run completes"
+
+rm -f "$WORK/fetch-count"
+PATH="$WORK/shim:$PATH" FAIL_FETCHES=9 DOTFILES_SYNC_FETCH_DELAYS="0 0" "$SYNC" "$WORK/wake" >/dev/null \
+    && fail "a run whose every fetch fails exited zero"
+[ "$(cat "$WORK/fetch-count")" = 3 ] || fail "expected 3 fetches before giving up, saw $(cat "$WORK/fetch-count")"
+msg="$(state_field wake message)"
+[[ "$msg" == "fetch from origin failed after 3 tries: fatal: unable to access"*"Could not resolve host: github.com" ]] \
+    || fail "state message does not carry the try count and git's error: $msg"
+pass "a fetch that never recovers fails with the try count and git's error"
 
 # 6. dry-run changes nothing
 fresh_remote dry

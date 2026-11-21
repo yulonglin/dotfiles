@@ -1,0 +1,12 @@
+title: Mac App Usage Audit
+url: https://claude.ai/artifact/BPVtsVTMThViHVsMLHYH3Y
+org: unknown
+status: live
+last_updated: 2026-11-05
+summary: >-
+  usage audit of the Mac's apps and Homebrew formulae, joining Spotlight, ActivityWatch, the macOS
+  app-usage database, process state, shell history and agent commands; corrects the 2026-09-03
+  audit on LibreOffice, which agents do use headless. Per-app usage is personal, so source and
+  data live in the private repo
+public: "no"
+index_source: "`dotfiles-personal: artifacts/app-usage-audit/`"

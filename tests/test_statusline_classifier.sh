@@ -133,6 +133,32 @@ echo "=== a stale health file is treated as absent, not as news ==="
 write_health subscription 25000   # ~7h, past the 6h cutoff
 check "stale renders nothing" "$(render_rust | classifier_segment)" ""
 
+echo "=== one toggle: features.conf hides the segment exactly when it stops the hook ==="
+# permissions.approval-classifier in claude/hooks/features.conf gates both the
+# PermissionRequest hook (via hook_feature.sh) and this segment. Each conf below
+# is also fed to hook_feature.py, so the two readers cannot drift apart.
+FEATURES="$FAKE/.claude/hooks/features.conf"
+mkdir -p "$(dirname "$FEATURES")"
+write_health api
+while IFS='|' read -r desc conf want; do
+    printf '%b' "$conf" > "$FEATURES"
+    check "$desc: statusline" "$(render_rust | classifier_segment)" "$want"
+    hook_rc=0
+    CLAUDE_HOOK_FEATURES_FILE="$FEATURES" python3 "$REPO/claude/hooks/hook_feature.py" \
+        enabled permissions.approval-classifier || hook_rc=$?
+    if [[ -n "$want" ]]; then want_rc=0; else want_rc=1; fi
+    check "$desc: hook_feature.py agrees" "$hook_rc" "$want_rc"
+done <<'CASES'
+flag off|permissions.approval-classifier = off\n|
+flag on|permissions.approval-classifier = on\n|auto-ant:mats
+parent off|permissions = off\n|
+child overrides parent|permissions = off\npermissions.approval-classifier = on\n|auto-ant:mats
+trailing comment, odd case|permissions.approval-classifier = OFF  # retired\n|
+unknown value is ignored|permissions.approval-classifier = maybe\n|auto-ant:mats
+CASES
+rm -f "$FEATURES"
+check "no features.conf means on" "$(render_rust | classifier_segment)" "auto-ant:mats"
+
 echo "=== past 15m the recorded backend is reported as unknown, not as fact ==="
 # The regression this guards: write_health() runs only on the classify() path, so
 # a session of fast-path-only tool calls freezes this file. On 2026-08-05 one
@@ -475,16 +501,19 @@ check "profiles are unbracketed" \
     "[Opus] "
 rm -f "$FAKE/.claude/context.yaml"
 
-echo "=== a narrow COLUMNS wraps the session row between segments ==="
+echo "=== a phone-width COLUMNS keeps only model and context in the session row ==="
 narrow_input=$(costed_input '{"total_duration_ms":3900000,"total_cost_usd":7.42}' \
     '{"used_percentage":12,"total_input_tokens":129000,"context_window_size":1000000}')
 check "wide keeps one session row" \
     "$(render_rust_with "$narrow_input" | strip_ansi | sed -n 2p)" \
     "[Opus] · ctx:129k/1.0M (12%) · 1h 5m · \$7.42"
-check "narrow splits it at a segment boundary" \
+# 34 columns is phone width: duration, price and the usage row are all left
+# out, so the session row is the last line and no newline follows it.
+# Wrapping between segments is pinned by the pack_groups unit tests.
+check "phone drops duration and price" \
     "$(printf '%s' "$narrow_input" | env HOME="$FAKE" CODEX_HOME="$FAKE/.codex" DOT_DIR="$FAKE/dot" TMPDIR="$FAKE/tmp" \
         COLUMNS=34 CLAUDE_CODE_OAUTH_TOKEN="" "$RUST_BIN" statusline 2>/dev/null | strip_ansi | sed -n '2,3p' | tr '\n' '|')" \
-    "[Opus] · ctx:129k/1.0M (12%)|1h 5m · \$7.42|"
+    "[Opus] · ctx:129k/1.0M (12%)"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

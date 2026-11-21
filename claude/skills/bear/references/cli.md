@@ -13,7 +13,7 @@ The MCP tool names map 1:1 to CLI subcommands.
 
 | # | Failure | Mitigation |
 |---|---|---|
-| 1 | **Sandbox SIGABRT (exit 134)** — `bearcli` aborts inside Claude Code's bash sandbox (configd NULL) | Pass `dangerouslyDisableSandbox: true` on every `bearcli` Bash call |
+| 1 | **Sandbox SIGABRT (exit 134)** — `bearcli` aborts inside Claude Code's bash sandbox (configd NULL). The symptom can also be silent: on 2026-10-12 `attachments add -h`, `attachments save` and `cat` printed nothing in the sandbox and worked outside it | Pass `dangerouslyDisableSandbox: true` on every `bearcli` Bash call, `attachments` and `cat` included. Empty output from `bearcli` in the sandbox is this failure, not an empty note |
 | 2 | **PATH absence in non-login shells** — `bearcli: command not found` in cron | Use absolute path `/Applications/Bear.app/Contents/MacOS/bearcli`, or rely on `/usr/local/bin/bearcli` symlink (deployed by dotfiles `deploy.sh`) |
 | 3 | **`bearcli open` steals focus** — brings Bear to foreground | Reserve `open` for explicit user-facing flows; use `show` for reads |
 | 4 | **Stdin vs flag escaping mismatch** — `--content 'foo\n'` (single-quoted) is interpreted by bearcli; stdin is passed verbatim | Pick one channel and stick with it. For multi-line content prefer stdin via `printf`/heredoc |
@@ -143,6 +143,20 @@ bearcli attachments delete "$ID" --filename photo.jpg
 ```
 
 `edit`/`overwrite` that drops inline attachment links is rejected by default; pass `--force` to confirm.
+
+`attachments add` appends the link at the end of the note, and renames on a filename collision (`cv.pdf` → `cv 2.pdf`). To replace a file and keep its position, follow the **Attachments playbook** in the skill.
+
+## Move a large block between notes
+
+Copy the block through files instead of retyping it (verified 2026-10-12):
+
+```bash
+bearcli cat "$SRC" > src.md                  # whole note, verbatim
+# extract the block with a script → block.md
+bearcli append "$DST" < block.md             # stdin is verbatim; --content would interpret \n escapes
+```
+
+Then remove the block from the source with MCP `overwrite_note` on the section's `address`, passing that section's `hash` from `read_note_content` as `baseHash`.
 
 ## Conventions
 

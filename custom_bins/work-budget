@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""work-budget - declare how long an agent must keep working before it may stop.
+
+    work-budget start DURATION [--goal TEXT] [--max-blocks N]
+    work-budget stop  ID|--all REASON
+    work-budget status
+
+`start` prints a budget ID. The hook in claude/hooks/enforce_work_budget.py
+records the session (and subagent) whose Bash call ran `start` as the owner,
+then refuses that owner's stops before the deadline, at most --max-blocks
+times. No other session is held, and a budget started outside Claude Code
+holds nobody.
+
+Paper behind it: arXiv 2610.09944 (AgentTime) - told to "work for N hours",
+agents mostly stop early or idle. Kill switch for every budget at once:
+`touch ~/.local/state/work-budget/KILL`, or `guards.work-budget = off` in
+claude/hooks/features.conf.
+"""
+
+import argparse
+import json
+import os
+import re
+import secrets
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+STATE = (
+    Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "work-budget"
+)
+MAX_DURATION = timedelta(hours=24)
+MAX_BLOCKS = 100
+
+
+def parse_duration(text: str) -> timedelta:
+    m = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?", text.strip())
+    if not m or not any(m.groups()):
+        raise argparse.ArgumentTypeError(
+            f"duration like 45m, 2h or 1h30m, not {text!r}"
+        )
+    d = timedelta(hours=int(m[1] or 0), minutes=int(m[2] or 0))
+    if not timedelta(minutes=1) <= d <= MAX_DURATION:
+        raise argparse.ArgumentTypeError("duration must be between 1m and 24h")
+    return d
+
+
+def budgets():
+    return sorted(STATE.glob("wb-*.json")) if STATE.is_dir() else []
+
+
+def cmd_start(a: argparse.Namespace) -> int:
+    if not 1 <= a.max_blocks <= MAX_BLOCKS:
+        sys.exit(f"work-budget: --max-blocks must be 1-{MAX_BLOCKS}")
+    STATE.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+    bid = "wb-" + secrets.token_hex(6)
+    rec = {
+        "id": bid,
+        "start": now.isoformat(timespec="seconds"),
+        "created": now.isoformat(),
+        "until": (now + a.duration).isoformat(timespec="seconds"),
+        "goal": a.goal,
+        "max_blocks": a.max_blocks,
+        "blocks": 0,
+        "stopped": None,
+    }
+    (STATE / f"{bid}.json").write_text(json.dumps(rec, indent=2) + "\n")
+    print(f"{bid} active until {rec['until']} (max {a.max_blocks} refused stops).")
+    print(
+        f'Finish early only with: work-budget stop {bid} "<why the goal is done or blocked>"'
+    )
+    return 0
+
+
+def cmd_stop(a: argparse.Namespace) -> int:
+    targets = budgets() if a.id == "--all" else [STATE / f"{a.id}.json"]
+    done = 0
+    for p in targets:
+        if not p.is_file():
+            print(f"work-budget: no budget {p.stem}", file=sys.stderr)
+            continue
+        rec = json.loads(p.read_text())
+        if rec.get("stopped"):
+            continue
+        rec["stopped"] = {
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "reason": a.reason,
+        }
+        p.write_text(json.dumps(rec, indent=2) + "\n")
+        print(f"{rec['id']} stopped: {a.reason}")
+        done += 1
+    return 0 if done or a.id == "--all" else 1
+
+
+def cmd_status(_: argparse.Namespace) -> int:
+    now = datetime.now(timezone.utc)
+    if (STATE / "KILL").exists():
+        print(f"KILL file present: every budget is off ({STATE / 'KILL'})")
+    for p in budgets():
+        rec = json.loads(p.read_text())
+        until = datetime.fromisoformat(rec["until"])
+        state = (
+            ("stopped: " + rec["stopped"]["reason"])
+            if rec.get("stopped")
+            else (
+                f"{int((until - now).total_seconds() // 60)} min left"
+                if until > now
+                else "expired"
+            )
+        )
+        print(
+            f"{rec['id']}  until {rec['until']}  refused {rec['blocks']}/{rec['max_blocks']}  {state}  {rec.get('goal') or ''}"
+        )
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="work-budget", description=__doc__.split("\n\n")[0]
+    )
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("start", help="start a budget; prints its ID")
+    s.add_argument("duration", type=parse_duration)
+    s.add_argument(
+        "--goal",
+        default="",
+        help="what the time is for; quoted back when a stop is refused",
+    )
+    s.add_argument(
+        "--max-blocks",
+        type=int,
+        default=30,
+        help=f"refused stops before giving up (1-{MAX_BLOCKS}, default 30)",
+    )
+    s.set_defaults(fn=cmd_start)
+    t = sub.add_parser("stop", help="end a budget early, with the reason")
+    t.add_argument("id", help="budget ID, or --all")
+    t.add_argument("reason")
+    t.set_defaults(fn=cmd_stop)
+    sub.add_parser("status", help="list budgets").set_defaults(fn=cmd_status)
+    argv = sys.argv[1:]
+    if argv[:2] == ["stop", "--all"]:  # argparse would read --all as an option
+        argv = ["stop", "--", "--all", *argv[2:]]
+    a = ap.parse_args(argv)
+    return a.fn(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

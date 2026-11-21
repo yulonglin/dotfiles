@@ -73,6 +73,11 @@ fi
 export VISUAL="$EDITOR"
 unset _fa_conf EDITOR_CLI EDITOR_CLI_SSH
 
+# Local zone for the Claude time-awareness hooks (claude/hooks/inject_timestamp.sh,
+# elapsed_stamp.sh). Servers run on UTC but the reader is in California; a Mac
+# already has the right zone in /etc/localtime, which also follows travel.
+[[ $OSTYPE == darwin* ]] || export CLAUDE_LOCAL_TZ="${CLAUDE_LOCAL_TZ:-America/Los_Angeles}"
+
 # Claude Code tmpdir - avoid root-owned /tmp/claude issues
 if [[ -n "$TMPDIR" && -w "$TMPDIR" ]]; then
     # Explicit TMPDIR takes priority (cloud environments, user preference)
@@ -164,8 +169,11 @@ fi
 [ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-if [ -d "$HOME/.cargo" ]; then
+if [ -f "$HOME/.cargo/env" ]; then
   . "$HOME/.cargo/env"
+elif [ -d "$HOME/.cargo/bin" ]; then
+  # Homebrew's rustup writes no ~/.cargo/env, but `cargo install` still lands here
+  add_to_path "$HOME/.cargo/bin"
 fi
 
 # Linuxbrew precedence, re-asserted last. The shellenv near the top of this file
@@ -229,6 +237,17 @@ _reset_terminal_modes() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _reset_terminal_modes_soft
+
+# Drop a VIRTUAL_ENV whose directory is gone, so p10k stops showing it. Typical
+# source: a shell inherited it from a `uv run` ephemeral env
+# (~/.cache/uv/builds-v0/.tmpXXXXXX) that uv deleted afterwards.
+_drop_stale_venv() {
+    [[ -n $VIRTUAL_ENV && ! -d $VIRTUAL_ENV ]] || return 0
+    path=(${path:#$VIRTUAL_ENV/bin})
+    unset VIRTUAL_ENV VIRTUAL_ENV_PROMPT
+}
+# Prepend so it runs before p10k's own precmd renders the prompt
+precmd_functions=(_drop_stale_venv ${precmd_functions:#_drop_stale_venv})
 # Exit alt screen once at shell startup (recovers scrollback after SSH disconnect;
 # mid-session kill -9 of alt-screen apps needs manual fix-term)
 _reset_terminal_modes

@@ -1,0 +1,351 @@
+#!/usr/bin/env python3
+"""Keep Rex's UI settings and config/rex/ui-prefs.tsv in step, both ways.
+
+Rex stores its Settings (sidebar, tab style, pane headers, padding, themes...) in
+the macOS defaults domain com.superlogical.rex as Workspace.* keys, not in
+init.lua, so they cannot be symlinked like a config file.
+
+  rex-prefs capture   live Rex settings -> the TSV (run by dotfiles-sync daily)
+  rex-prefs apply     the TSV -> live Rex settings (run by deploy.sh --rex)
+  rex-prefs check     exit 1 if they differ (prints the differences)
+
+Capture merges: every scalar Workspace.* key that Rex has set on this Mac is
+written with its live value; rows for keys this Mac has not set are kept. So a
+setting changed in Rex lands in dotfiles, and a fresh Mac keeps the file's rows.
+A setting reset to its default (key deleted) is not removed from the file;
+delete that row by hand.
+
+Custom themes (Workspace.customThemes, a JSON blob Rex stores as plist data) go to
+config/rex/custom-themes.json instead, merged by theme id the same way: a theme
+made or edited in Rex is captured, themes only in the file are kept, and apply
+writes the file's themes back into Rex. A theme deleted in Rex stays in the file;
+delete it there by hand.
+
+App settings outside Workspace.* (server run mode, tailnet serving, auto-restart,
+plugin-reload blocking, agent session naming, auto-update) go to
+config/rex/app-prefs.tsv under their full key names, from the APP_KEYS allowlist
+only; per-machine state such as the tailnet hostname and sync server list is
+never captured. Same capture/apply/check semantics as ui-prefs.tsv.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import plistlib
+import subprocess
+import sys
+from pathlib import Path
+
+# REX_PREFS_DOMAIN lets tests run against a scratch defaults domain.
+DOMAIN = os.environ.get("REX_PREFS_DOMAIN") or "com.superlogical.rex"
+PREFIX = "Workspace."
+CONFIG_DIR = Path(__file__).resolve().parent.parent / "config" / "rex"
+DEFAULT_FILE = CONFIG_DIR / "ui-prefs.tsv"
+THEMES_KEY = PREFIX + "customThemes"
+DEFAULT_THEMES_FILE = CONFIG_DIR / "custom-themes.json"
+DEFAULT_APP_FILE = CONFIG_DIR / "app-prefs.tsv"
+
+# Settings Rex keeps outside Workspace.*, stored under their full key names.
+# An allowlist: the same domain also holds per-machine state (tailnet hostname,
+# RexSync.servers, cached routes, serverInstanceID) that must not reach git.
+APP_KEYS = (
+    "rex.server.run-mode",
+    "rex.server.tailnet-enabled",
+    "rex.server.automatic-restart-enabled",
+    "rex.server.block-plugin-reload-enabled",
+    "rex.agents.names-sessions",
+    "SUAutomaticallyUpdate",
+    "SUEnableAutomaticChecks",
+)
+
+# Scalar keys that are app state, not settings. Data, array and dict values
+# (lastFocusedSession, programActivitySeen, sessionOrder, ...) are skipped by type.
+STATE_KEYS = {
+    "hasDismissedRaisedTextContrastNotice",
+}
+
+HEADER = """\
+# Rex app UI settings (macOS defaults domain com.superlogical.rex, keys Workspace.<key>).
+# Two-way: `rex-prefs capture` writes live values here (dotfiles-sync runs it before each daily commit);
+# `rex-prefs apply` writes these rows into Rex (deploy.sh --rex runs capture, then apply).
+# Change a setting in Rex Settings and it reaches git on the next sync; a row deleted here is not unset in Rex.
+# key\ttype\tvalue
+"""
+
+APP_HEADER = """\
+# Rex app settings outside Workspace.* (macOS defaults domain com.superlogical.rex, full key names).
+# Allowlisted in custom_bins/rex-prefs (APP_KEYS); same two-way sync as ui-prefs.tsv.
+# key\ttype\tvalue
+"""
+
+
+def paint(text: str, sgr: str) -> str:
+    """ANSI colour for a terminal; plain text when piped or when NO_COLOR is set."""
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    return f"\033[{sgr}m{text}\033[0m"
+
+
+def encode(value: object) -> tuple[str, str] | None:
+    """(type, text) for a defaults scalar, or None for data/array/dict."""
+    if isinstance(value, bool):
+        return "bool", "true" if value else "false"
+    if isinstance(value, int):
+        return "int", str(value)
+    if isinstance(value, float):
+        return "float", f"{value:g}"
+    if isinstance(value, str) and "\t" not in value and "\n" not in value:
+        return "string", value
+    return None
+
+
+def export_domain() -> dict | None:
+    """The whole Rex defaults domain; None if it is absent."""
+    proc = subprocess.run(
+        ["defaults", "export", DOMAIN, "-"], capture_output=True, check=False
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    return plistlib.loads(proc.stdout)
+
+
+def read_live(prefs: dict | None = None) -> dict[str, tuple[str, str]] | None:
+    """Scalar Workspace.* settings Rex has set on this Mac; None if the domain is absent."""
+    prefs = export_domain() if prefs is None else prefs
+    if prefs is None:
+        return None
+    live: dict[str, tuple[str, str]] = {}
+    for full_key, value in prefs.items():
+        if not full_key.startswith(PREFIX):
+            continue
+        key = full_key[len(PREFIX) :]
+        if key in STATE_KEYS:
+            continue
+        enc = encode(value)
+        if enc is not None:
+            live[key] = enc
+    return live
+
+
+def read_live_app(prefs: dict | None) -> dict[str, tuple[str, str]]:
+    """Allowlisted non-Workspace settings Rex has set, keyed by full name."""
+    live: dict[str, tuple[str, str]] = {}
+    for key in APP_KEYS:
+        if prefs and key in prefs and (enc := encode(prefs[key])) is not None:
+            live[key] = enc
+    return live
+
+
+def read_live_themes(prefs: dict | None) -> list[dict] | None:
+    """Rex's custom themes; None if Rex has none stored."""
+    raw = (prefs or {}).get(THEMES_KEY)
+    if raw is None:
+        return None
+    return json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+
+
+def read_themes_file(path: Path) -> list[dict]:
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def write_themes_file(path: Path, themes: list[dict]) -> None:
+    text = json.dumps(themes, indent=2, sort_keys=True) + "\n"
+    if not path.exists() or path.read_text() != text:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(text)
+        tmp.replace(path)
+
+
+def merge_themes(file_themes: list[dict], live: list[dict]) -> list[dict]:
+    """Live themes win by id; themes only in the file are kept after them."""
+    live_ids = {t["id"] for t in live}
+    return live + [t for t in file_themes if t["id"] not in live_ids]
+
+
+def diff_themes(file_themes: list[dict], live: list[dict]) -> list[str]:
+    f = {t["id"]: t for t in file_themes}
+    l = {t["id"]: t for t in live}
+    out = []
+    for tid in sorted(set(f) | set(l)):
+        name = paint((f.get(tid) or l[tid]).get("name", tid), "1")
+        if tid not in l:
+            out.append(f"theme {name}: in file, not in Rex")
+        elif tid not in f:
+            out.append(f"theme {name}: in Rex, not in file")
+        elif f[tid] != l[tid]:
+            out.append(f"theme {name}: differs between file and Rex")
+    return out
+
+
+def read_file(path: Path) -> dict[str, tuple[str, str]]:
+    rows: dict[str, tuple[str, str]] = {}
+    if not path.exists():
+        return rows
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        key, typ, value = line.split("\t", 2)
+        rows[key] = (typ, value)
+    return rows
+
+
+def write_file(
+    path: Path, rows: dict[str, tuple[str, str]], header: str = HEADER
+) -> None:
+    body = "".join(f"{k}\t{t}\t{v}\n" for k, (t, v) in sorted(rows.items()))
+    text = header + body
+    if not path.exists() or path.read_text() != text:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(text)
+        tmp.replace(path)
+
+
+def diff(file_rows: dict, live: dict) -> list[str]:
+    out = []
+    for key in sorted(set(file_rows) | set(live)):
+        f, l = file_rows.get(key), live.get(key)
+        if f == l:
+            continue
+        if l is None:
+            out.append(f"{paint(key, '1')}: file {f[1]}, Rex unset")
+        elif f is None:
+            out.append(f"{paint(key, '1')}: Rex {l[1]}, not in file")
+        else:
+            out.append(f"{paint(key, '1')}: file {f[1]}, Rex {l[1]}")
+    return out
+
+
+def cmd_capture(path: Path, themes_path: Path, app_path: Path, quiet: bool) -> int:
+    prefs = export_domain()
+    live = read_live(prefs)
+    if live is None:
+        if not quiet:
+            print(paint("Rex has no settings on this Mac; file left as is", "33"))
+        return 0
+    rows = read_file(path)
+    changes = diff({k: rows[k] for k in rows if k in live}, live)
+    rows.update(live)
+    write_file(path, rows)
+    live_app = read_live_app(prefs)
+    if live_app:
+        app_rows = read_file(app_path)
+        changes += diff({k: app_rows[k] for k in app_rows if k in live_app}, live_app)
+        app_rows.update(live_app)
+        write_file(app_path, app_rows, APP_HEADER)
+    live_themes = read_live_themes(prefs)
+    if live_themes is not None:
+        file_themes = read_themes_file(themes_path)
+        live_ids = {t["id"] for t in live_themes}
+        changes += diff_themes(
+            [t for t in file_themes if t["id"] in live_ids], live_themes
+        )
+        write_themes_file(themes_path, merge_themes(file_themes, live_themes))
+    if not quiet:
+        if changes:
+            print(paint(f"captured {len(changes)} change(s) into {path.parent}", "32"))
+            print("\n".join(f"  {c}" for c in changes))
+        else:
+            print(paint("in sync", "32") + f": {path} already matches Rex")
+    return 0
+
+
+def cmd_apply(path: Path, themes_path: Path, app_path: Path) -> int:
+    rows = read_file(path)
+    if not rows:
+        print(paint(f"no rows in {path}", "31"), file=sys.stderr)
+        return 1
+    # UI rows are short names under Workspace.; app rows are full names.
+    writes = {PREFIX + k: v for k, v in rows.items()}
+    writes.update(read_file(app_path))
+    failed = 0
+    for key, (typ, value) in writes.items():
+        rc = subprocess.run(
+            ["defaults", "write", DOMAIN, key, f"-{typ}", value], check=False
+        ).returncode
+        failed += rc != 0
+    if failed:
+        print(
+            paint(f"{failed} of {len(writes)} settings failed to write", "31"),
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        paint(f"applied {len(writes)} Rex settings", "32")
+        + f" from {path} and {app_path}"
+    )
+    file_themes = read_themes_file(themes_path)
+    if file_themes:
+        # Merge so a theme made in Rex but not yet captured is not dropped.
+        themes = merge_themes(read_live_themes(export_domain()) or [], file_themes)
+        blob = json.dumps(themes, separators=(",", ":")).encode()
+        rc = subprocess.run(
+            ["defaults", "write", DOMAIN, THEMES_KEY, "-data", blob.hex()], check=False
+        ).returncode
+        if rc != 0:
+            print(paint("custom themes failed to write", "31"), file=sys.stderr)
+            return 1
+        print(
+            paint(f"applied {len(file_themes)} custom theme(s)", "32")
+            + f" from {themes_path}"
+        )
+    return 0
+
+
+def cmd_check(path: Path, themes_path: Path, app_path: Path) -> int:
+    prefs = export_domain()
+    live = read_live(prefs) or {}
+    changes = diff(read_file(path), live)
+    changes += diff(read_file(app_path), read_live_app(prefs))
+    changes += diff_themes(read_themes_file(themes_path), read_live_themes(prefs) or [])
+    if changes:
+        print(paint("differs", "33") + f": {path} vs Rex")
+        print("\n".join(f"  {c}" for c in changes))
+        return 1
+    print(paint("in sync", "32"))
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("command", choices=["capture", "apply", "check"])
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=DEFAULT_FILE,
+        help=f"TSV to sync (default {DEFAULT_FILE})",
+    )
+    parser.add_argument(
+        "--themes-file",
+        type=Path,
+        default=DEFAULT_THEMES_FILE,
+        help=f"custom themes JSON to sync (default {DEFAULT_THEMES_FILE})",
+    )
+    parser.add_argument(
+        "--app-file",
+        type=Path,
+        default=DEFAULT_APP_FILE,
+        help=f"non-Workspace app settings TSV to sync (default {DEFAULT_APP_FILE})",
+    )
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="capture: print nothing"
+    )
+    args = parser.parse_args()
+    if sys.platform != "darwin":
+        if not args.quiet:
+            print(
+                "rex-prefs: macOS only (Rex settings live in macOS defaults); nothing to do"
+            )
+        return 0
+    if args.command == "capture":
+        return cmd_capture(args.file, args.themes_file, args.app_file, args.quiet)
+    if args.command == "apply":
+        return cmd_apply(args.file, args.themes_file, args.app_file)
+    return cmd_check(args.file, args.themes_file, args.app_file)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

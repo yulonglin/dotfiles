@@ -1,0 +1,60 @@
+name: Python tests
+
+# Every pytest file under tests/, on every push and pull request. Added 2026-11-04
+# after 31 tests went red unnoticed: each other workflow runs only the tests it
+# names, so six files had no trigger at all, and two of the causes were real bugs.
+#
+# Both operating systems on purpose: macOS has the case-insensitive filesystem and
+# launchd that Linux does not (a mis-cased row file was accepted only there).
+#
+# Shell tests stay with their own workflows: several need a tailnet, a live router
+# or a macOS host. A test that needs one of those skips itself rather than turning
+# this red, because a workflow red for environmental reasons teaches people to
+# ignore it.
+#
+# Only first-party actions (actions/*), matching this repo's supply-chain posture.
+# Dependencies are declared in tests/requirements.txt.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      # fetch-depth 0: test_memory_tier_budget reads the pretrim tag.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+
+      # uv from PyPI, not astral-sh/setup-uv: first-party actions only. Scripts under
+      # custom_bins/ have uv shebangs and the tests run them directly.
+      - name: Install uv and test dependencies
+        run: python -m pip install --quiet uv -r tests/requirements.txt
+
+      - name: Run pytest
+        run: python -m pytest tests/ -q
