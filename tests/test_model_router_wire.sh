@@ -79,7 +79,7 @@ p = json.load(open(sys.argv[1]))["modelPicker"]
 assert "replaceBuiltInOptions" not in p, p
 desc = {o["model"]: o.get("description") for o in p["options"]}
 assert desc["astra"] == "ChatGPT subscription (Codex)", desc
-assert desc["kimi"] == "OpenRouter, pay per token", desc
+assert desc["glm"] == "OpenRouter, pay per token", desc
 assert desc["claude-opus-5-5"] == "Claude subscription", desc
 assert [o["model"] for o in p["options"]][:3] == ["claude-opus-5-5", "claude-fable-5-2", "claude-sonnet-5-5"], p
 PY
@@ -232,19 +232,19 @@ has_key "$CLAUDE_SETTINGS" ANTHROPIC_BASE_URL && fail "--install left ANTHROPIC_
 # --- picker: toggles rewrite only `picker =` lines and the built-in flag, then render ---
 cp "$REPO_ROOT/config/model-router.toml" "$WORK/source.toml"
 export MODEL_ROUTER_SOURCE="$WORK/source.toml"
-"$WIRE" picker --off kimi --on claude-haiku-5-5 --built-in off </dev/null >/dev/null || fail "picker with flags failed"
+"$WIRE" picker --off glm --on claude-haiku-5-5 --built-in off </dev/null >/dev/null || fail "picker with flags failed"
 python3 - "$CLAUDE_SETTINGS" "$WORK/source.toml" <<'PY' || fail "picker toggles did not reach the source or the rendered rows"
 import json, sys, tomllib
 p = json.load(open(sys.argv[1]))["modelPicker"]
 rows = [o["model"] for o in p["options"]]
 assert p.get("replaceBuiltInOptions") is True, p
-assert "kimi" not in rows and "claude-haiku-5-5" in rows, rows
+assert "glm" not in rows and "claude-haiku-5-5" in rows, rows
 src = tomllib.load(open(sys.argv[2], "rb"))
 by = {m["id"]: m for m in src["models"]}
-assert by["kimi-k3.1-pro"].get("picker") is False and by["claude-haiku-5-5"].get("picker", True) is True
+assert by["glm-5.3"].get("picker") is False and by["claude-haiku-5-5"].get("picker", True) is True
 PY
 # Toggling back restores every line except the dated `off /model` comments.
-"$WIRE" picker --on kimi --off claude-haiku-5-5 --built-in on --no-apply </dev/null >/dev/null
+"$WIRE" picker --on glm --off claude-haiku-5-5 --built-in on --no-apply </dev/null >/dev/null
 grep -v 'off /model' "$REPO_ROOT/config/model-router.toml" >"$WORK/want.txt"
 grep -v 'off /model' "$WORK/source.toml" >"$WORK/got.txt"
 cmp -s "$WORK/want.txt" "$WORK/got.txt" || fail "picker round trip changed other lines: $(diff "$WORK/want.txt" "$WORK/got.txt")"
