@@ -204,6 +204,26 @@
         "model": "glm",
         "label": "GLM 5.3",
         "description": "OpenRouter, pay per token"
+      },
+      {
+        "model": "kimi",
+        "label": "Kimi K3.1 Pro",
+        "description": "More models · OpenRouter, pay per token"
+      },
+      {
+        "model": "muse",
+        "label": "Muse Wonder",
+        "description": "More models · OpenRouter, pay per token"
+      },
+      {
+        "model": "grok",
+        "label": "Grok 4.7",
+        "description": "More models · OpenRouter, pay per token"
+      },
+      {
+        "model": "qwen",
+        "label": "Qwen4 Max",
+        "description": "More models · OpenRouter, pay per token"
       }
     ]
   },
@@ -1067,15 +1087,6 @@
     "gpt-5.6-luna-fast": {
       "autoCompactWindow": 258400
     },
-    "kimi-k3.1-pro": {
-      "autoCompactWindow": 250000
-    },
-    "kimi": {
-      "autoCompactWindow": 250000
-    },
-    "kimi-k3": {
-      "autoCompactWindow": 250000
-    },
     "deepseek-v4.1-flash": {
       "autoCompactWindow": 1000000
     },
@@ -1087,6 +1098,15 @@
     },
     "glm": {
       "autoCompactWindow": 262124
+    },
+    "kimi-k3.1-pro": {
+      "autoCompactWindow": 250000
+    },
+    "kimi": {
+      "autoCompactWindow": 250000
+    },
+    "kimi-k3": {
+      "autoCompactWindow": 250000
     },
     "muse-wonder": {
       "autoCompactWindow": 1000000

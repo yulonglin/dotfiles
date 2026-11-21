@@ -190,8 +190,8 @@ agent = false
 
 # /model shows rows in file order. Picker priority (Yulong, 2026-11-21):
 # Anthropic, OpenAI, Gemini, then DeepSeek, then GLM. Kimi, Muse, Grok and Qwen
-# are off the picker ("others aren't very good or important") but keep their
-# routes and agents, so the agentic council and anything naming them still work.
+# are deprioritised, not removed: they sit last under a "More models"
+# description (see that block further down), with routes and agents unchanged.
 
 # `sol` moved here from gpt-6.1-sol on 2026-11-17, with astra (see above).
 [[models]]
@@ -319,29 +319,7 @@ agent = false
 # Slugs match the council roster in config/openrouter-models.toml. Windows are the host's guaranteed figure
 # from `verify-providers` on 2026-10-12.
 
-# `kimi` moved here from kimi-k3 on 2026-10-28 (K3.1 Pro released 2026-10-23,
-# Moonshot the only host). Artificial Analysis scores it level with K3, at half
-# K3's output price ($2/$10 per M).
-[[models]]
-id = "kimi-k3.1-pro"
-aliases = ["kimi"]
-writer-priority = 3
-name = "Kimi K3.1 Pro"
-provider = "openrouter"
-slug = "moonshotai/kimi-k3.1-pro"
-context-window = 250000   # K3's host limit, carried over unverified; the catalogue says 1048576 as it did for K3
-picker = false            # off the picker 2026-11-21 (priority list at the top); agent stays
-
-[[models]]
-id = "kimi-k3"
-name = "Kimi K3"
-provider = "openrouter"
-slug = "moonshotai/kimi-k3"
-context-window = 250000   # host limit; the catalogue's 1048576 failed verify-providers
-picker = false            # `kimi` is now K3.1 Pro; the route stays for anything naming kimi-k3
-agent = false
-
-# DeepSeek above GLM in /model (Yulong, 2026-11-21).
+# DeepSeek, then GLM, then the deprioritised families (Yulong, 2026-11-21).
 [[models]]
 id = "deepseek-v4.1-flash"
 aliases = ["deepseek"]
@@ -358,23 +336,51 @@ provider = "openrouter"
 slug = "z-ai/glm-5.3"
 context-window = 262124
 
+# ---- More models: deprioritised, still in /model, below everything above ----
+# `modelPicker` has no section headers (code.claude.com/docs/en/settings-reference
+# #modelpicker: rows take only model, label, description, behavesAs), so the
+# "More models" group is these rows sitting last plus a description that starts
+# with "More models". Routes and agents are unchanged.
+
+# `kimi` moved here from kimi-k3 on 2026-10-28 (K3.1 Pro released 2026-10-23,
+# Moonshot the only host). Artificial Analysis scores it level with K3, at half
+# K3's output price ($2/$10 per M).
+[[models]]
+id = "kimi-k3.1-pro"
+aliases = ["kimi"]
+writer-priority = 3
+name = "Kimi K3.1 Pro"
+description = "More models · OpenRouter, pay per token"
+provider = "openrouter"
+slug = "moonshotai/kimi-k3.1-pro"
+context-window = 250000   # K3's host limit, carried over unverified; the catalogue says 1048576 as it did for K3
+
+[[models]]
+id = "kimi-k3"
+name = "Kimi K3"
+provider = "openrouter"
+slug = "moonshotai/kimi-k3"
+context-window = 250000   # host limit; the catalogue's 1048576 failed verify-providers
+picker = false            # `kimi` is now K3.1 Pro; the route stays for anything naming kimi-k3
+agent = false
+
 [[models]]
 id = "muse-wonder"
 aliases = ["muse"]
 name = "Muse Wonder"
+description = "More models · OpenRouter, pay per token"
 provider = "openrouter"
 slug = "meta/muse-wonder"
 context-window = 1048576
-picker = false            # off the picker 2026-11-21; agent stays
 
 [[models]]
 id = "grok-4.7"
 aliases = ["grok"]
 name = "Grok 4.7"
+description = "More models · OpenRouter, pay per token"
 provider = "openrouter"
 slug = "x-ai/grok-4.7"
 context-window = 500000
-picker = false            # off the picker 2026-11-21; agent stays
 
 # `qwen` moved here from qwen3.8-max on 2026-11-21, when `council refresh`
 # seated qwen4-max (newest-in-line: no index has scored it yet). $1.43/$4.28
@@ -383,10 +389,10 @@ picker = false            # off the picker 2026-11-21; agent stays
 id = "qwen4-max"
 aliases = ["qwen"]
 name = "Qwen4 Max"
+description = "More models · OpenRouter, pay per token"
 provider = "openrouter"
 slug = "qwen/qwen4-max"
 context-window = 1000000
-picker = false            # off the picker 2026-11-21; agent stays
 
 [[models]]
 id = "qwen3.8-max"
