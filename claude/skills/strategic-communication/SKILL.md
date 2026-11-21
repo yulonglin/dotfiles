@@ -1,109 +1,150 @@
 ---
 name: strategic-communication
-description: Draft or refine a message that must negotiate, persuade or say no while staying warm, using Chris Voss's tactical empathy and emotion labelling. Use for rentals, salary discussions, work requests, declining offers, changing plans, a tense exchange, or a draft that reads off-tone.
+description: Draft or refine any message where the outcome matters and usually the relationship too, such as rentals, salary, contracts and other negotiation, work requests, declining, changing plans, delivering hard news, giving or replying to feedback, a tense exchange, writing to an official or institution, or a draft that reads off-tone. Routes the exchange to the framework that fits.
 ---
 
-# Strategic Communication Skill
+# Strategic Communication Fits The Exchange
 
-Built on **Chris Voss's FBI hostage negotiation approach**: tactical empathy and emotion labeling as your primary tools, with a warm "positive & playful" default tone.
+## Use This Skill Broadly
 
-## When to Use This Skill
+Use this skill when a message must protect a concrete outcome, usually with a relationship to keep. Treat it as a writing task first and follow the drafting order in `~/.claude/rules/communication.md`. With a bad-faith or one-shot counterpart, stay courteous but put clarity and the outcome first. Do not force a bargaining technique into a request, apology, refusal or reply to criticism.
 
-- **Negotiating**: Rentals, salaries, contracts, terms with vendors/hotels
-- **Making asks**: Requesting resources, time, help from colleagues
-- **Declining**: Saying no to requests, opportunities, or offers
-- **Changing plans**: Backing out or modifying commitments
-- **Navigating tension**: Any situation where emotions are running high
-- **Refining messages**: When your draft feels off-tone or unclear
+## Route Before Drafting The Message
 
-## The Foundation: Tactical Empathy + Labeling
+First decide what kind of exchange this is. Use one primary framework, then add only the supporting moves that fit.
 
-**Rule from Voss: Every fourth thing you say should be a label.**
+| Exchange | Primary framework |
+|---|---|
+| Terms such as price, dates or scope | *Getting to Yes* |
+| A bad-faith or hard counterpart, or one-shot bargaining where the relationship matters little | *Never Split the Difference* |
+| Hard news, changed plans, backing out or a dispute about what happened | *Difficult Conversations* |
+| Receiving criticism or replying to it | *Thanks for the Feedback* |
+| Giving feedback | *Thanks for the Feedback* |
+| Saying no | *The Power of a Positive No* |
+| Writing to an official or institution | *Getting to Yes* plus administrative clarity |
+| A plain work request, or a draft that merely reads off-tone | Reader-first revision |
 
-1. **Recognize their perspective** - imagine yourself in their situation
-2. **Identify their emotions** - what are they feeling and why?
-3. **Label those emotions explicitly** - "It seems like..." / "It sounds like..." / "You're probably..."
+### Terms Need Interests And Criteria
 
-**This is not manipulation. This is demonstrating genuine understanding.**
+Use *Getting to Yes*:
 
-### Also Label Your Own State
+- Separate the people from the problem.
+- Identify interests behind positions.
+- Invent options for mutual gain.
+- Use objective criteria.
+- Know Yulong's BATNA before drafting.
+- Let labels and calibrated questions from *Never Split the Difference* shape the tone only; they are not the method.
 
-Voss teaches labelling *their* emotion. The other half is naming *yours* — "I'm sensing...", "I'm feeling...", "I notice I'm...". Use it when you are the one who is uneasy, rushed, disappointed or unsure.
+### Hard Counterparts Need Selective Tactics
 
-- **"I'm sensing we're talking past each other on the price."** — names the dynamic without blaming anyone for it
-- **"I'm feeling uneasy about committing to Friday."** — states your own constraint as a fact about you, not a verdict on them
-- **"I notice I'm getting defensive — let me back up."** — repairs a conversation mid-flight
+Use *Never Split the Difference*, selectively:
 
-Why it works: it is more honest than only reading their mind, it gives them something true to respond to, and it makes a hard message land as information rather than accusation. It also cannot be wrong the way a mislabelled emotion can — you are the authority on your own state.
+- Tactical empathy
+- Mirrors
+- Labels
+- Calibrated how or what questions
+- No-oriented questions
+- An accusation audit
+- Protection of a weak BATNA: do not disclose it
 
-**Do not overuse it.** One or two per conversation. Your state is context for your ask, never the ask itself, and never a bid for reassurance.
+If the counterpart stonewalls, add *Getting Past No*:
 
-### Your Default Mode: Positive & Playful
+- Go to the balcony.
+- Step to their side.
+- Reframe.
+- Build a golden bridge.
+- Use power to educate.
 
-From Voss: "Voice of an easygoing, good-natured person. Relax and smile while talking."
+### Hard News Opens From Neutral Ground
 
-## Core Workflow
+Use *Difficult Conversations*:
 
-### Step 1: Understand Their Emotional Landscape
+- Separate What Happened, Feelings and Identity.
+- Open from the Third Story: a neutral account of the difference between the two views.
+- Hold both accounts with the And stance.
+- Separate intent from impact.
+- Map contribution instead of assigning blame.
 
-Before drafting, ask yourself:
-1. How does this situation affect them emotionally?
-2. What are they afraid of or concerned about?
-3. How have my actions impacted them?
-4. What do they actually need?
+### Criticism Needs A Diagnosis First
 
-### Step 2: Lead With Tactical Empathy
+Use *Thanks for the Feedback*:
 
-**Structure**: [Label their emotion] + [Show you understand] + [Your message]
+- Identify the trigger: truth, relationship or identity.
+- Identify what was meant: appreciation, coaching or evaluation.
+- If the reply changes the subject, signpost the two topics and handle them one at a time.
 
-**Example**: "You're probably frustrated that I'm changing plans last minute, especially since you took time off. I'm sorry about that - something unexpected came up."
+### Giving Feedback Names Its Kind
 
-### Step 3: Use Calibrated Questions
+Use *Thanks for the Feedback*, with intent versus impact from *Difficult Conversations*:
 
-After acknowledging emotions, use "How" and "What" questions:
-- "How would [your need] work for you?"
-- "What would you need to make this work?"
+- Say whether this is appreciation, coaching or evaluation.
+- State the observed behaviour and its concrete impact.
+- Do not infer intent.
+- Make one request for the future.
 
-**Avoid**: "Why" questions (accusatory), "Can you" questions (easy to refuse)
+### Refusals Follow Yes, No, Yes
 
-### Step 4: Listen for "That's Right" Not "You're Right"
+Use *The Power of a Positive No*:
 
-- **"That's Right"** = Genuine agreement, they feel understood
-- **"You're Right"** = Dismissive, they want you to go away
+- Write the first yes: the interest or commitment being protected.
+- State the no plainly.
+- End with a second yes: what Yulong can offer instead.
+- Keep a Plan B behind the no.
 
-### Step 5: Reality Check
+### Officials Need A Decision-Ready Request
 
-- Did I acknowledge how this affects them emotionally?
-- Am I being genuine about their concerns?
-- Am I staying warm and collaborative in tone?
+Use objective criteria from *Getting to Yes*, plus administrative clarity:
 
-## Key Principles From Voss
+- Identify the case or reference.
+- Make one clear ask, and name the rule, precedent or deadline behind it.
+- Give the reader the facts needed to approve the request.
+- Own any lapse briefly and plainly.
+- Follow `evidence-packs` for attachments.
+- Do not label a stranger's emotions.
 
-**1. Label Emotions Constantly** Pattern: "It seems like..." / "It sounds like..." / "You're probably..." Then **pause** and let them respond.
+### Plain Requests Need Reader-First Drafting
 
-**2. Accusation Audit - Name The Worst First** Say what they might think about you before they can: "You're going to think I'm being flaky..."
+Use reader-first revision:
 
-**3. "I'm Sorry" Is a Tool, Not Weakness** Apologize for your impact on them, not for having needs.
+- Preserve the facts and ask.
+- Make one specific ask with a date.
+- Remove hedging, guilt spirals and implied demands.
+- Match the reader's formality and the relationship.
+- Use a book framework only if the exchange actually needs one.
 
-**4. Three Types of "Yes"** Only Commitment Yes matters. Use no-oriented questions: "Would it be crazy to...?"
+## Draft For The Actual Reader
 
-**5. Slow Down and Smile** Creates trustworthiness and combats defensiveness.
+1. Name the outcome, the relationship and the reader's likely decision.
+2. Put the facts in the order the reader needs, not the order Yulong discovered them.
+3. State the ask, decision or boundary in one sentence.
+4. Apply the routed framework without displaying the technique.
+5. Cut anything that makes the reader manage Yulong's guilt, infer the request or decode a tactic.
 
-## Reference Files
+## Treat Labels As Guesses
 
-- **`references/frameworks.md`** - Deep dive on tactical empathy, BATNA/ZOPA, interests vs positions, power dynamics
-- **`references/patterns.md`** - Before/after examples, templates, red flags, tone calibration
-- **`references/scenarios.md`** - Common scenarios: rental, salary, work requests, backing out, saying no
+A label is an interpretation, not a fact. In writing to someone Yulong does not know, naming a feeling can read as presumptuous. State the concrete impact instead: "This leaves you re-listing in winter." Reserve emotion labels for people he knows or cases where the feeling is visible from their words or conduct.
 
-## Tips for Effective Use
+Use an accusation audit only for concerns the reader could reasonably hold and Yulong can honestly own. Do not invent a harsher accusation to make the real request seem mild.
 
-- **Label emotions every fourth thing you say**
-- **Name your own state too** - "I'm sensing...", "I'm feeling..." is often more honest than labelling theirs
-- **Lead with accusation audits when changing plans**
-- **Slow down when you feel rushed**
-- **Smile while writing** - it changes your tone
-- **Trust "that's right" over "you're right"**
-- **Apologize when your actions affect them** - this builds trust
-- **Your collaborative instincts are usually right**
-- **Practice on low-stakes situations first**
-- **People are emotional first, rational second** - address emotions before facts
+## Name Your Own State Sparingly
+
+It can be clearer to name Yulong's state than to guess the reader's: "I'm feeling uneasy about committing to Friday" or "I notice I'm getting defensive, so let me step back." Use this once when it explains the message or repairs the exchange. It is context for the ask, not a bid for reassurance.
+
+## Keep Strategy Honest And Visible
+
+Strategic communication is not manipulation. Use only reasoning Yulong would be comfortable with the reader seeing. Do not hide material facts, manufacture urgency or perform empathy that the message does not support.
+
+## Check The Finished Message
+
+- Does the opening fit the type of exchange?
+- Can the reader find the facts and the ask quickly?
+- Does the message own Yulong's impact without apologising for having a legitimate need?
+- Does it distinguish intent, impact and contribution where those differ?
+- Does it offer a real option rather than a disguised demand?
+- Would Yulong be comfortable with the reader seeing the reasoning behind the draft?
+
+## Use References For Detail
+
+- `references/frameworks.md` explains the books, BATNA, ZOPA, relationship type, power and culture.
+- `references/patterns.md` contains reusable message forms and tone checks.
+- `references/scenarios.md` routes common written exchanges through the appropriate framework.

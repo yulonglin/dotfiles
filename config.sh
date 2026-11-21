@@ -67,6 +67,7 @@ DEPLOY_REGISTRY=(
     "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
     "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
+    "antigravity|Antigravity global config (~/.gemini/config)|all|true|AI & Apps"
     "serena|Serena MCP server config (symlinked)|all|false|AI & Apps"
     "git-config|gitconfig, global gitignore, ripgrep config|all|true|Git"
     "git-hooks|Global pre-commit secret detection|all|true|Git"
@@ -248,8 +249,6 @@ PACKAGES_EXTRAS_LINUX=(
 # (and sanctions its tap). Promote to an array above or `brew uninstall` it once
 # the trial is over; date each entry so the audit's reader can tell how long it has run.
 PACKAGES_TRIAL_MACOS=(
-    "hunk"                  # review-first terminal diff viewer for agent-authored changes (trial from 2026-09-03)
-    "codersauce/tap/red"    # modal Rust editor — third-party tap, Yulong's exception 2026-09-03
     "libimobiledevice"      # iPhone over USB: ~/scratch/watchpat/capture.zsh logs Bluetooth HCI (from 2026-10-14); uninstall when that project ends
     # "micro"               # candidate terminal editor, not installed yet
 )
@@ -366,6 +365,7 @@ apply_profile() {
             DEPLOY_GIT_HOOKS=true
             DEPLOY_CLAUDE=true
             DEPLOY_CODEX=true
+            DEPLOY_ANTIGRAVITY=true
             DEPLOY_PKG_CONFIGS=true
             DEPLOY_CLAUDE_TOOLS=true
             ;;

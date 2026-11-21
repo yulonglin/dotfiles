@@ -656,29 +656,30 @@ install_direnv() {
     fi
 }
 
-# Rust toolchain (cargo) via rustup. macOS: official Homebrew formula (sha-pinned,
-# reviewed) provides `rustup-init`; run it non-interactively. Linux: keep the upstream
-# rustup installer but pin TLS (--proto '=https' --tlsv1.2) — no brew dependency.
-# See claude/rules/safety.md § curl|bash Installers.
+# Rust toolchain (cargo): one rustup per machine. Homebrew's formula wherever brew
+# exists (macOS and Linuxbrew), so `brew upgrade` updates it like every other tool;
+# toolchains live in ~/.rustup either way. The formula is keg-only and no longer
+# ships `rustup-init`, so its proxies (cargo, rustc, ...) are reached through the
+# keg bin, which config/zshenv.sh puts ahead of ~/.cargo/bin. The TLS-pinned
+# upstream installer is only the fallback for a machine without brew. Running
+# both is what left macOS with two `rustup` binaries sharing one ~/.rustup
+# (2026-10-21).
 install_rust_toolchain() {
     if is_installed cargo; then
         source "$HOME/.cargo/env" 2>/dev/null || true
         return 0
     fi
     log_info "Installing Rust toolchain (user-level, no root needed)..."
-    if is_macos && cmd_exists brew; then
-        # Official formula ships `rustup-init`; install the default stable toolchain.
-        brew_install rustup
-        if cmd_exists rustup-init; then
-            rustup-init -y --quiet 2>/dev/null || log_warning "rustup-init failed"
-        elif cmd_exists rustup; then
-            rustup default stable 2>/dev/null || log_warning "rustup default stable failed"
-        fi
+    if cmd_exists brew && brew_install rustup \
+       && [[ -x "$(brew --prefix)/opt/rustup/bin/rustup" ]]; then
+        export PATH="$(brew --prefix)/opt/rustup/bin:$PATH"
+        run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" rustup default stable \
+            || log_warning "rustup default stable failed"
     else
         curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
             https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
+        source "$HOME/.cargo/env" 2>/dev/null || true
     fi
-    source "$HOME/.cargo/env" 2>/dev/null || true
 }
 
 install_bws() {

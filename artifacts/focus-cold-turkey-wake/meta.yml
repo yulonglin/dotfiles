@@ -1,0 +1,22 @@
+title: Cold Turkey Wake-Up
+url: https://claude.ai/artifact/LPsVraJ4Fc3bKWhSmrLESN
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-11-06
+last_updated: 2026-11-06
+status: live
+
+public: "no"
+
+summary: >-
+  why focus switches failed: Cold Turkey's CLI leaves one command in a preference that the agent reads
+  only when it becomes the active app, how a brief activation cut `focus deep` from a failure to about
+  0.5 s, a bug report to send, and why not to rebuild the app
+
+source: focus-cold-turkey-wake.html
+built: focus-cold-turkey-wake.html
+builds_with: |
+  hand-written HTML; annotate-html focus-cold-turkey-wake.html
+  publish with the capabilities md2artifact --capabilities prints
+evidence: |
+  Cold Turkey system log from 17:02 to 21:51 on 6 Nov 2026, database and commandArgs polls, the real
+  focus deep runs at 21:48, 21:51 and 21:55, and terminal output pasted by Yulong

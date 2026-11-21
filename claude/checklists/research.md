@@ -50,6 +50,8 @@ State the research question in one sentence, phrased so that it's falsifiable, a
 
 **Every causal contrast declares which factors it changed and what its matched control is.** One factor at a time is the default and it is usually right, but it cannot see an interaction: model, prompt, scaffold and monitor move together often enough that a one-factor sweep can hand the whole effect to whichever factor happened to move first. Where an interaction is plausible, run a randomised factorial small enough to afford and report main effects and interactions separately, rather than reading a stack of one-factor rows as if they added up.
 
+**Compare methods at their strongest published configuration.** When comparing methods (lenses, probes, monitors), run each with the configuration its authors published: their filters, layers, top-k and fitting recipe. Otherwise, state each departure and why. A comparison that uses one method's weak default is not a comparison of the methods (Yulong, 2026-10-15).
+
 **Ask what alternative explanations exist, and design the ablation that separates them** — an alternative explanation you cannot ablate away is a caveat the result will carry forever. Plan the ablations with the experiment, not after the headline number.
 
 ## Related
