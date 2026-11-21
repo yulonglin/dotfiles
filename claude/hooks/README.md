@@ -56,6 +56,19 @@ Hooks for automating task and agent management workflows.
 - Blocks tool call when `AUTO_AGENT_DEPTH >= AUTO_AGENT_MAX_DEPTH`.
 - Intended to cap recursive delegation chains.
 
+### nudge_advisor_skipped.py
+
+**Purpose:** Tell the user when a session changed real files and never consulted the advisor — the stronger reviewer that reads the whole transcript.
+
+**Behavior:**
+- `Stop`, once per session, prints a `systemMessage` to the user when the transcript says the advisor tool was available, the main agent's transcript holds no advisor call, and the session did substantive work — three or more file-modifying operations, or a `git commit` plus at least two. `Write`/`Edit`/`NotebookEdit` and Bash edits (`sed -i`, `tee`, `cat >`, heredoc writes) both count, since auto mode edits through Bash; a plain output redirect does not.
+- **Never blocks.** Claude stops as normal and does not see the message. Moving it to the model is one line — `hookSpecificOutput.additionalContext` at Stop, which continues the turn once as non-error feedback — and is worth doing only once the reminder has proven accurate.
+- Reads the call from the transcript: the advisor is a server-side tool, recorded as an assistant `server_tool_use` block named `advisor` plus an `advisor_tool_result` (Claude Code 2.1.296, 2026-10-12). No `PostToolUse` marker is used. Detail: `.claude/rules/dotfiles-settings.md`.
+- Silent on a small session, a withdrawn advisor tool, a missing transcript or garbage input. The before-work leg of the advisor contract is deliberately unenforced.
+- Flag: `nudges.advisor-skipped` (on explicitly, since the `nudges` family is off).
+
+**Tests:** `tests/test_advisor_skipped.py`.
+
 ### simplify_mark_dirty.sh / simplify_track_reuse.py / simplify_nudge.sh
 
 **Purpose:** Suggest a `/simplify` pass when the session produced work worth one. Two independent signals feed one `Stop` message; both are soft nudges (`systemMessage`) that never continue the turn.
