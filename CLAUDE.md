@@ -30,6 +30,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Show or hide `/model` rows, or keep/replace Claude Code's built-in lineup | `model-router-wire picker` (checkbox menu; `--on ID`, `--off ID`, `--built-in on\|off` without a terminal). Writes `picker = false` lines in `config/model-router.toml` and applies |
 | Start or adopt a research project hub (`~/projects/<name>/{code,paper,data,runs,…}`) | `project-hub new <name>`, `project-hub adopt <name> code=<path>`, `project-hub tier <name>/code logs`, `project-hub doctor` — layout in the `server-storage-tiering` skill |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
+| Load less global memory (rules, CLAUDE.md) | `claude-memory minimal\|none\|full`; bare `claude-memory` shows sizes — [`docs/terminal-and-dev-tools.md`](docs/terminal-and-dev-tools.md) |
 | Check or repair hard-wrapped Markdown | `md-unwrap --check claude/` (gated in pre-commit and CI); `md-unwrap --fix <path>` |
 | Find unused Mac apps and formulae | `app-usage [--days N] [--json]` (read-only; run in a terminal, outside the sandbox) |
 | Find a cloud resource left running | `cloud-spend-check --days 14` (daily timer + session nudge; flags flat daily spend) — [`docs/cloud-spend-check.md`](docs/cloud-spend-check.md) |

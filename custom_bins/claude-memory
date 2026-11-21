@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# claude-memory — switch the global Claude memory tier (~/.claude/CLAUDE.md +
+# ~/.claude/rules/*.md) on or off, and report what it costs.
+#
+#   claude-memory                 status: current mode + size of the tier
+#   claude-memory full            load everything (the default)
+#   claude-memory minimal         drop ~/.claude/rules/**, keep ~/.claude/CLAUDE.md
+#   claude-memory none            drop both, and auto memory (MEMORY.md) too
+#   claude-memory stats [DIR]     per-file lines/words/chars/≈tokens, global tier
+#                                 plus DIR's project CLAUDE.md files (default: $PWD)
+#   claude-memory settings-path [MODE]
+#                                 print the --settings file for MODE (empty for
+#                                 full); the claude() wrapper calls this
+#
+# How it works: Claude Code's `claudeMdExcludes` setting skips matched memory
+# files of the User/Project/Local types. The excludes cannot go in
+# claude/settings.json — that is the committed file, and a toggle there is a
+# permanent working-copy diff — so they go in a generated file under
+# ~/.config/claude-memory/ that the claude() wrapper passes as --settings.
+# Only wrapper launches see it; the IDE extension and desktop app always get
+# the full tier. One-off override: CLAUDE_MEMORY=none claude ...
+#
+# Project memory (./CLAUDE.md, ./.claude/rules/) is never touched. To drop
+# every CLAUDE.md for a session, Claude Code has CLAUDE_CODE_DISABLE_CLAUDE_MDS=1.
+
+set -euo pipefail
+
+STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-memory"
+MODE_FILE="$STATE_DIR/mode"
+CLAUDE_HOME="$HOME/.claude"
+MODES="full minimal none"
+
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+
+valid_mode() { [[ " $MODES " == *" $1 "* ]]; }
+
+current_mode() {
+    local m="${CLAUDE_MEMORY:-}"
+    [[ -z "$m" && -f "$MODE_FILE" ]] && m=$(<"$MODE_FILE")
+    m="${m:-full}"
+    if ! valid_mode "$m"; then
+        echo "claude-memory: unknown mode '$m' (want: $MODES); using full" >&2
+        m=full
+    fi
+    printf '%s\n' "$m"
+}
+
+# Exclude patterns are matched against absolute paths. ~/.claude is a symlink
+# into the dotfiles checkout, so name both spellings rather than depend on
+# which one Claude Code resolves (measured 2.1.304: the ~/.claude spelling
+# excludes both files; the resolved one only caught the rules).
+roots() {
+    printf '%s\n' "$CLAUDE_HOME"
+    local real
+    real=$(cd "$CLAUDE_HOME" 2>/dev/null && pwd -P) || return 0
+    [[ "$real" != "$CLAUDE_HOME" ]] && printf '%s\n' "$real"
+    return 0
+}
+
+settings_json() {
+    local mode="$1" root
+    local -a pats=()
+    while IFS= read -r root; do
+        [[ "$mode" == none ]] && pats+=("$root/CLAUDE.md")
+        pats+=("$root/rules/**")
+    done < <(roots)
+    # A --settings array may replace the user file's rather than merge with it,
+    # so carry the user file's own excludes along.
+    local base='[]'
+    if command -v jq >/dev/null && [[ -f "$CLAUDE_HOME/settings.json" ]]; then
+        base=$(jq -c '.claudeMdExcludes // []' "$CLAUDE_HOME/settings.json" 2>/dev/null || echo '[]')
+    fi
+    printf '%s\n' "${pats[@]}" | jq -R . | jq -s \
+        --argjson base "$base" --arg mode "$mode" \
+        '{claudeMdExcludes: ($base + . | unique)}
+         + (if $mode == "none" then {autoMemoryEnabled: false} else {} end)'
+}
+
+settings_path() {
+    local mode="${1:-$(current_mode)}"
+    valid_mode "$mode" || { echo "claude-memory: unknown mode '$mode'" >&2; return 2; }
+    [[ "$mode" == full ]] && return 0
+    command -v jq >/dev/null || { echo "claude-memory: jq is required" >&2; return 1; }
+    mkdir -p "$STATE_DIR"
+    local f="$STATE_DIR/$mode.json"
+    settings_json "$mode" >"$f.tmp" && mv "$f.tmp" "$f"
+    printf '%s\n' "$f"
+}
+
+# One row per file. Tokens are an estimate: bytes / 2.7, measured 2026-10-20 by
+# diffing `claude -p --output-format json` usage across modes (rules 25,704 B =
+# 9,512 tok, CLAUDE.md 4,377 B = 1,651 tok). The common bytes/4 rule of thumb
+# undercounts this tokenizer by a third. That usage diff is the exact figure.
+row() {
+    local label="$1" f="$2"
+    [[ -f "$f" ]] || return 0
+    local lines words chars bytes
+    read -r lines words chars < <(wc -lmw <"$f")
+    bytes=$(wc -c <"$f")
+    printf '%-9s %-44s %6d %7d %8d %7d\n' "$label" "${f/#$HOME/~}" \
+        "$lines" "$words" "$chars" $(((bytes * 10 + 13) / 27))
+}
+
+stats() {
+    local dir="${1:-$PWD}" root
+    root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")
+    local rows f style
+    rows=$(
+        row global "$CLAUDE_HOME/CLAUDE.md"
+        for f in "$CLAUDE_HOME"/rules/*.md; do row rules "$f"; done
+        # The active output style is always-on too; it is not toggled here.
+        style=$(jq -r '.outputStyle // empty' "$CLAUDE_HOME/settings.json" 2>/dev/null || true)
+        for f in "$CLAUDE_HOME"/output-styles/*.md; do
+            [[ -n "$style" ]] && grep -qiE "^(name: *|# Output Style: *)$style\$" "$f" 2>/dev/null && row style "$f"
+        done
+        if [[ "$root" != "$HOME" ]]; then
+            for f in "$root/CLAUDE.md" "$root/.claude/CLAUDE.md" "$root/CLAUDE.local.md" "$root"/.claude/rules/*.md; do
+                row project "$f"
+            done
+        fi
+        true
+    )
+    printf '%-9s %-44s %6s %7s %8s %7s\n' tier file lines words chars '≈tok'
+    printf '%s\n\n' "$rows"
+    printf '%s\n' "$rows" | awk '
+        NF { n[$1]++; w[$1]+=$4; c[$1]+=$5; t[$1]+=$6; if (!($1 in seen)) { seen[$1]=1; order[++k]=$1 } }
+        END { for (i=1; i<=k; i++) { g=order[i]
+                  printf "%-9s %2d files %44s %7d %8d %7d\n", g, n[g], "", w[g], c[g], t[g] } }'
+}
+
+status() {
+    local mode
+    mode=$(current_mode)
+    local src="default"
+    [[ -f "$MODE_FILE" ]] && src="$MODE_FILE"
+    [[ -n "${CLAUDE_MEMORY:-}" ]] && src="CLAUDE_MEMORY env"
+    echo "mode: $mode  (from $src)"
+    case "$mode" in
+        full)    echo "  loads ~/.claude/CLAUDE.md + ~/.claude/rules/*.md" ;;
+        minimal) echo "  loads ~/.claude/CLAUDE.md; skips ~/.claude/rules/*.md" ;;
+        none)    echo "  skips ~/.claude/CLAUDE.md, ~/.claude/rules/*.md and auto memory" ;;
+    esac
+    echo "  applies to sessions started through the claude() shell wrapper"
+    echo
+    stats "$PWD"
+}
+
+cmd="${1:-status}"
+case "$cmd" in
+    full|minimal|none)
+        mkdir -p "$STATE_DIR"
+        printf '%s\n' "$cmd" >"$MODE_FILE"
+        [[ "$cmd" != full ]] && settings_path "$cmd" >/dev/null
+        echo "claude-memory: $cmd (new claude sessions)"
+        ;;
+    status) status ;;
+    stats) shift; stats "$@" ;;
+    settings-path) shift; settings_path "$@" ;;
+    -h|--help|help) usage ;;
+    *) echo "claude-memory: unknown command '$cmd'" >&2; usage >&2; exit 2 ;;
+esac
