@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stop hook: tell the user when a substantive session never consulted the advisor.
+"""Stop hook: remind the model when a substantive session never consulted the advisor.
 
 WHAT IS OBSERVABLE. The advisor is a server-side tool, and the session
 transcript records each call: an assistant content block
@@ -22,13 +22,16 @@ WHEN IT FIRES. At Stop, once per session, only when ALL of:
     or a `git commit` plus at least two. A one-line fix and its commit stays
     silent on purpose.
 
-NON-BLOCKING. It prints {"systemMessage": ...}, a warning shown to the user;
-Claude stops as normal and does not see it. To hand the reminder to the model
-instead, emit {"hookSpecificOutput": {"hookEventName": "Stop",
-"additionalContext": MESSAGE}} -- a one-line change, which keeps the
-conversation going one more turn as non-error feedback. Use that only once the
-reminder has proven accurate in practice. A guard file written before the
-message keeps it to once per session.
+MODEL-FACING, NOT A BLOCK. It prints {"hookSpecificOutput": {"hookEventName":
+"Stop", "additionalContext": MESSAGE}}. Per the Claude Code hooks docs (Stop
+decision control, code.claude.com/docs/en/hooks, checked 2026-11-21) this is
+"non-error feedback for Claude": the conversation continues one more turn so
+the model can call the advisor, the transcript labels it `Stop hook feedback`,
+and no hook error is shown. It never emits `decision: "block"`. Loop safety:
+the docs apply the same protections as a block (`stop_hook_active` and the
+8-consecutive-continuation cap), this hook exits on `stop_hook_active`, and a
+guard file written before the message keeps it to once per session. Until
+2026-11-21 it printed a user-only `systemMessage` instead.
 
 Fail-quiet everywhere: a missing transcript, an unparseable payload or an
 unwritable state directory exits 0 with no output.
@@ -60,8 +63,9 @@ EDITS_WITH_COMMIT = 2
 
 MESSAGE = (
     "Advisor skipped: this session changed real files and never called advisor(), "
-    "though it was on offer. Ask Claude to call it now if the work needs a second "
-    "look before you rely on it. (Shown once per session; nothing was blocked.)"
+    "though it was on offer. Call advisor() now to review the work before you "
+    "finish, then tell the user anything it changed. (Once per session; this is "
+    "a reminder, not a block.)"
 )
 
 
@@ -210,7 +214,9 @@ def main() -> int:
     except OSError:
         return 0
 
-    print(json.dumps({"systemMessage": MESSAGE}))
+    print(json.dumps({
+        "hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": MESSAGE}
+    }))
     return 0
 
 

@@ -70,11 +70,11 @@ Hooks for automating task and agent management workflows.
 
 ### nudge_advisor_skipped.py
 
-**Purpose:** Tell the user when a session changed real files and never consulted the advisor — the stronger reviewer that reads the whole transcript.
+**Purpose:** Remind the model when a session changed real files and never consulted the advisor — the stronger reviewer that reads the whole transcript.
 
 **Behavior:**
-- `Stop`, once per session, prints a `systemMessage` to the user when the transcript says the advisor tool was available, the main agent's transcript holds no advisor call, and the session did substantive work — three or more file-modifying operations, or a `git commit` plus at least two. `Write`/`Edit`/`NotebookEdit` and Bash edits (`sed -i`, `tee`, `cat >`, heredoc writes) both count, since auto mode edits through Bash; a plain output redirect does not.
-- **Never blocks.** Claude stops as normal and does not see the message. Moving it to the model is one line — `hookSpecificOutput.additionalContext` at Stop, which continues the turn once as non-error feedback — and is worth doing only once the reminder has proven accurate.
+- `Stop`, once per session, hands the model a reminder as `hookSpecificOutput.additionalContext` when the transcript says the advisor tool was available, the main agent's transcript holds no advisor call, and the session did substantive work — three or more file-modifying operations, or a `git commit` plus at least two. `Write`/`Edit`/`NotebookEdit` and Bash edits (`sed -i`, `tee`, `cat >`, heredoc writes) both count, since auto mode edits through Bash; a plain output redirect does not.
+- **Never blocks.** Stop `additionalContext` is non-error feedback: the turn continues once so the model can call the advisor, and the transcript labels it `Stop hook feedback` (hooks docs, Stop decision control). It exits on `stop_hook_active` and writes its once-per-session guard before printing, so it cannot loop. Until 2026-11-21 it printed a user-only `systemMessage`.
 - Reads the call from the transcript: the advisor is a server-side tool, recorded as an assistant `server_tool_use` block named `advisor` plus an `advisor_tool_result` (Claude Code 2.1.296, 2026-10-12). No `PostToolUse` marker is used. Detail: `.claude/rules/dotfiles-settings.md`.
 - Silent on a small session, a withdrawn advisor tool, a missing transcript or garbage input. The before-work leg of the advisor contract is deliberately unenforced.
 - Flag: `nudges.advisor-skipped` (on explicitly, since the `nudges` family is off).

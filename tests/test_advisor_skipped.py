@@ -9,7 +9,7 @@ that a small session, a session where the advisor was already called, and a
 session where the tool was never offered all pass through with no output. The
 one-shot property is tested by calling the hook twice with the same session id.
 Every firing case also asserts the output carries no `decision` key: the hook is
-a user-facing reminder and must never block a stop.
+a model-facing Stop `additionalContext` reminder and must never block a stop.
 
 Advisor calls are synthesised the way Claude Code 2.1.296 records them: an
 assistant `server_tool_use` block named `advisor`, then an `advisor_tool_result`.
@@ -101,9 +101,10 @@ class AdvisorGateTest(unittest.TestCase):
     def assert_reminder(self, out: str) -> None:
         payload = json.loads(out)
         self.assertNotIn("decision", payload, "the reminder must never block a stop")
-        self.assertNotIn("hookSpecificOutput", payload,
-                         "additionalContext would continue the turn; not yet")
-        self.assertIn("advisor()", payload["systemMessage"])
+        self.assertNotIn("systemMessage", payload, "the reminder is model-facing now")
+        specific = payload["hookSpecificOutput"]
+        self.assertEqual(specific["hookEventName"], "Stop")
+        self.assertIn("advisor()", specific["additionalContext"])
 
     # --- it fires -----------------------------------------------------------
     def test_warns_on_a_substantive_session_with_no_advisor_call(self) -> None:
