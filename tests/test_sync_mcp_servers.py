@@ -112,3 +112,34 @@ def test_apply_updates_managed_entries_and_preserves_unmanaged_codex(
     assert "# BEGIN SHARED MCP SERVERS" in codex_text
     assert "[mcp_servers.bear]" in codex_text
     assert 'command = "/Applications/Bear.app/Contents/MacOS/bearcli"' in codex_text
+
+
+def test_antigravity_config_creates_and_preserves_unmanaged(tmp_path: Path) -> None:
+    source, claude, codex = write_sample_files(tmp_path)
+    ag = tmp_path / "gemini-config" / "mcp_config.json"
+
+    check_res = run_sync(source, claude, codex, "--antigravity-config", str(ag), "--check")
+    assert check_res.returncode == 1
+    assert "Antigravity MCP drift" in check_res.stdout
+    assert not ag.exists()
+
+    apply_res = run_sync(source, claude, codex, "--antigravity-config", str(ag), "--apply")
+    assert apply_res.returncode == 0, apply_res.stderr
+    assert json.loads(ag.read_text()) == {
+        "mcpServers": {
+            "bear": {
+                "command": "/Applications/Bear.app/Contents/MacOS/bearcli",
+                "args": ["mcp-server"],
+            }
+        }
+    }
+
+    # Add an unmanaged server and verify re-apply preserves it
+    ag_data = json.loads(ag.read_text())
+    ag_data["mcpServers"]["context7"] = {"url": "https://mcp.context7.com/mcp"}
+    ag.write_text(json.dumps(ag_data, indent=2) + "\n")
+
+    recheck = run_sync(source, claude, codex, "--antigravity-config", str(ag), "--check")
+    assert recheck.returncode == 0, recheck.stdout
+    assert "Antigravity MCP: up to date" in recheck.stdout
+    assert "context7" in json.loads(ag.read_text())["mcpServers"]

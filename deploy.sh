@@ -88,6 +88,7 @@ COMPONENTS:
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
     --codex           Deploy Codex CLI config (~/.codex symlink)
+    --antigravity     Deploy Antigravity global config (~/.gemini/config)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
@@ -1068,6 +1069,23 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
         log_info "  Config: AGENTS.md, skills/"
     else
         log_warning "Codex directory not found at $DOT_DIR/codex"
+    fi
+fi
+
+# ─── Antigravity ──────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_ANTIGRAVITY" == "true" ]]; then
+    log_section "DEPLOYING ANTIGRAVITY CONFIGURATION"
+
+    if [[ -x "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" || -f "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" ]]; then
+        if bash "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" --dotfiles-dir "$DOT_DIR"; then
+            log_success "Antigravity global configuration deployed"
+            log_info "  Config: ~/.gemini/config/{skills.json,AGENTS.md,GEMINI.md,rules/,mcp_config.json}"
+        else
+            log_warning "Antigravity configuration sync failed"
+        fi
+    else
+        log_warning "Antigravity sync script not found at $DOT_DIR/scripts/sync_claude_to_antigravity.sh"
     fi
 fi
 
