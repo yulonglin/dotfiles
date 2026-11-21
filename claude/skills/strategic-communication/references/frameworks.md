@@ -1,320 +1,110 @@
-# Negotiation & Strategic Communication Frameworks
+# Different Exchanges Need Different Frameworks
 
-## Core Philosophy: Cooperation Over Conflict
+The books in this reference solve different problems. Choose the exchange first, then use the framework that matches it.
 
-The goal isn't to "win" negotiations - it's to find solutions that work for everyone while maintaining relationships. The best outcomes come from being both warm and clear about what you need.
+## Getting To Yes Structures Terms
 
-**Default mindset**: We're on the same team trying to solve a problem together.
+*Getting to Yes* gives four principles for negotiating price, dates, scope and other terms:
 
-## Core Collaborative Principles
+1. Separate the people from the problem.
+2. Focus on interests, not positions.
+3. Invent options for mutual gain.
+4. Insist on objective criteria.
 
-### Tactical Empathy (Chris Voss - FBI Hostage Negotiation)
+A position is the stated demand. An interest is the need behind it. A landlord's position might be a six-month tenancy; the interests might include predictable income, fewer vacant weeks and less work finding another tenant. Ask what makes the term important or how the constraint affects the decision. Do not use a bare why question when it could sound like a challenge.
 
-**This is your primary tool, not an occasional tactic.** Demonstrate deep understanding of their situation and emotions.
+Generate options only after the interests are clear. Vary more than one term where possible: dates, scope, timing, responsibilities or service level. Compare the result with objective criteria such as a written rule, market data, a prior agreement or a standard process.
 
-The goal: Get them to say **"that's right"** (you truly understand me) not "you're right" (you win, I give up).
+BATNA is the best alternative to a negotiated agreement and the basis of bargaining power. Define it before drafting, including the point at which it is better than the proposed agreement. Improve it where possible, but do not use it as a threat in a collaborative message.
 
-**How to apply:**
-1. **Label their emotions**: "You're obviously annoyed by this..." / "It sounds like this is really frustrating..."
-2. **Acknowledge their constraints**: "I imagine re-listing is a hassle you don't want..."
-3. **Validate before asking**: Show you understand their position before stating yours
+ZOPA is the overlap, if any, between the outcomes each side can accept. It is a planning model, not a fact known in advance. Questions and offers reveal whether an overlap exists. Do not create one by conceding against yourself before the other side responds.
 
-**Examples:**
-- Good: "You're probably frustrated that I'm changing plans last minute - I get that this affects your schedule"
-- Bad: "I understand" (empty phrase with no specificity)
+Labels, mirrors and calibrated questions can make a terms discussion less rigid, but *Getting to Yes* remains the method: interests, options, criteria and BATNA.
 
-**Critical insight**: This isn't manipulation. It's genuine acknowledgment of how your actions affect them. You'd want the same consideration.
+## Getting Past No Handles Impasse
 
-**When to use**: Almost always, especially in ongoing relationships (landlords, colleagues, long-term collaborators).
+*Getting Past No* applies when a counterpart resists, stonewalls or treats agreement as defeat. Its five steps are:
 
-### Labeling Emotions Explicitly
+1. Go to the balcony: pause before reacting.
+2. Step to their side: acknowledge their account without surrendering the issue.
+3. Reframe: move from positions to interests, options or criteria.
+4. Build a golden bridge: make agreement compatible with their interests and dignity.
+5. Use power to educate: show the consequences and alternatives without trying to humiliate them.
 
-**Don't dance around obvious tensions.** Naming the emotion defuses it.
+A cornered counterpart can resist because agreement feels like defeat. Leave a credible route to agreement rather than demanding a public reversal.
 
-Pattern: "You're [emotion] about [situation], and I understand why..."
+## Never Split The Difference Handles Hard Counterparts
 
-**Examples:**
-- "You're obviously annoyed that I postponed - I get that you took time off for this"
-- "This probably feels like I'm wasting your time, which isn't my intention"
-- "I imagine you're worried about having the place vacant longer"
+*Never Split the Difference* supplies a set of conversational tools for a hard counterpart or a one-shot bargain: tactical empathy, labels, mirrors, calibrated how or what questions, accusation audits, no-oriented questions and distinctions among forms of agreement.
 
-**Why this works**: 
-- Stops them from having to express the emotion (which often escalates)
-- Shows you're not oblivious or dismissive
-- Positions you as reasonable and self-aware
-- Creates space for problem-solving
+Use these tools selectively. A mirror can invite detail. A calibrated question can expose a constraint. An accusation audit can name concerns already present. None replaces interests, objective criteria or a BATNA when the dispute concerns terms.
 
-**Your instinct is right**: It's okay to acknowledge when you've inconvenienced someone. That's being human, not weak.
+Do not infer a stranger's emotions from limited text. Describe a visible impact or constraint unless the feeling is clear from the exchange.
 
-### Interests vs Positions (Harvard Negotiation Project)
+## Difficult Conversations Separates Three Layers
 
-**Position**: What someone says they want
-**Interest**: Why they want it
+*Difficult Conversations* treats a hard exchange as three conversations:
 
-Example:
-- Position: "I need 6 months minimum tenancy"
-- Possible interests: Financial stability, avoiding re-listing hassle, property security
+- What Happened covers different stories about events, intent and impact.
+- Feelings covers emotions that shape the exchange whether or not they are stated.
+- Identity covers what the exchange appears to say about each person's competence, character or worth.
 
-**Application**: Ask "why" to understand interests. Then address the underlying concern, which might have solutions besides their stated position.
+Open from the Third Story: the neutral account a mediator might give of how the two views differ. Move from certainty to curiosity. Use the And stance to hold Yulong's account and the other person's account without forcing either one to erase the other.
 
-### BATNA (Best Alternative To Negotiated Agreement)
+Separate intent from impact. Yulong can have meant well and still have caused a problem; the reader can have caused harm without having intended it. Replace blame with a contribution map: identify what each person, the process and the circumstances added to the result. Contribution does not remove responsibility for a specific action.
 
-Your BATNA is your walk-away power. Know it before negotiating, but don't lead with it in collaborative contexts.
+## Feedback Triggers Need Separate Diagnosis
 
-Strong BATNA example: "I have 3 other viewings this weekend" Weak BATNA example: "I desperately need a place by Monday"
+*Thanks for the Feedback* distinguishes three triggers:
 
-**In collaborative mode**: Use BATNA internally to know your limits, but don't weaponize it.
-**In competitive mode**: Reveal strong BATNAs to create urgency.
+- A truth trigger disputes the substance, accuracy or usefulness of the feedback.
+- A relationship trigger concerns who gave it or how the relationship affects its meaning.
+- An identity trigger concerns what accepting it would imply about the recipient.
 
-### Zone of Possible Agreement (ZOPA)
+It also distinguishes appreciation, coaching and evaluation. A reply goes wrong when one person intends coaching while the other hears a final evaluation, or when a request for appreciation receives more advice. Name the kind of feedback before responding to its content.
 
-The overlap between what you'll accept and what they'll accept.
+Switchtracking occurs when the reaction introduces a second issue and the original topic disappears. Signpost both topics: first address the feedback, then address how it was delivered or what it reveals about the relationship. Do not pretend the second topic is irrelevant; do not let it replace the first.
 
-If asking for £900/month but willing to pay £1100, and they want £1000 minimum, ZOPA is £1000-£1100.
+## A Positive No Protects Interests
 
-**Key insight**: Negotiation fails when there's no ZOPA. Sometimes walking away is the right move, and that's okay.
+*The Power of a Positive No* replaces accommodation, attack and avoidance with a yes-no-yes structure:
 
-## When to Apologize vs When Not To
+1. Yes: name the interest, value or commitment the refusal protects.
+2. No: state the boundary without leaving the decision ambiguous.
+3. Yes: offer a different path, condition or form of help when one is genuine.
 
-**Apologize when:**
-- You changed plans and it affects them: "I'm sorry for the late change"
-- You made a mistake: "My bad, I misunderstood the timeline"  
-- You're asking something inconvenient: "Sorry to ask last minute, but..."
+Keep a Plan B behind the no. The alternative can be private; its purpose is to make the boundary real rather than theatrical.
 
-**Don't apologize for:**
-- Having reasonable needs: "Sorry, but could I get this by Friday?" → "Could I get this by Friday?"
-- Existing: "Sorry to bother you" at the start of every email
-- Their unreasonable expectations: Don't apologize for things that aren't your fault
+## Institutions Need Rules And Facts
 
-**The distinction**: Apologize for your actions that affect them. Don't apologize for having needs or taking up space.
+An official or institution usually needs a decision-ready record. Combine the objective-criteria discipline from *Getting to Yes* with a direct administrative request. The order is in `scenarios.md` "Institutions Need Decision-Ready Facts".
 
-## Collaborative Questioning Techniques
+Do not open by guessing how a stranger feels. Do not bury the request under personal context that does not affect the decision.
 
-### Calibrated Questions
+## Clear Questions Expose Real Constraints
 
-Questions that give the other person control while guiding the conversation toward solutions.
+Use how and what questions when the answer could change the proposal: "What does the six-month minimum protect against?" or "How does the review process handle a late submission?" These ask for the reason without making the reader defend it.
 
-**Pattern**: Start with "How" or "What" (not "Why" - sounds accusatory)
+Use a mirror only when a phrase is unclear and more detail would matter. Repeating every phrase makes the technique visible and adds no substance to a written exchange.
 
-**Examples:**
-- "How would a shorter-term tenant work for you?"
-- "What would make this timeline work on your end?"
-- "How do you normally handle situations like this?"
+## Apologies Address Impact Not Existence
 
-**Purpose**: Gets them problem-solving with you, not against you.
+Apologise for a mistake, a late change or a concrete inconvenience. Do not apologise merely for making a reasonable request, holding a boundary or taking up the reader's time with a necessary message.
 
-### Mirroring
+Keep the apology proportional. State what happened, acknowledge the impact and continue to the decision or repair. Do not make the reader reassure Yulong.
 
-Repeat their last 2-3 words as a question to encourage elaboration.
+## Relationship Type Changes The Draft
 
-Them: "This deadline is going to be really tight with current resources" You: "Current resources?" Them: [Usually explains the real constraint]
+In an ongoing relationship, preserve future cooperation: explain relevant reasoning, acknowledge contribution and leave the next interaction workable. In a one-time transaction, protect information and alternatives while remaining honest. Mixed cases such as salary discussions and new client work need both: clear terms now and a relationship that can continue afterward.
 
-**Warning**: Overuse makes you sound like a parrot. Use sparingly when you genuinely need more information.
+Match the amount of context to the relationship. A colleague may need the history and the effect on shared work. An official may need only the record, rule and requested action.
 
-## Strategic Clarity Within Warmth
+## Power Changes What Needs Protection
 
-Being warm doesn't mean being unclear. You can be both kind and direct.
+With less formal power, strengthen the BATNA, identify objective criteria, ask about constraints and look for several issues that can be traded. Do not mistake deference for vagueness: the reader still needs a clear request.
 
-### Making Clear Asks
+With more formal power, avoid extracting an agreement that the other person cannot realistically carry out. State constraints, choices and consequences plainly, and preserve a route for disagreement or correction.
 
-**Pattern**: [Warm acknowledgment] + [Clear request] + [Easy response option]
+## Culture Changes What Sounds Respectful
 
-**Example:** "I know you're swamped - could you send me the retention data by Friday? If that's too tight, let me know what works."
-
-**NOT**: "Sorry to bother you, I was wondering if maybe when you get a chance you could possibly..."
-
-### Being Firm When Needed (While Staying Warm)
-
-Sometimes you need to hold a boundary or be clear about limits:
-
-**Pattern**: [Acknowledge their position] + [State your reality] + [Offer what you can]
-
-**Example:** "I totally get that 6 months works better for you. I can only commit through February, but I'm happy to help you find the next tenant before I leave if that helps."
-
-**What this does**: 
-- Shows you heard them
-- Clear about your constraint  
-- Offers to help solve their underlying concern
-
-### Changing Your Mind (The Landlord Example)
-
-When you need to back out or change plans:
-
-**Your original instinct was right:** "I previously said yes, but this other place with 2 toilets is just too hard to give up. You're obviously annoyed by this, but I hope you understand."
-
-**Why this works:**
-1. Honest about what changed
-2. Labels their emotion directly
-3. Doesn't over-apologize but acknowledges impact
-4. Human and relatable
-
-**My bad advice was**: "Don't apologize, be firm, move on"
-**Better**: Acknowledge you changed your mind, that it affects them, and maintain your decision
-
-## What Makes Communication Strategic vs Manipulative
-
-### Strategic (Good)
-- You'd be comfortable if they knew your full reasoning
-- Acknowledges how your actions affect them
-- Seeks solutions that work for both parties
-- Preserves long-term relationship
-- You're being authentic about your interests and constraints
-
-### Manipulative (Avoid)
-- Relies on deception or hidden information
-- Extracts value without giving value
-- Uses empathy as a tactic without genuine care
-- Creates unsustainable agreements
-- Optimizes for short-term gain over relationship
-
-**Key test**: Would you be okay with them reading a transcript of this conversation? If yes, you're being strategic. If no, you've crossed into manipulation.
-
-## Context-Specific Approaches
-
-### Collaborative Situations (Default Mode)
-
-**When**: Ongoing relationships, colleagues, landlords you'll rent from, long-term collaborators
-
-**Approach**:
-- Lead with empathy and acknowledgment
-- Be clear about your needs and constraints
-- Actively problem-solve together
-- Apologize when your actions affect them
-- Maintain warmth throughout
-
-**Example scenarios**: Rental negotiations, work requests, team coordination, client relationships
-
-### Strategic Firmness (When Needed)
-
-**When**: You need to hold a boundary, say no, or be clear about limits
-
-**Approach**:
-- Still warm and acknowledging
-- But crystal clear about what you can/cannot do
-- Don't waver or over-explain
-- Offer alternatives when possible
-
-**Example**: "I can't take on another project right now - I'm at capacity. Could [other person] help instead?"
-
-### Competitive/Adversarial (Rare)
-
-**When**: Truly adversarial situations, one-time transactions where relationship doesn't matter, bad-faith actors
-
-**Approach**:
-- Use calibrated questions to extract information without revealing yours
-- Don't show weakness or reveal weak BATNA
-- Focus on your leverage
-- Minimal emotional acknowledgment
-
-**Example scenarios**: Dealing with scammers, one-off negotiations with no relationship value, situations where collaboration attempts have failed
-
-**Important**: Most people default to competitive mode too early. Stay collaborative longer than feels comfortable - it usually pays off.
-
-## Negotiation by Relationship Type
-
-### Ongoing Relationships (Landlords, Colleagues, Long-term Clients)
-
-**Priority**: Relationship preservation > short-term gains
-
-**Approach**:
-- Always acknowledge how your needs/changes affect them
-- Be genuinely apologetic when you inconvenience them  
-- Problem-solve together
-- Build goodwill for future interactions
-
-**Don't**: Treat like a transaction, hide your reasoning, be unnecessarily firm
-
-### One-Time Transactions (Rare)
-
-**Priority**: Getting the best deal within ethical bounds
-
-**Approach**:
-- Still be decent and honest
-- But less need to build long-term goodwill
-- Can be firmer on terms
-- Protect your interests more actively
-
-### Somewhere In Between
-
-Most situations fall here. Default to collaborative, but know when to be strategic:
-- Salary negotiations (want the job, but this is a big moment)
-- Major purchases (might need service later)
-- Client proposals (building new relationship)
-
-## Power Dynamics
-
-Research shows equal-power negotiations often create more value than unequal ones. 
-
-**When you have less power:**
-- Focus on relationships and multiple issues to trade
-- Use questions to understand their constraints
-- Find low-cost things you can offer that they value highly
-- Build power through alternatives (BATNA)
-
-**When you have more power:**
-- Be careful not to extract unsustainable agreements
-- Build goodwill for future interactions
-- Consider reputation effects
-- Don't abuse the power differential
-
-**In practice**: Most negotiations are more equal than they feel. Don't underestimate your position.
-
-## Negotiation by Context
-
-### Salary Negotiations
-- Anchor high but within market range
-- Never give a number first if you can avoid it
-- Time it right (after offer, before acceptance)
-- Negotiate multiple variables (salary, equity, flexibility, start date)
-
-### Housing/Rentals
-- Have competing options ready
-- Understand landlord's constraints (re-listing hassle, vacancy cost)
-- Don't negotiate against yourself by offering premiums unprompted
-- Be willing to walk away
-
-### Collaborative Work Requests
-- Lead with value proposition for them
-- Make response easy (specific asks, clear options)
-- Acknowledge their constraints
-- Build relationship capital through reciprocity
-
-### Saying No
-- Be direct and kind
-- Provide brief reason (optional but helpful)
-- Suggest alternative if possible
-- Don't over-apologize
-
-## Common Mistakes
-
-1. **Negotiating against yourself**: Offering more before they say no
-2. **Revealing weak BATNA**: "I really need this to work out"
-3. **Asking yes/no when you need details**: Use open questions
-4. **Over-using techniques**: Making every email sound like hostage negotiation
-5. **Splitting differences too early**: Usually leaves value on the table
-6. **Accepting first offer**: Often means you could have gotten more
-7. **Focusing only on price**: Ignore other valuable dimensions
-
-## Power Dynamics
-
-Research shows equal-power negotiations often create more value than unequal ones. When you have less power:
-
-- Focus on relationships and multiple issues to trade
-- Create power through alternatives (BATNA)
-- Use questions to understand their constraints
-- Find low-cost things you can offer that they value highly
-
-When you have more power:
-- Be careful not to extract unsustainable agreements
-- Build goodwill for future interactions
-- Consider reputation effects
-
-## Cultural Context
-
-Negotiation styles vary significantly by culture. Be aware of:
-- Direct vs indirect communication preferences
-- Individual vs collective decision-making
-- Time orientation (urgent vs patient)
-- Face-saving considerations
-
-When in doubt, mirror their communication style initially.
+Communication norms differ in directness, hierarchy, group decision-making, time and face-saving. Match the reader's level of formality and explicitness before borrowing a conversational technique. When context is limited, prefer clear facts, a courteous request and room for the reader to respond.

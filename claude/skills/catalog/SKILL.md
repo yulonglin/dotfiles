@@ -39,7 +39,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `reduce-ambiguity` | "is this clear", "will this be misread" — red-teaming a draft before it is sent or acted on |
 | `check-prose-claims` | Fact-checking stats, comparatives and quotes in slides, reports and PDFs |
 | `check-bib-references` | Verifying BibTeX citations aren't LLM-fabricated |
-| `strategic-communication` | Messages needing negotiation or persuasion — rentals, salary, declining an offer |
+| `strategic-communication` | Any message where the relationship and the outcome both matter — negotiating, declining, hard news, replying to criticism, writing to an official; routes to the book that fits |
 | `externalise-handover` | Handing this conversation to another person or agent — next tasks, what ran, bugs, open uncertainties |
 | `debrief` | "debrief", "what did you do while I was away" — one commentable review page of a finished session, rendered by the hive CLI, iterated in rounds |
 
@@ -111,6 +111,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `deslop` | Before committing agent-written code — narrating comments, defensive guards, needless abstraction |
 | `mv-repo` | Moving a repo to a new directory (venv, project state, symlinks, tmux sessions) |
 | `wrap-up` (user-invoked only) | A stalled session needs a terminal state — land it, state the blocker, or take one step |
+| `session-sweep` | "clean up the sessions", "clear agent view", "finish up open sessions" — every session checked for really done, stranded work landed, decisions bundled, only finished sessions removed |
 | `done` | "done", "finished", "ship it" — titles the finished session and hands back the `/rename` line |
 
 ## Permission gates and auto mode
@@ -126,6 +127,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 |---|---|
 | `docs-search` | Grep-based search across docs, specs and CLAUDE.md files with `fd` + `rg` |
 | `fast-cli` | Which modern CLI to reach for — `eza`, `fd`, `rg`, `bat`, `dust`, `duf`, `fzf`, `jq`, `delta` |
+| `fetch-walled-web` | Reading X posts (`xpost`), Reddit (Arctic Shift), LessWrong comments (GraphQL, greaterwrong), arXiv text and PDFs, or transcript pages that block scripted reads, and verifying a quote before stating it |
 
 ## Browser automation
 

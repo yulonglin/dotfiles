@@ -25,7 +25,7 @@ Unless the user asks otherwise, a fork writes the debrief (Agent with `subagent_
   - Work directly on a branch that existed before the session: HEAD at the time of the first entry in `hive local outline <session>`, from `git rev-list -1 --before="<that time>" HEAD`.
   - A later round reuses round 1's `base`.
   - Then run `git log --format='%h %s' <base>..HEAD`. It must list every commit the transcript records, or, after a squash merge, the one squash commit that replaced them; an empty or short range means the base is wrong, so stop and fix it. Another session's commits in the range belong in the `landing` item, named as not this session's.
-- **Fact-checker from another family**: an agent type routed through the model-router gateway, `sol(high)` first, `astra(high)` if that fails. Name the model on the page ("fact-checked by GPT-6.1 Sol").
+- **Fact-checker from another family**: an agent type routed through the model-router gateway, `sol` first, `astra` if that fails. Name the model on the page ("fact-checked by GPT-6.2 Sol").
 - **House writing rules apply on the page** — `~/.claude/rules/communication.md` and `sensitive-content.md`. The page is shareable, so no payloads, credentials, hosts or injection strings: describe the mechanism and cite the transcript locator instead.
 
 ## Publish and iterate
@@ -38,7 +38,7 @@ Publish each round's `page.html` with the Artifact tool. The first round passes 
 {"db": {"rules": [{"path": "seen", "read": "admin", "write": "owner"}, {"path": "seen/{self}", "read": "interact", "write": "interact"}]}, "user": {}, "comments": {"composer_only": true}}
 ```
 
-as `capabilities`: seen marks in the artifact database, and the composer entry point (no consent prompt; the page writes nothing). Later rounds pass the first round's `url` and omit `capabilities`, so seen marks and open sections carry over. Post the link and the "Left for you" lines in chat. The Artifact is the page's only home: no vault copy, and no `ARTIFACTS.md` row unless the debrief is the report of record for a result.
+as `capabilities`: seen marks in the artifact database, and the composer entry point (no consent prompt; the page writes nothing). Later rounds pass the first round's `url` and omit `capabilities`, so seen marks and open sections carry over. Post the link and the "Left for you" lines in chat, then one line offering `learn-quiz` on the session's work. The Artifact is the page's only home: no vault copy, and no `ARTIFACTS.md` row unless the debrief is the report of record for a result.
 
 Read comments with `ArtifactComments`. A comment that asks for a change to the work is yours to act on before the next round. Then send the fork every comment, each with what it was placed on, and the new round number; spawn a fresh fork instead if the session has compacted or much has happened since the last round.
 

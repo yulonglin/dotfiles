@@ -1,6 +1,6 @@
 ---
 name: gmail-connector
-description: "Pull receipts, invoices and attachments out of Gmail with the claude.ai Gmail MCP connector — search operators that work, the RAW-MIME route that recovers attachments the connector has no download call for, the read-only rules, and the script that decodes them. Use when asked to find receipts or invoices in Gmail, save an email attachment, sweep a mailbox for a claim or audit, or when a Gmail search returns nothing for a vendor that definitely bills by email."
+description: "Pull receipts, invoices and attachments out of Gmail with the claude.ai Gmail MCP connector — search operators that work, the RAW-MIME route that recovers attachments the connector has no download call for, the read-only rules, and the script that decodes them. Use when asked to find receipts or invoices in Gmail, save an email attachment, sweep a mailbox for a claim or audit, when a Gmail search returns nothing for a vendor that definitely bills by email, or when creating or revising a Gmail draft with attachments or through gws (drafts need an HTML part or Gmail hard-wraps them)."
 ---
 
 # Gmail connector — receipts, invoices and attachments
@@ -11,7 +11,24 @@ The claude.ai Gmail connector (`mcp__claude_ai_Gmail__*`) can read every message
 
 - The connectors only appear when `ANTHROPIC_API_KEY` is **absent** from the session (the dotfiles wrapper strips it; a stale daemon or an `.envrc` can reintroduce it). If `mcp__claude_ai_Gmail__*` is missing from the tool list, that is the first thing to check — see `spawn-session`.
 - Load the tools in one call: `ToolSearch "select:mcp__claude_ai_Gmail__search_threads,mcp__claude_ai_Gmail__get_thread,mcp__claude_ai_Gmail__get_message"`.
-- `gws` is not installed on this machine; do not plan around it.
+- `gws` (Google Workspace CLI, `/opt/homebrew/bin/gws`) is installed and authenticated for lin.yulong@gmail.com. It is the fallback when the connector times out or errors, and the only route for attaching files to an existing draft. In the sandbox it needs `allowed_domains: ["gmail.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"]`.
+
+## Drafts must carry an HTML part, or Gmail hard-wraps them
+
+A draft whose only body is `text/plain` opens in Gmail's plain-text compose mode, and Gmail hard-wraps that mode at about 70 characters when it is sent, so the recipient gets a newline in the middle of every sentence. On 13 Nov 2026 a J-1 support-letter request went out that way, and the recipient would have had to rejoin every line of the letter before putting it on letterhead; it had to be resent as a follow-up. The MCP `create_draft` with `body` alone is safe in practice (Gmail generates the HTML), but anything built as raw MIME is not.
+
+Build drafts with `scripts/make_draft.py`, which always writes `multipart/alternative` (plain text plus an HTML rendering), handles attachments and threading, and calls `gws`:
+
+```bash
+python3 ~/.claude/skills/gmail-connector/scripts/make_draft.py \
+  --to someone@example.org --cc other@example.org \
+  --subject "Re: …" --body-file body.txt \
+  --attach form.pdf --attach-name "Lin_form.pdf" \
+  --reply-to "<message-id>" --thread-id <thread-id> \
+  [--update <draft-id>]   # replace a draft in place instead of creating another copy
+```
+
+Write `body.txt` with one line per paragraph and a blank line between paragraphs; a single newline is kept as a line break (address blocks, lists, signatures). Prefer `--update` over a new draft when revising, so the user is not left with several drafts under one subject. Before replacing a draft, check its message id has not changed since you wrote it; a new id means the user edited it, so rebuild from their text.
 
 ## The three calls
 
