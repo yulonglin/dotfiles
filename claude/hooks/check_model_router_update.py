@@ -26,7 +26,18 @@ import urllib.request
 
 MAX_REPORT = 32768
 COOLDOWN = 300
-GATEWAY_ENV = ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL")
+GATEWAY_ENV = ("ANTHROPIC_BASE_URL", "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL", "CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER")
+LOOPBACK_PROXY = "http://127.0.0.1:8787"
+
+
+def carries_gateway(settings):
+    """Whether a settings dict holds any model-router wiring key, base-url or proxy.
+    HTTPS_PROXY counts only at the router's loopback origin."""
+    env = settings.get("env", {})
+    if not isinstance(env, dict):
+        return False
+    return (any(k in env for k in GATEWAY_ENV) or env.get("HTTPS_PROXY") == LOOPBACK_PROXY
+            or "proxyAuthHelper" in settings)
 
 
 def managed_env(env):
@@ -63,8 +74,7 @@ def drop_in_nudge(home, env):
     try:
         if not (home / ".local/state/model-router/ingress-token").is_file():
             return None
-        user_env = read_json(home / ".claude/settings.json").get("env", {})
-        in_user = isinstance(user_env, dict) and any(k in user_env for k in GATEWAY_ENV)
+        in_user = carries_gateway(read_json(home / ".claude/settings.json"))
         drop_in = managed_path(env)
         staged = read_json(Path(env.get("MODEL_ROUTER_STAGED") or home / ".config/model-router/managed-settings.json"))
         if not drop_in.exists():
@@ -245,7 +255,12 @@ def check_update(force=False, *, home=None, env=None, repo=None, timeout=60, now
         if not token_path.is_file():
             return 0, None
         token = token_path.read_text().strip()
-        if not token or base_url != "http://127.0.0.1:8787/t/" + token:
+        # Under the proxy wiring no base URL is configured anywhere, but the router
+        # serves its base-URL front beside the proxy, so validate through that.
+        proxy = managed_env(env).get("HTTPS_PROXY") or config_env.get("HTTPS_PROXY", "")
+        if token and not base_url and proxy == LOOPBACK_PROXY:
+            base_url = LOOPBACK_PROXY + "/t/" + token
+        if not token or base_url != LOOPBACK_PROXY + "/t/" + token:
             return 0, None
         binary = home / ".local/bin/claude"
         if not binary.is_file():

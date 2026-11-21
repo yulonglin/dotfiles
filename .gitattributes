@@ -7,3 +7,7 @@ custom_bins/claude-tools-linux-aarch64 binary
 # Zed writes remote hosts into settings.json as ssh_connections; the clean
 # filter keeps them out of the repo. deploy.sh --git-config wires the driver.
 config/zed/settings.json filter=zed-ssh
+
+# Codex writes trusted project paths and app state into config.toml; the
+# clean/smudge filter keeps them on the machine. deploy.sh --git-config wires it.
+codex/config.toml filter=codex-local

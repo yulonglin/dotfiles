@@ -21,6 +21,14 @@ if [[ "${CLAUDE_WATCHDOG_ENABLED:-1}" == "0" ]]; then
   exit 0
 fi
 
+# Interactive sessions only. The daemon owns a background job's lifecycle and
+# retires idle sessions without SessionEnd reaching this watchdog, which read as
+# "died — possible OOM kill". The grandparent PID below is also the bg-pty-host
+# wrapper there, not the worker, so the memory alert could never fire.
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  exit 0
+fi
+
 TMPDIR="${TMPDIR:-/tmp}"
 PID_FILE="${TMPDIR}/claude-watchdog-${SESSION_ID}.pid"
 HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"

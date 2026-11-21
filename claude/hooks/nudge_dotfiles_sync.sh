@@ -84,7 +84,7 @@ for path in sorted(glob.glob(os.path.join(os.environ["STATE_DIR"], "*.json"))):
             lines.append(f"{name}: claude/settings.json was held back from the sync commit"
                          " because it still carries the router token; run"
                          " `model-router-wire apply --install` once so the managed drop-in holds it"
-                         " and the file commits normally (.claude/rules/dotfiles-settings.md).")
+                         " and the file commits normally (.claude/rules/model-router-gateway.md).")
         else:
             lines.append(f"{name}: {st['held_back']} was held back from the sync commit"
                          " because the pre-commit hook rejected it; commit a stripped copy"

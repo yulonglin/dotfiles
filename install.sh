@@ -81,7 +81,7 @@ SELECTIVE INSTALLATION:
 COMPONENTS:
     --zsh             Enable ZSH installation
     --tmux            Enable tmux installation
-    --ai-tools        Enable AI CLI tools (Claude, Codex, OpenCode, Antigravity)
+    --ai-tools        Enable AI CLI tools (Claude, Codex)
     --extras          Enable extra CLI tools (hyperfine, gitui, code2prompt)
     --cleanup         Enable automatic cleanup (macOS only)
     --docker          Enable Docker installation (Linux only)
@@ -243,6 +243,15 @@ if cmd_exists uv; then
     fi
 fi
 
+# Global python3 is uv's default Python (python and python3 in ~/.local/bin), so
+# one tool owns every Python on the machine. A Homebrew python@3.x appears only
+# as a dependency of a formula or cask (gcloud-cli lists python@3.14).
+if cmd_exists uv && [[ ! -x "$HOME/.local/bin/python3" ]]; then
+    log_info "Installing uv's default Python (global python3)..."
+    run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" uv python install --default \
+        || log_warning "uv python install --default failed"
+fi
+
 # ─── Python Dev Tools (uv ecosystem) ────────────────────────────────────────
 
 if cmd_exists uv; then
@@ -326,33 +335,23 @@ if [[ "$INSTALL_AI_TOOLS" == "true" ]]; then
     log_section "INSTALLING AI CLI TOOLS"
 
     # Rust toolchain (needed for claude-tools build in deploy.sh)
-    if ! is_installed cargo; then
-        log_info "Installing Rust toolchain (user-level, no root needed)..."
-        curl --proto '=https' --tlsv1.2 -sSf --connect-timeout 10 --max-time 300 --retry 2 --retry-max-time 300 \
-            https://sh.rustup.rs | run_with_timeout "${DOTFILES_INSTALLER_TIMEOUT:-600}" sh -s -- -y --quiet
-    fi
-    source "$HOME/.cargo/env" 2>/dev/null || true
+    install_rust_toolchain
 
     # Pre-set PATH for subshells
     [[ -d "$HOME/.claude/bin" ]] && export PATH="$HOME/.claude/bin:$PATH"
 
     # Bun is the global JS CLI package manager on BOTH platforms. Codex follows
-    # config/codex-install.conf; OpenCode can fall back to bun, and Socket CLI
-    # uses `bun add -g` everywhere.
+    # config/codex-install.conf, and Socket CLI uses `bun add -g` everywhere.
     install_bun || true
 
     if is_macos; then
         # brew has a global lock — sequential
         install_claude_code
         install_codex_cli
-        install_opencode
-        install_antigravity_cli   # official Gemini CLI successor (cask, macOS)
     else
         run_parallel "Installing AI CLI tools" \
             "claude|install_claude_code" \
-            "codex|install_codex_cli" \
-            "opencode|install_opencode" \
-            "antigravity|install_antigravity_cli"
+            "codex|install_codex_cli"
     fi
 
     # MCP servers (sequential — unclear if concurrent-safe)
