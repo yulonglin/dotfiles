@@ -712,11 +712,11 @@ class TestPickerFollowsCouncil:
                   {"slug": "x-ai/grok-4.7"}]
         assert orc.picker_gaps(seated, self.ROUTER) == []
 
-    def test_a_moved_seat_and_a_hidden_row_are_both_reported(self):
+    def test_a_moved_seat_is_reported_and_a_hidden_row_is_not(self):
+        """The picker is hand-curated, so a route-only seat is not a gap."""
         gaps = orc.picker_gaps([{"slug": "x-ai/grok-4.8"}, {"slug": "google/gemini-3.8-flash"}],
                                self.ROUTER)
-        assert gaps == ["x-ai/grok-4.8: no route in model-router.toml",
-                        "google/gemini-3.8-flash: routed but picker = false"]
+        assert gaps == ["x-ai/grok-4.8: no route in model-router.toml"]
 
     def test_every_live_seat_has_a_route(self):
         """The committed configs: a refresh that moves a seat must move its route too."""

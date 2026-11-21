@@ -150,7 +150,7 @@ review_days = 14
 
 # Stamped by `council refresh --apply`. A date in the past by more than
 # `review_days` is what makes the nudge fire.
-reviewed = "2026-11-16"
+reviewed = "2026-11-21"
 
 # Everything between the markers is REWRITTEN mechanically by
 # `openrouter-cli council refresh --apply`. Edit by hand only to force a seat;
@@ -170,14 +170,14 @@ reviewed = "2026-11-16"
 #
 # BEGIN council-auto
 seats = [
-  { alias = "opus", slug = "anthropic/claude-fable-5.2", family = "anthropic", score = 173.44, basis = "eci" },
-  { alias = "gpt", slug = "openai/gpt-6.2-astra", family = "openai", score = 0.0, basis = "newest-in-line" },
-  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 161.68, basis = "eci" },
-  { alias = "kimi", slug = "moonshotai/kimi-k3.1-pro", family = "moonshotai", score = 161.37, basis = "eci" },
+  { alias = "opus", slug = "anthropic/claude-fable-5.2", family = "anthropic", score = 173.4, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6.2-astra", family = "openai", score = 172.82, basis = "eci" },
+  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 161.74, basis = "eci" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3.1-pro", family = "moonshotai", score = 161.2, basis = "eci" },
   { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 157.1, basis = "eci" },
-  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 156.18, basis = "newest-within-ci" },
-  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.97, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 156.43, basis = "newest-within-ci" },
   { alias = "gemini", slug = "google/gemini-4-neon", family = "google", score = 0.0, basis = "pinned" },
+  { alias = "qwen", slug = "qwen/qwen4-max", family = "qwen", score = 0.0, basis = "newest-in-line" },
 ]
 # END council-auto
 

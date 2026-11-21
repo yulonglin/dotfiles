@@ -1437,10 +1437,12 @@ def cmd_council_refresh(args, cfg) -> None:
 
 
 def picker_gaps(seated: list[dict], router: dict) -> list[str]:
-    """Council seats the /model picker does not offer, one line each.
+    """Council seats with no route in config/model-router.toml, one line each.
 
-    The picker is rendered from config/model-router.toml, so a refresh that
-    moves a seat leaves the picker on the old model until that file follows.
+    A refresh that moves a seat leaves the router (and its agent) on the old
+    model until that file follows. Whether a routed seat also shows in /model
+    is not checked: the picker is a short hand-curated list (Yulong,
+    2026-11-21), so most seats are deliberately route-only.
     A seat matches a router entry when the normalised tails agree:
     `anthropic/claude-opus-5.5` ~ id `claude-opus-5-5`, `x-ai/grok-4.7` ~ slug
     `x-ai/grok-4.7`, `openai/gpt-6-astra` ~ codex id `gpt-6-astra`."""
@@ -1452,8 +1454,6 @@ def picker_gaps(seated: list[dict], router: dict) -> list[str]:
                if norm(str(m.get("slug", m["id"])).split("/", 1)[-1]) == want]
         if not hit:
             out.append(f"{s['slug']}: no route in model-router.toml")
-        elif not any(m.get("picker", True) for m in hit):
-            out.append(f"{s['slug']}: routed but picker = false")
     return out
 
 
@@ -1463,7 +1463,7 @@ def report_picker_gaps(seated: list[dict]) -> None:
         return
     gaps = picker_gaps(seated, tomllib.loads(ROUTER_CONFIG.read_text()))
     if gaps:
-        print(f"\nthe /model picker is out of step with the council ({ROUTER_CONFIG.name}):")
+        print(f"\nthe router has no route for these council seats ({ROUTER_CONFIG.name}):")
         for g in gaps:
             print(f"  ! {g}")
         print("edit that file, then `model-router-wire apply`.")

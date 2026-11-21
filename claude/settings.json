@@ -186,43 +186,23 @@
         "description": "ChatGPT subscription (Codex)"
       },
       {
-        "model": "gemini",
-        "label": "Gemini 4 Neon",
-        "description": "OpenRouter, pay per token"
-      },
-      {
         "model": "sol",
         "label": "GPT-6.2 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
-        "model": "kimi",
-        "label": "Kimi K3.1 Pro",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "glm",
-        "label": "GLM 5.3",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "muse",
-        "label": "Muse Wonder",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "grok",
-        "label": "Grok 4.7",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "qwen",
-        "label": "Qwen3.8 Max",
+        "model": "gemini",
+        "label": "Gemini 4 Neon",
         "description": "OpenRouter, pay per token"
       },
       {
         "model": "deepseek",
         "label": "DeepSeek V4.1 Flash",
+        "description": "OpenRouter, pay per token"
+      },
+      {
+        "model": "glm",
+        "label": "GLM 5.3",
         "description": "OpenRouter, pay per token"
       }
     ]
@@ -1009,6 +989,18 @@
     "gpt-6-astra-fast": {
       "autoCompactWindow": 258400
     },
+    "gpt-6.2-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "sol": {
+      "autoCompactWindow": 258400
+    },
+    "sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gemini-4-neon": {
       "autoCompactWindow": 1000000
     },
@@ -1025,18 +1017,6 @@
       "autoCompactWindow": 258400
     },
     "gpt-6.1-sol-fast": {
-      "autoCompactWindow": 258400
-    },
-    "gpt-6.2-sol": {
-      "autoCompactWindow": 258400
-    },
-    "gpt-6.2-sol-fast": {
-      "autoCompactWindow": 258400
-    },
-    "sol": {
-      "autoCompactWindow": 258400
-    },
-    "sol-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-6.1-terra": {
@@ -1096,6 +1076,12 @@
     "kimi-k3": {
       "autoCompactWindow": 250000
     },
+    "deepseek-v4.1-flash": {
+      "autoCompactWindow": 1000000
+    },
+    "deepseek": {
+      "autoCompactWindow": 1000000
+    },
     "glm-5.3": {
       "autoCompactWindow": 262124
     },
@@ -1114,16 +1100,13 @@
     "grok": {
       "autoCompactWindow": 500000
     },
-    "qwen3.8-max": {
+    "qwen4-max": {
       "autoCompactWindow": 1000000
     },
     "qwen": {
       "autoCompactWindow": 1000000
     },
-    "deepseek-v4.1-flash": {
-      "autoCompactWindow": 1000000
-    },
-    "deepseek": {
+    "qwen3.8-max": {
       "autoCompactWindow": 1000000
     }
   },
