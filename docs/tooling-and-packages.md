@@ -8,6 +8,30 @@ Reference for how this repo installs tools, where it puts them, and the surprise
 
 Cloud and RunPod provisioning lives in [`deploy-components.md`](deploy-components.md) § Cloud Environments.
 
+## Slack MCP authentication
+
+Codex connects directly to Slack's official `https://mcp.slack.com/mcp` endpoint through `codex/config.toml`; no plugin is needed. Its `http_headers_helper` runs `custom_bins/slack-mcp-headers`, which resolves `SLACK_MCP_USER_TOKEN` from Bitwarden and returns the authorization header directly to Codex. Do not run the helper in a terminal: its stdout contains the token. Use an `xoxp-` user token from an internal or Marketplace app with Slack MCP enabled (app settings → Agents → Slack Model Context Protocol Server). Give the user token the scopes needed for the tools you use; a bot `xoxb-` token is not a substitute for this user-token setup. See [Slack's authentication and scope reference](https://docs.slack.dev/ai/slack-mcp-server/) and [bearer-token example](https://docs.slack.dev/ai/slack-mcp-server/developing/).
+
+Store the token once through the hidden prompt, then launch Codex normally:
+
+```bash
+secrets edit SLACK_MCP_USER_TOKEN
+codex
+```
+
+The first command saves the token in Bitwarden Secrets Manager, not this repo. Other machines need `secrets init`, access to the same Bitwarden secret, and the checkout at `~/code/dotfiles` (or an adjusted helper path). Local Codex clients using this config can fetch the token without an exported environment variable. Restart existing clients after changing the config. If multiple workspaces share the environment-variable name, select the intended key with `secrets use SLACK_MCP_USER_TOKEN`. Do not put tokens in MCP config, shell startup files, or command arguments.
+
+ChatGPT Work and regular ChatGPT chats use their own account connection; they do not read this local Codex config. Connect Slack once through ChatGPT Settings → Apps/Plugins → Slack → Connect, subject to workspace permissions. See [Using Slack in ChatGPT](https://help.openai.com/en/articles/12525822-using-slack-in-chatgpt).
+
+After launching a fresh session, check `/mcp` for Slack tools and make a read-only call. Configuration presence alone does not verify authentication. An authentication failure can mean the token's app lacks MCP access; a tool permission failure can mean missing user scopes. Token rotation or revocation requires updating the stored token.
+
+Keep this HTTP entry out of `config/mcp-servers.json`: the current shared sync copies fields verbatim, while Claude and Codex use different HTTP authentication schemas. For Claude Code, register it separately with an environment-variable header and launch with the same secret:
+
+```bash
+claude mcp add --transport http --scope user slack https://mcp.slack.com/mcp --header 'Authorization: Bearer ${SLACK_MCP_USER_TOKEN}'
+secrets run SLACK_MCP_USER_TOKEN -- claude
+```
+
 ## Homebrew Manages CLI Tools on Both Platforms
 
 macOS uses Homebrew (ecosystem, GUI apps, libraries). Linux now uses Homebrew (Linuxbrew) too for modern versions of fast-moving CLI tools (fzf, bat, eza, fd, ripgrep, delta, dust, zoxide, jless, just, sd, duf, vivid), with apt keeping only the baseline — apt packages are often years behind upstream. This reverses the earlier "Homebrew on Linux is too heavy, installs its own gcc/glibc" decision (reversed 2026-08-31): one manager unifying macOS and Linux won, and mise, the previous Linux CLI-tool manager, is retired. Updates run through `custom_bins/update-packages`, whose brew branch now covers Linux as well as macOS. Package lists live in `config.sh` (`PACKAGES_CORE` for the apt/brew baseline, `PACKAGES_MACOS` for brew-on-macOS extras, plus the Linux brew list).

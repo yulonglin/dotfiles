@@ -11,7 +11,7 @@ OpenRouter slug, not only the routed ones.
     openrouter-cli models                 # configured models
     openrouter-cli models --check         # ...cross-checked against the catalogue
     openrouter-cli drift                  # every configured slug vs the catalogue
-    openrouter-cli refresh                # rank via Epoch ECI (+ AA if keyed)
+    openrouter-cli refresh                # rank via Epoch ECI + Artificial Analysis
     openrouter-cli ask glm "question"     # one model
     openrouter-cli fusion "question"      # panel in parallel + chair synthesis
     openrouter-cli council roster --check # is the seated roster still the best?
@@ -33,6 +33,7 @@ import argparse
 import csv
 import datetime
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -64,6 +65,7 @@ ECI_CSV_LEGACY = "epoch_capabilities_index.csv"
 
 # Resolved relative to this script so the tool works from any cwd.
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "openrouter-models.toml"
+ROUTER_CONFIG = CONFIG.with_name("model-router.toml")
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -99,8 +101,16 @@ def get_json(url: str, headers: dict | None = None, timeout: int = 60) -> dict:
         die(f"cannot reach {url}: {e.reason}")
 
 
+# Every chat completion is STREAMED and reassembled into the non-streamed shape.
+# A non-streamed request sends no bytes until the whole answer exists, and
+# OpenRouter's edge closes a connection that stays silent for 60 s: on
+# 2026-11-01 a two-seat fusion over a 4 KB brief died at exactly 60.0 s with
+# RemoteDisconnected, while the same request streamed finished in 112 s, kept
+# open by ~240 ": OPENROUTER PROCESSING" comment lines. Fusion runs the panel,
+# the analyst and the chair inside one request, so any non-trivial brief passes
+# 60 s. The timeout below is per socket read, so those comments reset it.
 def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
-    body = json.dumps(payload).encode()
+    body = json.dumps({**payload, "stream": True}).encode()
     req = urllib.request.Request(
         url,
         data=body,
@@ -111,13 +121,66 @@ def post_json(url: str, payload: dict, key: str, timeout: int = 600) -> dict:
             "X-OpenRouter-Title": "openrouter-cli (dotfiles)",
         },
     )
+    started = datetime.datetime.now()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r)
+            return assemble_stream(r)
     except urllib.error.HTTPError as e:
         die(f"HTTP {e.code}: {e.read()[:500].decode('utf-8', 'replace')}")
     except urllib.error.URLError as e:
         die(f"cannot reach {url}: {e.reason}")
+    except (http.client.HTTPException, ConnectionError, TimeoutError) as e:
+        # Not retried: the server may still finish, and bill, the first call.
+        secs = (datetime.datetime.now() - started).total_seconds()
+        die(f"connection lost after {secs:.0f}s ({type(e).__name__}: {e}); "
+            "the call may still be billed - check openrouter.ai/activity before retrying")
+
+
+def assemble_stream(lines) -> dict:
+    """Fold an SSE chat-completion stream into the non-streamed response shape.
+
+    Callers read `id`, `model`, `usage`, `error` and choices[0]'s
+    `finish_reason`, `native_finish_reason`, `error` and `message.content` /
+    `message.reasoning_details`. Fusion's record is one
+    `reasoning.server_tool_call` entry in a delta; reasoning entries that
+    arrive in fragments share an `index` and are joined back together.
+    """
+    resp: dict = {}
+    content: list[str] = []
+    details: list[dict] = []
+    choice: dict = {}
+    for raw in lines:
+        line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else raw.strip()
+        if not line.startswith("data:"):
+            continue  # blank separators and ": OPENROUTER PROCESSING" keep-alives
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        ev = json.loads(data)
+        for k in ("id", "model", "provider", "usage", "error"):
+            if ev.get(k):
+                resp[k] = ev[k]
+        for ch in ev.get("choices") or []:
+            delta = ch.get("delta") or {}
+            if delta.get("content"):
+                content.append(delta["content"])
+            for d in delta.get("reasoning_details") or []:
+                prev = details[-1] if details else None
+                if (prev is not None and "index" in d and prev.get("index") == d["index"]
+                        and prev.get("type") == d.get("type")):
+                    for f in ("text", "summary", "result"):
+                        if isinstance(d.get(f), str):
+                            prev[f] = (prev.get(f) or "") + d[f]
+                else:
+                    details.append(dict(d))
+            for k in ("finish_reason", "native_finish_reason", "error"):
+                if ch.get(k):
+                    choice[k] = ch[k]
+    message: dict = {"content": "".join(content)}
+    if details:
+        message["reasoning_details"] = details
+    resp["choices"] = [{**choice, "message": message}] if (content or details or choice) else []
+    return resp
 
 
 # Append-only provenance log. Every billed call records which concrete model
@@ -357,6 +420,23 @@ def parse_panel(spec: str | None, cfg: dict) -> list[str]:
     return panel
 
 
+# Fusion is asked for, not forced. `tool_choice: "required"` is what OpenRouter
+# documents for forcing fusion, but Anthropic rejects forced tool use on its
+# current flagships: claude-opus-5.5 and claude-fable-5.1 both answer
+# `tool_choice: type "tool" and "any" are not supported for this model.`
+# (measured 2026-11-01; claude-haiku-4.5 still accepts it). Inside fusion that
+# upstream 400 surfaces only as an opaque "Model call failed: invalid request
+# (400)" with no model named, and it broke every `fusion` and default `council
+# ask` from the day Opus 5.5 took the chair. A system instruction plus "auto"
+# works on every chair tried; if the chair ever skips the tool anyway,
+# fusion_result() fails closed, so compliance is checked rather than assumed.
+FUSION_INSTRUCTION = (
+    "Before answering, call the openrouter:fusion tool exactly once with the "
+    "user's request, then write your final answer from its result. Do not "
+    "answer without calling it."
+)
+
+
 def fusion_result(resp: dict) -> dict:
     """The structured fusion outcome, recorded as a server tool call in
     reasoning_details. Without it the panel cannot be verified, so its
@@ -368,7 +448,10 @@ def fusion_result(resp: dict) -> dict:
                 return json.loads(d["result"])
             except ValueError:
                 die("fusion tool result is not valid JSON")
-    die("response carries no openrouter:fusion tool result - cannot verify the panel ran")
+    # The usual cause since tool_choice became "auto": the chair answered
+    # directly and never called the tool. The answer is not a panel answer.
+    die("response carries no openrouter:fusion tool result - the chair likely "
+        "answered without calling fusion, so no panel ran; retry")
 
 
 def check_fusion_integrity(result: dict, panel: list[str]) -> list[str]:
@@ -452,11 +535,23 @@ def cmd_models(args, cfg) -> None:
             die(f"{bad} configured slug(s) are not in the catalogue", 3)
 
 
+# 95% intervals from the last fetch_eci(), keyed like its scores. pick_seat()
+# reads them to tell a real gap between sibling checkpoints from noise.
+ECI_CI: dict[str, tuple[float, float]] = {}
+
+
 def fetch_eci() -> dict[str, float]:
-    """Epoch Capabilities Index, keyed by normalised model name."""
-    req = urllib.request.Request(EPOCH_ZIP)
-    with urllib.request.urlopen(req, timeout=120) as r:
-        blob = r.read()
+    """Epoch Capabilities Index, keyed by normalised model name. Fills ECI_CI."""
+    # Epoch's server truncates this zip now and then (IncompleteRead, seen
+    # twice on 2026-10-12); a second try has always completed.
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(EPOCH_ZIP), timeout=120) as r:
+                blob = r.read()
+            break
+        except http.client.IncompleteRead:
+            if attempt == 2:
+                raise
     z = zipfile.ZipFile(io.BytesIO(blob))
     member = ECI_CSV if ECI_CSV in z.namelist() else ECI_CSV_LEGACY
     rows = csv.DictReader(io.StringIO(z.read(member).decode("utf-8", "replace")))
@@ -471,21 +566,96 @@ def fetch_eci() -> dict[str, float]:
         except ValueError:
             continue
         # Several reasoning-effort variants share one Model name; keep the best.
+        if val >= out.get(norm(name), val):
+            try:
+                ECI_CI[norm(name)] = (float(row["eci_ci_low"]), float(row["eci_ci_high"]))
+            except (KeyError, TypeError, ValueError):
+                ECI_CI.pop(norm(name), None)
         out[norm(name)] = max(out.get(norm(name), val), val)
     return out
 
 
-def fetch_aa() -> dict[str, float]:
-    """Artificial Analysis intelligence index, or {} when unkeyed."""
+AA_PAGE = "https://artificialanalysis.ai/models"
+# One model record as the site embeds it: id, slug, name, then (within the same
+# record) the release it belongs to and its index. A release has one record per
+# reasoning effort; the best effort stands for the release.
+AA_RECORD = re.compile(
+    r'\{"id":"[0-9a-f-]{36}","slug":"[a-z0-9.-]+","name":"[^"]+"(.*?)'
+    r'(?=\{"id":"[0-9a-f-]{36}","slug"|$)', re.S)
+
+
+# Releases whose AA score in the last fetch_aa_pages() is an estimate, because
+# AA had not measured them yet. pick_seat() labels such a seat "aa-estimated".
+AA_ESTIMATED: set[str] = set()
+
+
+def aa_page_records(html: str) -> tuple[dict[str, float], dict[str, float]]:
+    """(measured, estimated): the best intelligence index per release, keyed by
+    normalised release slug (`grok-4-6` -> `grok46`, which is also norm() of
+    OpenRouter's `grok-4.6`). AA publishes an estimate for a release it has not
+    measured on the current suite, which can be a new model's only AA signal for
+    its first days; estimates are kept apart so a measurement always wins."""
+    meas: dict[str, float] = {}
+    est: dict[str, float] = {}
+    for m in AA_RECORD.finditer(html.replace('\\"', '"')):
+        body = m.group(1)[:6000]
+        rel = re.search(r'"release":\{"slug":"([a-z0-9.-]+)"', body)
+        ii = re.search(r'"intelligenceIndex":([0-9.]+),"intelligenceIndexIsEstimated":(true|false)', body)
+        if rel and ii:
+            d = est if ii.group(2) == "true" else meas
+            k = norm(rel.group(1))
+            d[k] = max(d.get(k, 0.0), float(ii.group(1)))
+    return meas, est
+
+
+def get_page(url: str) -> str | None:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    for _ in range(3):  # multi-MB pages arrive truncated now and then
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.read().decode("utf-8", "replace")
+        except http.client.IncompleteRead:
+            continue
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            return None
+    return None
+
+
+def fetch_aa_pages(candidates: list[str]) -> dict[str, float]:
+    """Artificial Analysis without a key, from its public model pages.
+
+    /models lists only current releases: a release AA has superseded
+    (`deprecatedTo`) drops off it, which is how Grok 4.6 and Gemini 3.7 Flash
+    came to look unlisted on 2026-10-12 while AA still scored both. So each
+    candidate not on that list is looked up on its own page, /models/<slug>,
+    which still carries its record (and the full catalogue, so one lookup
+    usually covers the rest)."""
+    meas, est = aa_page_records(get_page(AA_PAGE) or "")
+    lookups = 0
+    for tail in candidates:
+        if norm(tail) in meas or lookups >= 40:
+            continue
+        lookups += 1
+        html = get_page(f"{AA_PAGE}/{tail.lower().replace('.', '-')}")
+        if html:
+            m2, e2 = aa_page_records(html)
+            meas.update({k: v for k, v in m2.items() if k not in meas})
+            est.update({k: v for k, v in e2.items() if k not in est})
+    AA_ESTIMATED.clear()
+    AA_ESTIMATED.update(set(est) - set(meas))
+    return {**est, **meas}
+
+
+def fetch_aa(candidates: list[str] | None = None) -> dict[str, float]:
+    """Artificial Analysis intelligence index: the API with AA_API_KEY, else the
+    public model pages for `candidates` (OpenRouter tails), else {}."""
     key = os.environ.get("AA_API_KEY")
     if not key:
-        print(
-            "note: AA_API_KEY unset - skipping Artificial Analysis, using Epoch only.\n"
-            "      Get a free key (1000 req/day) at artificialanalysis.ai, then\n"
-            "      add it with `secrets edit`.",
-            file=sys.stderr,
-        )
-        return {}
+        out = fetch_aa_pages(candidates or [])
+        if not out:
+            print("note: Artificial Analysis pages unreadable and AA_API_KEY unset - using Epoch only.",
+                  file=sys.stderr)
+        return out
     data = get_json(AA_URL, headers={"x-api-key": key}).get("data", [])
     out: dict[str, float] = {}
     for m in data:
@@ -841,7 +1011,10 @@ def cmd_fusion(args, cfg) -> None:
     payload = {
         # The outer voice that writes the final prose.
         "model": chair_of(cfg),
-        "messages": [{"role": "user", "content": args.prompt}],
+        "messages": [
+            {"role": "system", "content": FUSION_INSTRUCTION},
+            {"role": "user", "content": args.prompt},
+        ],
         "tools": [{
             "type": "openrouter:fusion",
             "parameters": {
@@ -855,7 +1028,8 @@ def cmd_fusion(args, cfg) -> None:
                 "max_completion_tokens": caps.get("max_completion_tokens", 16000),
             },
         }],
-        "tool_choice": "required",
+        # "auto", not "required": see FUSION_INSTRUCTION for why forcing fails.
+        "tool_choice": "auto",
     }
     if args.dry_run:
         print(json.dumps(payload, indent=2))
@@ -953,28 +1127,47 @@ def catalog_rows(data: list[dict] | None = None) -> list[dict]:
     return rows
 
 
-def index_scores() -> tuple[dict[str, float], list[str]]:
+# Names the last index_scores() scored from Artificial Analysis alone, because
+# Epoch had not reached them. pick_seat() labels such a seat "aa-only" rather
+# than "eci", which on 2026-10-13 it wrongly wrote for gemini-4-argon and
+# muse-wonder.
+AA_ONLY: set[str] = set()
+
+
+def index_scores(candidates: list[str] | None = None) -> tuple[dict[str, float], list[str]]:
     """Capability score per normalised model name, plus attribution lines.
 
-    Epoch alone when AA_API_KEY is unset. With both, each index is min-max
-    normalised before averaging: the two use different scales, so a raw mean
-    would silently let whichever has the wider range dominate the ranking.
+    Epoch alone when Artificial Analysis is unreachable. With both, each index
+    is min-max normalised before averaging: the two use different scales, so a
+    raw mean would silently let whichever has the wider range dominate the
+    ranking. `candidates` (OpenRouter tails) are the models looked up on AA's
+    pages when there is no API key.
     """
     eci = fetch_eci()
-    aa = fetch_aa()
+    aa = fetch_aa(candidates)
+    AA_ONLY.clear()
     credits = ["Epoch AI Capabilities Index (CC-BY)"]
     if not aa:
         return eci, credits
     credits.append("artificialanalysis.ai intelligence index")
 
+    # The scaling range comes from the candidates only. AA's page payload holds
+    # 26 models or ~130 depending on which pages a run happened to fetch, and
+    # a range over "whatever came back" would move every seat's score with no
+    # model having changed.
+    keys = {norm(t) for t in candidates or []}
+
     def unit(d: dict[str, float]) -> dict[str, float]:
-        vals = list(d.values())
+        vals = [v for k, v in d.items() if k in keys]
+        if len(vals) < 2:
+            vals = list(d.values())
         lo, hi = min(vals), max(vals)
         if hi == lo:
             return {k: 1.0 for k in d}
         return {k: (v - lo) / (hi - lo) for k, v in d.items()}
 
     ne, na = unit(eci), unit(aa)
+    AA_ONLY.update(set(na) - set(ne))
     out = {}
     for name in set(ne) | set(na):
         parts = [d[name] for d in (ne, na) if name in d]
@@ -983,7 +1176,10 @@ def index_scores() -> tuple[dict[str, float], list[str]]:
 
 
 def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
-              cap: float, in_cap: float = float("inf")) -> dict | None:
+              cap: float, in_cap: float = float("inf"),
+              cis: dict[str, tuple[float, float]] | None = None,
+              aa_only: set[str] | None = None,
+              aa_estimated: set[str] | None = None) -> dict | None:
     """The best seat for one family under both price caps, or None.
 
     Both caps, not just output: the `--rank` round sends every seat the other
@@ -1015,7 +1211,46 @@ def pick_seat(family: str, rows: list[dict], scores: dict[str, float],
     if newer:
         cand = max(newer, key=lambda r: r["created"])
         return {**cand, "score": 0.0, "basis": "newest-in-line"}
-    return {**best, "score": round(score, 1), "basis": "eci"}
+    # A newer SCORED sibling whose interval overlaps the best's is a tie, not a
+    # loss, so recency breaks it: gemini-3.8-flash trailed 3.7 by 0.6 and
+    # grok-4.7 trailed 4.6 by 2.9, both inside overlapping 95% intervals
+    # (2026-10-12), and Artificial Analysis ranked the newer one higher. The
+    # older model keeps the seat only when its whole interval is above.
+    # Intervals are in raw ECI units, so both ends must come from them, never
+    # from `score` (min-max normalised once the AA index is in the mix).
+    cis = ECI_CI if cis is None else cis
+    lo = cis.get(norm(best["tail"]), (float("inf"),))[0]
+    tied = [(r, s) for r, s in have
+            if stem(r["slug"]) == line and r["created"] > best["created"]
+            and norm(r["tail"]) in cis and cis[norm(r["tail"])][1] >= lo]
+    if tied:
+        cand, cs = max(tied, key=lambda rs: rs[0]["created"])
+        return {**cand, "score": round(cs, 2), "basis": "newest-within-ci"}
+    aa_only = AA_ONLY if aa_only is None else aa_only
+    aa_estimated = AA_ESTIMATED if aa_estimated is None else aa_estimated
+    key = norm(best["tail"])
+    basis = "eci" if key not in aa_only else "aa-estimated" if key in aa_estimated else "aa-only"
+    return {**best, "score": round(score, 2), "basis": basis}
+
+
+def pinned_seat(family: str, slug: str, rows: list[dict],
+                cap: float, in_cap: float = float("inf")) -> dict:
+    """The hand-pinned seat for one family, recorded as basis = "pinned".
+
+    A pin is Yulong's call overriding the index for one family, not a score.
+    It fails loudly rather than falling back: a pin that quietly reverted to
+    the index pick would look honoured while seating a different model. It
+    still obeys the family and both price caps, which are spend decisions.
+    """
+    hit = [r for r in rows if r["slug"] == slug]
+    if not hit:
+        die(f"[council].pinned {family} = {slug}: not in the OpenRouter catalogue")
+    r = hit[0]
+    if r["family"] != family:
+        die(f"[council].pinned {family} = {slug}: slug belongs to family {r['family']}")
+    if r["out"] > cap or r["in"] > in_cap:
+        die(f"[council].pinned {family} = {slug}: ${r['in']}/${r['out']} per M breaches the price caps")
+    return {**r, "score": 0.0, "basis": "pinned"}
 
 
 def alias_for(cfg: dict, family: str, slug: str) -> str:
@@ -1042,10 +1277,22 @@ def propose_roster(cfg: dict, rows: list[dict] | None = None) -> tuple[list[dict
         die(f"council has {len(families)} families; fusion panels take at most 8")
     if rows is None:
         rows = catalog_rows()
-    scores, credits = index_scores()
+    # Newest first: page lookups are capped, and past the first page or two the
+    # merged catalogue usually already holds the rest.
+    pool = sorted((r for r in rows if r["family"] in families
+                   and r["out"] <= cap and r["in"] <= in_cap),
+                  key=lambda r: -r["created"])
+    scores, credits = index_scores([r["tail"] for r in pool])
+    pins = dict(council.get("pinned") or {})
+    stray = sorted(set(pins) - set(families))
+    if stray:
+        die(f"[council].pinned names families not on the council: {', '.join(stray)}")
     picked, gaps = [], []
     for fam in families:
-        best = pick_seat(fam, rows, scores, cap, in_cap)
+        if fam in pins:
+            best = pinned_seat(fam, pins[fam], rows, cap, in_cap)
+        else:
+            best = pick_seat(fam, rows, scores, cap, in_cap)
         if best is None:
             gaps.append(fam)
             continue
@@ -1124,8 +1371,9 @@ def cmd_council_roster(args, cfg) -> None:
     for s in current:
         # Read `basis`, never the magnitude: a normalised score can legitimately
         # be 0.0, so "score == 0 means unscored" would hide a real measurement.
-        sc = "-" if s.get("basis") == "newest-in-line" else f"{s.get('score', 0):.1f}"
+        sc = "-" if s.get("basis") in ("newest-in-line", "pinned") else f"{s.get('score', 0):.2f}"
         print(f"{s['alias']:<8} {s['slug']:<32} {sc:>6}  {s.get('basis', '?')}")
+    report_picker_gaps(current)
     if not args.check:
         return
 
@@ -1154,6 +1402,9 @@ def cmd_council_roster(args, cfg) -> None:
             print(f"  ! {fam:<11} no model under the price caps")
         print("\napply with: openrouter-cli council refresh --apply")
     print("\nScores: " + "; ".join(credits) + ". Attribution required.")
+    if len(credits) == 1:
+        print("note: ranked on Epoch alone - Artificial Analysis was unreachable, so "
+              "models Epoch has not scored yet cannot win a seat.", file=sys.stderr)
     if age is not None and age > due:
         raise SystemExit(3)
     if now != was:
@@ -1166,19 +1417,56 @@ def cmd_council_refresh(args, cfg) -> None:
         die("index-driven pick produced no seats - refusing to empty the roster")
     print(f"{'family':<11} {'slug':<32} {'score':>6} {'out$/M':>7}  basis")
     for s in picked:
-        sc = "-" if s["basis"] == "newest-in-line" else f"{s['score']:.1f}"
+        sc = "-" if s["basis"] in ("newest-in-line", "pinned") else f"{s['score']:.2f}"
         print(f"{s['family']:<11} {s['slug']:<32} {sc:>6} {s['out']:7.2f}  {s['basis']}")
     for fam in gaps:
         print(f"{fam:<11} (no model under the price caps)", file=sys.stderr)
     print("\nScores: " + "; ".join(credits) + ". Attribution required.")
-    if not os.environ.get("AA_API_KEY"):
-        print("note: AA_API_KEY unset - ranked on Epoch alone. `secrets edit` to add it.",
-              file=sys.stderr)
+    if len(credits) == 1:
+        print("note: ranked on Epoch alone - Artificial Analysis was unreachable.", file=sys.stderr)
+        # Epoch lags releases by weeks, so an Epoch-only pick quietly reseats
+        # the previous generation under a confident "eci" label.
+        if args.apply and not args.epoch_only:
+            die("refusing to --apply an Epoch-only ranking; retry, or pass --epoch-only to accept it")
     if not args.apply:
         print("\n(dry run - pass --apply to write the config)")
         return
     rewrite_seats(CONFIG, picked, datetime.date.today().isoformat())
     print(f"\nwrote {len(picked)} seats to {CONFIG}")
+    report_picker_gaps(picked)
+
+
+def picker_gaps(seated: list[dict], router: dict) -> list[str]:
+    """Council seats with no route in config/model-router.toml, one line each.
+
+    A refresh that moves a seat leaves the router (and its agent) on the old
+    model until that file follows. Whether a routed seat also shows in /model
+    is not checked: the picker is a short hand-curated list (Yulong,
+    2026-11-21), so most seats are deliberately route-only.
+    A seat matches a router entry when the normalised tails agree:
+    `anthropic/claude-opus-5.5` ~ id `claude-opus-5-5`, `x-ai/grok-4.7` ~ slug
+    `x-ai/grok-4.7`, `openai/gpt-6-astra` ~ codex id `gpt-6-astra`."""
+    entries = [m for m in router.get("models", []) if m.get("enabled", True)]
+    out = []
+    for s in seated:
+        want = norm(s["slug"].split("/", 1)[-1])
+        hit = [m for m in entries
+               if norm(str(m.get("slug", m["id"])).split("/", 1)[-1]) == want]
+        if not hit:
+            out.append(f"{s['slug']}: no route in model-router.toml")
+    return out
+
+
+def report_picker_gaps(seated: list[dict]) -> None:
+    import tomllib
+    if not ROUTER_CONFIG.is_file():
+        return
+    gaps = picker_gaps(seated, tomllib.loads(ROUTER_CONFIG.read_text()))
+    if gaps:
+        print(f"\nthe router has no route for these council seats ({ROUTER_CONFIG.name}):")
+        for g in gaps:
+            print(f"  ! {g}")
+        print("edit that file, then `model-router-wire apply`.")
 
 
 def read_context(paths: list[str]) -> str:
@@ -1474,10 +1762,10 @@ def sum_usage(answers: dict[str, dict]) -> dict:
 
 
 def advisor_slugs(cfg: dict) -> list[str]:
-    """The two-model advisor pair, resolved from families to seated slugs.
+    """The advisors, resolved from `advisor_families` to seated slugs, in order.
 
-    Families rather than slugs so the pair follows a refresh: whoever holds the
-    anthropic and openai seats is the pair, with no second list to update.
+    Families rather than slugs so the advisors follow a refresh (or a pin):
+    whoever holds those seats advises, with no second list to update.
     """
     council = cfg.get("council") or {}
     fams = list(council.get("advisor_families") or [])
@@ -1496,9 +1784,9 @@ def advisor_slugs(cfg: dict) -> list[str]:
 
 
 def cmd_council_advise(args, cfg) -> None:
-    """Ask the two strongest families and show both answers, unsynthesised.
+    """Ask the advisor families and show every answer, unsynthesised.
 
-    No chair on purpose. With two answers the disagreement IS the signal, and a
+    No chair on purpose. With a few answers the disagreement IS the signal, and a
     synthesis would average it away for the price of another call -- the exact
     failure mode the council's bucket (d) exists to prevent.
     """
@@ -1682,6 +1970,8 @@ def main() -> None:
         help="re-pick every seat from the capability indices (dry run by default)")
     cf_.add_argument("--apply", action="store_true",
                      help="write the new seats into the config")
+    cf_.add_argument("--epoch-only", action="store_true",
+                     help="let --apply proceed when Artificial Analysis is unreachable")
     cf_.set_defaults(fn=cmd_council_refresh)
 
     cv = csub.add_parser(

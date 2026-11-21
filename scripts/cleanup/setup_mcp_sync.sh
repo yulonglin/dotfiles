@@ -35,16 +35,22 @@ install() {
 
     mkdir -p "$DOT_DIR/custom_bins"
     cat > "$WRAPPER" <<WRAPPER
-#!/bin/bash
+#!/usr/bin/env bash
 # Auto-generated wrapper for scheduled shared MCP sync
 set -euo pipefail
 
 export PATH="\$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
 
+extra_args=()
+if [[ -d "\$HOME/.gemini/config" ]]; then
+    extra_args+=(--antigravity-config "\$HOME/.gemini/config/mcp_config.json")
+fi
+
 exec python3 "$DOT_DIR/scripts/helpers/sync_mcp_servers.py" \\
     --source "$DOT_DIR/config/mcp-servers.json" \\
     --claude-settings "$DOT_DIR/claude/settings.json" \\
     --codex-config "$DOT_DIR/codex/config.toml" \\
+    "\${extra_args[@]}" \\
     --apply
 WRAPPER
     chmod +x "$WRAPPER"

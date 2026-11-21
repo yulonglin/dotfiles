@@ -40,6 +40,15 @@
 #      `glm-5.3` counts as a sibling of `glm-5.2` but `glm-5.3-flash` does not)
 #      and the index has not scored it yet, prefer the newer one and record
 #      basis = "newest-in-line".
+#   4. If a newer SCORED model in the same product line trails the best only
+#      within noise (its Epoch 95% interval reaches the best's lower bound),
+#      prefer the newer one and record basis = "newest-within-ci". The older
+#      model keeps the seat only when its whole interval sits above.
+#
+# Step 4 exists because a point-score ranking treats a 0.6-point gap as a
+# verdict: on 2026-10-12 it kept gemini-3.7-flash over 3.8-flash (157.3 vs
+# 156.7) and grok-4.6 over 4.7 (156.4 vs 153.5), both with overlapping
+# intervals and both ranked the other way by Artificial Analysis.
 #
 # Step 3 exists because index coverage lags releases by weeks, and step 1
 # exists because raw ranking buys capability at any price: Epoch ranks
@@ -99,7 +108,26 @@ families = [
 # and openai seats after a refresh becomes the advisor pair automatically. Today
 # that is claude-opus-5.5 and gpt-6-astra, the two highest-scoring models in the
 # catalogue under the price cap.
-advisor_families = ["anthropic", "openai"]
+#
+# Google joined on 2026-11-20 and goes first (Yulong): Gemini 4 Neon was
+# reported strong at inferring intent, so it answers beside the two strongest
+# rather than only on a full council. Three answers, still no synthesis; the
+# extra seat costs about $3/$15 per M. Drop "google" to return to the pair.
+advisor_families = ["google", "anthropic", "openai"]
+
+# Hand pins: family -> slug, overriding the index pick for that family only.
+# `council refresh` honours them and records basis = "pinned", so the roster
+# never presents a pin as an index score. A pin still obeys the family and both
+# price caps, and refresh dies (rather than falling back) if the slug leaves
+# the catalogue. Keep this list short: each pin is a seat the index no longer
+# maintains.
+#
+# google = gemini-4-neon since 2026-11-20 (Yulong: "really good and great at
+# inferring intent"). The index alone keeps seating gemini-4-carbon, because
+# Epoch has not scored Neon yet and `stem()` puts neon and carbon in different
+# product lines, so the newest-in-line rule never reaches it. Revisit when
+# Epoch scores Neon; launch-week evidence is in config/model-router.toml.
+pinned = { google = "google/gemini-4-neon" }
 
 # Per-seat price ceilings in USD per million tokens. Raising either changes
 # which models can be seated, so both are spend decisions: a council run costs
@@ -122,7 +150,7 @@ review_days = 14
 
 # Stamped by `council refresh --apply`. A date in the past by more than
 # `review_days` is what makes the nudge fire.
-reviewed = "2026-10-12"
+reviewed = "2026-11-21"
 
 # Everything between the markers is REWRITTEN mechanically by
 # `openrouter-cli council refresh --apply`. Edit by hand only to force a seat;
@@ -130,21 +158,26 @@ reviewed = "2026-10-12"
 # is why the commentary in this file survives an automated update.
 #
 # `basis` records why a seat was chosen, and it is not decoration: "eci" means
-# an index actually scored the model, "newest-in-line" means it is seated on
-# recency alone because no index has reached it yet. A roster where several
+# Epoch scored the model (with Artificial Analysis averaged in when it has a
+# score too), "aa-only" means only Artificial Analysis has scored it so far,
+# because Epoch lags releases by weeks, "aa-estimated" means even AA has only
+# estimated it (a measured AA score always replaces the estimate), "newest-in-line" means it is seated on
+# recency alone because no index has reached it yet, and "newest-within-ci"
+# means a newer checkpoint in the same line was seated over a higher point
+# score because the two Epoch 95% intervals overlap. A roster where several
 # seats read "newest-in-line" is running ahead of the evidence, and its
 # capability claims should be stated that way.
 #
 # BEGIN council-auto
 seats = [
-  { alias = "opus", slug = "anthropic/claude-opus-5.5", family = "anthropic", score = 167.3, basis = "eci" },
-  { alias = "gpt", slug = "openai/gpt-6-astra", family = "openai", score = 166.4, basis = "eci" },
-  { alias = "kimi", slug = "moonshotai/kimi-k3", family = "moonshotai", score = 157.4, basis = "eci" },
-  { alias = "gemini", slug = "google/gemini-3.7-flash", family = "google", score = 157.3, basis = "eci" },
-  { alias = "muse", slug = "meta/muse-spark-1.3", family = "meta", score = 156.8, basis = "eci" },
-  { alias = "grok", slug = "x-ai/grok-4.6", family = "x-ai", score = 156.4, basis = "eci" },
-  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 155.6, basis = "eci" },
-  { alias = "qwen", slug = "qwen/qwen3.8-max-0902", family = "qwen", score = 155.1, basis = "eci" },
+  { alias = "opus", slug = "anthropic/claude-fable-5.2", family = "anthropic", score = 173.4, basis = "eci" },
+  { alias = "gpt", slug = "openai/gpt-6.2-astra", family = "openai", score = 172.82, basis = "eci" },
+  { alias = "muse", slug = "meta/muse-wonder", family = "meta", score = 161.74, basis = "eci" },
+  { alias = "kimi", slug = "moonshotai/kimi-k3.1-pro", family = "moonshotai", score = 161.2, basis = "eci" },
+  { alias = "glm", slug = "z-ai/glm-5.3", family = "z-ai", score = 157.1, basis = "eci" },
+  { alias = "grok", slug = "x-ai/grok-4.7", family = "x-ai", score = 156.43, basis = "newest-within-ci" },
+  { alias = "gemini", slug = "google/gemini-4-neon", family = "google", score = 0.0, basis = "pinned" },
+  { alias = "qwen", slug = "qwen/qwen4-max", family = "qwen", score = 0.0, basis = "newest-in-line" },
 ]
 # END council-auto
 
@@ -178,12 +211,38 @@ alias = "deepseek"
 slug = "deepseek/deepseek-v4.1-flash"
 alias = "deepseek-flash"
 
+# GEMINI 4 CARBON. The index pick for the google seat (Epoch 169.76), displaced
+# by the Neon pin on 2026-11-20. Carbon keeps a slight lead on long-horizon
+# agent tasks, so it stays addressable: `openrouter-cli ask carbon "..."`.
+[[models]]
+slug = "google/gemini-4-carbon"
+alias = "carbon"
+
 # FABLE 5.1. Held the anthropic seat until 2026-10-12, when Opus 5.5 (167.3)
 # overtook it (164.7) at under half the price ($4/$20 vs $10/$50). Kept so the
 # `fable` alias still answers: `openrouter-cli ask fable "..."`.
 [[models]]
 slug = "anthropic/claude-fable-5.1"
 alias = "fable"
+
+# XIAOMI MIMO. New family, released 2026-09-21: MiMo-V2.6-Pro is a 1.02T
+# omni-modal reasoning flagship (1M ctx, MIT, $0.43/$0.87). Addressable but NOT
+# seated: the council is capped at 8 families and every current seat is still
+# its family's newest flagship, so no seat is displaced to make room. Reach it
+# explicitly: `openrouter-cli ask mimo "..."`. A `-flash` tier (309B-A15B) also
+# exists; the Pro is the flagship and the one worth a ninth opinion.
+[[models]]
+slug = "xiaomi/mimo-v2.6-pro"
+alias = "mimo"
+
+# MINIMAX. New family: MiniMax-M3 (released 2026-06, 1M ctx, multimodal,
+# $0.30/$1.20, 80.5% SWE-bench per vendor). Addressable but NOT seated for the
+# same 8-family cap reason. M2 was never seated. Reach it: `openrouter-cli ask
+# minimax "..."`. A newer M3.1-Flash exists (2026-10-19) but only as a `:free`
+# tier, so the Pro-line M3 is the addressable one.
+[[models]]
+slug = "minimax/minimax-m3"
+alias = "minimax"
 
 # GPT-6.1 SOL. Scores 166.1 against the seated gpt-6-astra's 166.4 at a fifth of
 # the price ($2/$10 vs $10/$50); the seat goes by score, so astra keeps it.
@@ -235,9 +294,12 @@ alias = "gpt55pro"
 #
 # Ranking data comes from `openrouter-cli council refresh`:
 #   - Epoch Capabilities Index -- CC-BY, no key needed, credit Epoch AI.
-#   - Artificial Analysis intelligence index -- needs AA_API_KEY, free tier
-#     1000 req/day. Their licence REQUIRES attribution to artificialanalysis.ai
-#     wherever these numbers are shown.
-# When both are available the seat score is the mean of the per-index
-# normalised scores; with only Epoch present it is the Epoch score, and the
-# roster table says so.
+#   - Artificial Analysis intelligence index -- the API with AA_API_KEY (free
+#     tier, 1000 req/day; the sanctioned path), else read from the public
+#     model pages, looking up each candidate the current-models list omits.
+#     Their licence REQUIRES attribution to artificialanalysis.ai wherever
+#     these numbers are shown.
+# When both are available the seat score is the mean of the per-index scores,
+# each min-max normalised over the candidate models (so 0-1, not Epoch
+# points); with only Epoch present it is the Epoch score, and the roster table
+# says so. The Epoch points quoted in comments above are Epoch's alone.

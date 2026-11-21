@@ -254,6 +254,7 @@ assert_contains "coreaudiod is restarted as root" "$EVENTS" "sudo /usr/bin/killa
 assert_contains "audiomxd is restarted as root" "$EVENTS" "sudo /usr/bin/killall audiomxd"
 assert_contains "system sound server is restarted as root" "$EVENTS" "sudo /usr/bin/killall systemsoundserverd"
 assert_contains "avconferenced is restarted unprivileged" "$EVENTS" "killall avconferenced"
+assert_not_contains "a daemon that exits on SIGTERM never gets SIGKILL" "$EVENTS" "killall -9"
 KILL_EVENTS="$(printf '%s\n' "$EVENTS" | rg '(^killall |^sudo .*killall )')"
 assert_not_contains "restart scope excludes Spotify" "$KILL_EVENTS" "Spotify"
 assert_not_contains "restart scope excludes FaceTime" "$KILL_EVENTS" "FaceTime"
@@ -286,14 +287,15 @@ EVENTS="$(<"$STUB_EVENTS")"
 assert_contains "sudo authentication was attempted" "$EVENTS" "sudo -v"
 assert_not_contains "sudo authentication failure causes no kill" "$EVENTS" "killall"
 
-echo "7. stale CoreAudio PID fails verification without broader escalation"
+echo "7. a CoreAudio PID that survives SIGTERM gets SIGKILL for that daemon only"
 setup_case
 export STUB_STALE_PROCESS=coreaudiod
 run_helper --yes --report-dir "$STUB_REPORT_ROOT"
-assert_failure "stale coreaudiod fails recovery"
+assert_failure "coreaudiod still stale after SIGKILL fails recovery"
 assert_contains "verification failure names coreaudiod" "$RUN_OUT" "coreaudiod"
 EVENTS="$(<"$STUB_EVENTS")"
-assert_not_contains "timeout never escalates to SIGKILL" "$EVENTS" "-KILL"
+assert_contains "stale coreaudiod escalates to SIGKILL" "$EVENTS" "sudo /usr/bin/killall -9 coreaudiod"
+assert_not_contains "escalation is limited to the stale daemon" "$EVENTS" "killall -9 audiomxd"
 assert_not_contains "timeout never touches WindowServer" "$EVENTS" "WindowServer"
 
 echo "8. a successfully stopped system job may remain loaded and dormant"

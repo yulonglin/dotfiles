@@ -88,11 +88,13 @@ COMPONENTS:
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
     --codex           Deploy Codex CLI config (~/.codex symlink)
+    --antigravity     Deploy Antigravity global config (~/.gemini/config)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
                       schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
+    --rex             Deploy Rex keybindings (init.lua) and UI layout prefs (macOS)
     --zed             Deploy Zed editor config (settings + keymap, symlinked)
     --htop            Deploy htop configuration
     --gitui           Deploy gitui theme (theme-reactive, symlinked)
@@ -112,9 +114,10 @@ COMPONENTS:
     --dotfiles-sync   Install daily commit + rebase + push of this repo (08:05, both platforms)
     --brew-update     Install weekly package upgrade + cleanup (brew/apt/dnf/pacman)
     --keyboard        Install keyboard repeat enforcement at login (macOS only)
+    --focus           Install the once-a-minute job that ends Cold Turkey focus breaks on time (macOS only)
     --hide-idle-apps  Hide, then close, then quit apps left covered up, per config/app-lifecycle.yaml (macOS only, off by default)
     --file-apps       Set default editor for coding file types (macOS only)
-    --bedtime         Install bedtime timezone enforcement (macOS only, opt-in)
+    --bedtime         Install bedtime timezone enforcement (macOS only, off by default)
     --bearcli         Symlink Bear CLI → /usr/local/bin (macOS only, for cron/scripts)
     --vpn             Install NordVPN+Tailscale split tunnel daemon (macOS only)
     --pueue           Deploy Pueue + systemd resource management (Linux only)
@@ -453,6 +456,15 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     if git -C "$DOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
         git -C "$DOT_DIR" config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
         log_success "Configured the zed-ssh clean filter for $DOT_DIR"
+        # codex-local: the clean side keeps this machine's Codex tables (trusted
+        # projects, app preferences, local marketplaces) out of
+        # codex/config.toml blobs and saves them; the smudge side appends them
+        # back when a pull rewrites the file. --save seeds the saved copy so the
+        # first pull after deploy already keeps them.
+        git -C "$DOT_DIR" config --local filter.codex-local.clean 'scripts/git-filters/codex-config-local --clean %f'
+        git -C "$DOT_DIR" config --local filter.codex-local.smudge 'scripts/git-filters/codex-config-local --smudge'
+        "$DOT_DIR/scripts/git-filters/codex-config-local" --save || true
+        log_success "Configured the codex-local clean/smudge filter for $DOT_DIR"
     fi
 fi
 
@@ -597,8 +609,27 @@ if [[ "$DEPLOY_GHOSTTY" == "true" ]]; then
         mkdir -p "$GHOSTTY_DIR"
         safe_symlink "$DOT_DIR/config/ghostty.conf" "$GHOSTTY_DIR/config"
         log_info "  Key bindings: Shift+Enter (newline), Cmd+C (copy)"
+        # Ghostty searches ~/.config/ghostty/themes for custom themes on every OS
+        safe_symlink "$DOT_DIR/config/ghostty-themes" "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/themes"
     else
         log_warning "Ghostty config not found"
+    fi
+fi
+
+# ─── Rex ──────────────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_REX" == "true" ]]; then
+    log_info "Deploying Rex configuration..."
+    safe_symlink "$DOT_DIR/config/rex/init.lua" "${XDG_CONFIG_HOME:-$HOME/.config}/rex/init.lua"
+
+    # UI settings live in the app's defaults domain, not in init.lua. Capture
+    # first so settings changed in Rex since the last sync are not reverted,
+    # then apply (on a fresh Mac, capture finds nothing and apply sets the file's rows).
+    if is_macos; then
+        "$DOT_DIR/custom_bins/rex-prefs" capture --quiet && "$DOT_DIR/custom_bins/rex-prefs" apply
+        if pgrep -xq Rex; then
+            log_info "  Rex is running: quit and reopen it if the layout does not update"
+        fi
     fi
 fi
 
@@ -1041,6 +1072,23 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
     fi
 fi
 
+# ─── Antigravity ──────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_ANTIGRAVITY" == "true" ]]; then
+    log_section "DEPLOYING ANTIGRAVITY CONFIGURATION"
+
+    if [[ -x "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" || -f "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" ]]; then
+        if bash "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" --dotfiles-dir "$DOT_DIR"; then
+            log_success "Antigravity global configuration deployed"
+            log_info "  Config: ~/.gemini/config/{skills.json,AGENTS.md,GEMINI.md,rules/,mcp_config.json}"
+        else
+            log_warning "Antigravity configuration sync failed"
+        fi
+    else
+        log_warning "Antigravity sync script not found at $DOT_DIR/scripts/sync_claude_to_antigravity.sh"
+    fi
+fi
+
 # ─── Serena MCP ──────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_SERENA" == "true" ]]; then
@@ -1203,6 +1251,7 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
                     vault-sync-tripwire.service vault-sync-tripwire.timer \
                     openrouter-drift.service openrouter-drift.timer \
                     council-roster.service council-roster.timer \
+                    context-review.service context-review.timer \
                     model-router-cooldown.service model-router-cooldown.timer \
                     codex-token-refresh.service codex-token-refresh.timer \
                     cloud-spend-check.service cloud-spend-check.timer \
@@ -1235,7 +1284,12 @@ if [[ "$DEPLOY_PUEUE" == "true" ]] && is_linux; then
         # their own state directories. Enabled unconditionally for the same
         # reason as the tripwire above -- a check that is installed but never
         # scheduled reports nothing while looking healthy.
-        for timer in openrouter-drift.timer council-roster.timer; do
+        #
+        # context-review.timer rides the same loop: monthly, no API key, no
+        # pueue, and it writes only its own state directory plus one report
+        # copy in ~/vault. A box without transcripts produces a near-empty
+        # report rather than an error.
+        for timer in openrouter-drift.timer council-roster.timer context-review.timer; do
             [[ -f "$systemd_user_dir/$timer" ]] || continue
             if systemctl --user enable --now "$timer" 2>/dev/null; then
                 log_success "$timer enabled"
@@ -1443,8 +1497,25 @@ queue_scheduled_job() {
             "$DOT_DIR/scripts/cleanup/setup_alfred_watchdog.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
+    # `focus break` stops a Cold Turkey mode and leaves a detached waiter to
+    # start it again. This job is the backstop: it ends an overdue break even
+    # after the waiter dies or the Mac restarts. The setup script skips quietly
+    # when Cold Turkey or its config note is absent.
+    if [[ "$DEPLOY_FOCUS" == "true" ]] && is_macos; then
+        queue_scheduled_job focus-tick "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)FOCUS]} )); then
+        # Gated on an EXPLICIT --no-focus, for the reason given at the alfred
+        # branch above: `--only vim` must not tear this job down.
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_focus_tick.sh" --uninstall >/dev/null 2>&1 || true
+    fi
+
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
+    fi
+
+    if [[ "$DEPLOY_COREAUDIO_WATCH" == "true" ]] && is_macos; then
+        queue_scheduled_job coreaudio-watch "$DOT_DIR/scripts/cleanup/setup_coreaudio_watch.sh"
     fi
 
     if [[ "$DEPLOY_HIDE_IDLE_APPS" == "true" ]] && is_macos; then

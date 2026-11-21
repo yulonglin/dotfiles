@@ -1,0 +1,60 @@
+Date/Time:        2026-10-26 14:56:26.138 -0700
+End time:         2026-10-26 14:56:32.659 -0700
+OS Version:       macOS 26.7.1 (Build 25G241)
+Architecture:     arm64e
+Report Version:   72
+Incident Identifier: 1324F8FF-5D5D-4585-870C-3690EFC507F2
+
+Data Source:      Stackshots
+Shared Cache:     7E67D54E-9D3D-3298-AABD-5DFA045343C0 slid base address 0x18136c000, slide 0x136c000 (System Primary)
+Shared Cache:     3DC3D727-44BC-3A5B-B009-4EBD4E378A2D slid base address 0x18046c000, slide 0x46c000 (DriverKit)
+Shared Cache:     7E67D54E-9D3D-3298-AABD-5DFA045343C0 slid base address 0x18c790000, slide 0xc790000
+
+Command:          Telegram
+Path:             /Applications/Telegram.app/Contents/MacOS/Telegram
+Identifier:       ru.keepcoder.Telegram
+Version:          13.1.0 (283357)
+Team ID:          6N38VWS5BX
+Is First Party:   No
+Beta Identifier:  F0EDDEBA-878F-5571-A37D-9BD78B564E87
+Architecture:     arm64
+Parent:           launchd [1]
+PID:              16796
+Time Since Fork:  7s
+
+Event:            hang
+Duration:         6.52s
+Duration Sampled: 1.10s (process was unresponsive for 5 seconds before sampling)
+Steps:            11 (100ms sampling interval)
+
+Hardware model:   Mac17,9
+Active cpus:      15
+Memory size:      48 GB
+HW page size:     16384
+VM page size:     16384
+Shared cache residency: 27.84% (1543.52 MB / 5544.05 MB)
+
+Time Since Boot:  1581028s
+Time Awake Since Boot: 898281s
+Time Since Wake:  357s
+
+Fan speed:        0 rpm
+Total CPU Time:   2.450s (6.4G cycles, 15.4G instructions, 0.41c/i, 2.60GHz avg)
+Advisory levels:  Battery -> 3, User -> 2, ThermalPressure -> 0, Combined -> 2
+Free disk space:  684.16 GB/926.30 GB, low space threshold 3072 MB
+Low Power Mode:   Enabled
+Vnodes Available: 83.25% (219098/263168)
+Models:           none
+
+Processes reached dispatch thread soft limit (75): coreaudiod [634]
+Deadlock:         coreaudiod [634] thread 0x367702c DispatchQueue "com.apple.audio.HALS_Client.5622"(2071473) -> coreaudiod [634] thread 0x3676878 DispatchQueue "PlugInDevice Change Queue 52778"(1883936) -> coreaudiod [634] thread 0x367702c DispatchQueue "com.apple.audio.HALS_Client.5622"(2071473)
+Blocked by Deadlock: 1 task - coreaudiod [634]
+
+Preferred User Language: en-US, zh-Hans-GB
+Country Code:     US
+Keyboards:        ABC
+OS Cryptex File Extents: 1
+
+--------------------------------------------------
+Timeline format: stacks are sorted chronologically
+Use -i and -heavy to re-report with count sorting

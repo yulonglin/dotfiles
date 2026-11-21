@@ -1,0 +1,267 @@
+<title>Rigour Checks Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a lab ledger. Decision summary first, then the value-by-cost grid, the conflicts, and the full register you decide in. */
+:root {
+  --bg: #f6f7f8; --surface: #ffffff; --fg: #1d2329; --muted: #5b6672; --line: #d9dee3;
+  --accent: #1f6f78; --accent-soft: #dcefef;
+  --risk-l: #2f855a; --risk-m: #b7791f; --risk-h: #c53030;
+  --chip-l: #e3f2e8; --chip-m: #fbf0d9; --chip-h: #fbe3e3;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161a; --surface: #1a2026; --fg: #e3e8ec; --muted: #9aa6b2; --line: #2c353e;
+  --accent: #5fb8c0; --accent-soft: #1d3638;
+  --risk-l: #68c48f; --risk-m: #e0b057; --risk-h: #f07a7a;
+  --chip-l: #1d3326; --chip-m: #3a2f17; --chip-h: #3d1e1e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161a; --surface: #1a2026; --fg: #e3e8ec; --muted: #9aa6b2; --line: #2c353e;
+  --accent: #5fb8c0; --accent-soft: #1d3638;
+  --risk-l: #68c48f; --risk-m: #e0b057; --risk-h: #f07a7a;
+  --chip-l: #1d3326; --chip-m: #3a2f17; --chip-h: #3d1e1e; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px; display: grid; gap: 32px; }
+h1, h2 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: .005em; }
+h1 { font-size: 2rem; line-height: 1.15; }
+h2 { font-size: 1.3rem; }
+p { margin: 0; max-width: 68ch; }
+.meta { color: var(--muted); font: 13px/1.4 var(--mono); }
+.lede { display: grid; gap: 10px; }
+ul.bluf { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+section { display: grid; gap: 12px; min-width: 0; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-width: 0; }
+
+/* value x cost grid */
+.grid-wrap { overflow-x: auto; }
+.vc { display: grid; grid-template-columns: 64px repeat(3, minmax(180px, 1fr)); gap: 6px; min-width: 620px; }
+.vc .ax { font: 600 12px/1.2 var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; justify-content: center; text-align: center; }
+.vc .cell { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 8px; display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; min-height: 64px; }
+.vc .cell.win { background: var(--accent-soft); }
+.vc .cell.cost { outline: 2px dashed var(--risk-h); outline-offset: -3px; }
+.idchip { font: 500 12px/1 var(--mono); padding: 5px 6px; border-radius: 3px; border: 1px solid transparent; cursor: pointer; background: var(--chip-l); color: var(--fg); }
+.idchip[data-r="M"] { background: var(--chip-m); }
+.idchip[data-r="H"] { background: var(--chip-h); }
+.idchip.decided { text-decoration: line-through; opacity: .55; }
+.idchip:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 13px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.legend .l::before { background: var(--chip-l); border: 1px solid var(--risk-l); }
+.legend .m::before { background: var(--chip-m); border: 1px solid var(--risk-m); }
+.legend .h::before { background: var(--chip-h); border: 1px solid var(--risk-h); }
+
+/* conflicts */
+.conflicts { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.conflicts li { border-left: 3px solid var(--risk-m); padding: 4px 0 4px 12px; }
+.conflicts li.hard { border-left-color: var(--risk-h); }
+.conflicts b { font-weight: 600; }
+
+/* register */
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.controls label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+select, input[type="text"] { font: 14px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; }
+.progress { font: 13px var(--mono); color: var(--muted); }
+.status { font-size: 13px; color: var(--muted); }
+.rows { display: grid; gap: 8px; }
+.row { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; grid-template-columns: 56px minmax(0, 1fr) 220px; gap: 6px 14px; scroll-margin-top: 16px; }
+.row.flash { box-shadow: 0 0 0 2px var(--accent); }
+.row .rid { font: 600 14px/1.3 var(--mono); color: var(--accent); }
+.row .txt { min-width: 0; display: grid; gap: 6px; }
+.row .check { font-weight: 600; }
+.row .why { color: var(--muted); font-size: 14px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; font: 12px/1 var(--mono); }
+.tag { padding: 4px 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); }
+.tag.lvl-H { color: var(--risk-h); border-color: var(--risk-h); }
+.tag.lvl-M { color: var(--risk-m); border-color: var(--risk-m); }
+.tag.lvl-L { color: var(--risk-l); border-color: var(--risk-l); }
+.tag.val.lvl-H { color: var(--risk-l); border-color: var(--risk-l); }
+.tag.val.lvl-L { color: var(--risk-h); border-color: var(--risk-h); }
+.tag.enf { color: var(--fg); }
+.tag.lean { background: var(--accent-soft); color: var(--fg); border-color: transparent; }
+details { font-size: 13px; }
+details summary { cursor: pointer; color: var(--muted); }
+details ul { margin: 6px 0 0; padding-left: 1.2em; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.decide { display: grid; gap: 6px; align-content: start; }
+.decide select, .decide input { width: 100%; box-sizing: border-box; }
+.decide .who { font-size: 12px; color: var(--muted); min-height: 1em; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) { .row { transition: box-shadow .3s; } }
+</style>
+
+<div class="wrap">
+  <header class="lede">
+    <div class="meta">dotfiles @ <a href="https://github.com/yulonglin/dotfiles/tree/96c350bd">96c350bd</a> · inventory of 12 Oct 2026 · <span id="n-total"></span> checks</div>
+    <h1>Rigour Checks Review</h1>
+    <p>Every rigour, reproducibility and research-integrity check the harness asks of an experiment, with one row per distinct check and every place it is stated. Each row is rated for what it costs an experiment iteration and what it catches, with a suggested disposition. Set a decision on each row; Claude reads the decisions back and edits the rules, checklists, skills and agents to match.</p>
+  </header>
+
+  <section>
+    <h2>Most checks are text, and five cost the most</h2>
+    <ul class="bluf">
+      <li><b>Only 3 of 75 checks run as code.</b> Four guards are built and tested but not wired into the live settings (existing code, synthetic data, hyperparameter provenance, number provenance). <code>nudge_experiment_jobs</code> is wired but switched off. Wiring them is cheap and turns text into enforcement.</li>
+      <li><b>Five checks cost iteration speed most</b>, all human waits: <a href="#D13">D13</a> research-engineer's blocking spec gate (lean drop), <a href="#D14">D14</a> two plan-mode gates per experiment (lean soften), <a href="#D06">D06</a> an hour attacking each detector (lean: only before quoting a number), <a href="#D16">D16</a> the overnight pre-launch review (lean: go on a stated default after a timeout), and <a href="#P06">P06</a> the spend gate at $100 (lean keep). Runner-up: <a href="#U08">U08</a>, two seeds for a quoted result.</li>
+      <li><b>Five pairs of files contradict each other</b>, listed below. Each needs one answer, not a vote per row.</li>
+      <li><b>Suggested dispositions:</b> <span id="disp-counts"></span>. The ratings and leans come from a Claude Opus 5.5 sweep and are a starting point, not a verdict.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Two thirds cost under five minutes an iteration</h2>
+    <p class="status">Each chip is one check, placed by what it catches (value, rows) against what it adds to an iteration with coding agents doing the work (effort, columns: L under 5 min, M 5–30 min, H over 30 min or a human gate). Colour is the risk that it stalls or breaks a run. Click a chip to jump to its row; decided checks are struck through.</p>
+    <div class="legend"><span class="l">risk low</span><span class="m">risk medium</span><span class="h">risk high</span></div>
+    <div class="grid-wrap"><div class="vc" id="vc"></div></div>
+  </section>
+
+  <section>
+    <h2>Five contradictions need one answer each</h2>
+    <ul class="conflicts">
+      <li class="hard"><b>Interval formula.</b> <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/docs/ci-standards.md#L17-L20">ci-standards.md:17-20</a> uses mean ± 1.96 SE for every score; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/skills/results-artifact/SKILL.md#L14">results-artifact:14</a> says Wilson for proportions, never the normal approximation. The same pair disagrees on whether non-overlapping intervals can stand in for a test. data-analyst, research-skeptic and experiment-designer all point at ci-standards.</li>
+      <li class="hard"><b>Point estimate without an interval.</b> <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/agents/data-analyst.md#L274">data-analyst:274</a> says never; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/checklists/results-analysis/sandbagging.md#L54">sandbagging.md:54</a> says give the point estimate alone when the only interval is degenerate.</li>
+      <li class="hard"><b>Seed count.</b> The checklists set at least 2 seeds for any quoted result (<a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/checklists/experiments.md#L66">experiments.md:66</a>); research-engineer only warns and suggests 5; inspect-ai-evals makes extra seeds a second phase once a signal shows. Reconcilable as explore versus quote, but no file says so.</li>
+      <li class="hard"><b>Human gates against "commit and run".</b> CLAUDE.md says proceed on partial answers; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/agents/research-engineer.md#L99-L167">research-engineer:99-167</a> stops and waits for the user, and verification-planning plus <code>require_plan_approval.sh</code> add two gates per experiment in this repo.</li>
+      <li class="hard"><b>Multiple comparisons.</b> data-analyst and experiment-designer require Bonferroni or FDR correction; <a href="https://github.com/yulonglin/dotfiles/blob/96c350bd/claude/rules/research-core.md#L11">research-core:11</a> asks only that the number of slices and comparisons be stated.</li>
+      <li><b>Softer tensions:</b> sandbagging.md:31 reads the behaviour-free baseline as the detector's bar; the transcript checklist triages by keyword while llm-judge forbids keywords for meaning (fine as triage, unlabelled); spec-interview-research points at a pilot gate that moved to experiments.md; three checklists still say "arm". Full notes: <code>artifacts/rigour-checks/notes.md</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Decide each check here</h2>
+    <div class="controls">
+      <label for="f-stage">Stage <select id="f-stage"><option value="">all</option><option>design</option><option>pilot</option><option>run</option><option>analysis</option><option>reporting</option></select></label>
+      <label for="f-lean">Suggested <select id="f-lean"><option value="">all</option></select></label>
+      <label for="f-dec">Decision <select id="f-dec"><option value="">all</option><option value="none">not decided</option><option value="any">decided</option></select></label>
+      <span class="progress" id="progress"></span>
+    </div>
+    <p class="status" id="db-status">Decisions save for everyone who opens this page once it connects.</p>
+    <div class="rows" id="rows"></div>
+  </section>
+</div>
+
+<script>
+const CHECKS = /*__CHECKS__*/[];
+const COMMIT = "96c350bd";
+const DECISIONS = ["", "keep", "keep-but-automate", "soften", "merge", "drop"];
+const decided = {};   // id -> {decision, note}
+let db = null, user = null;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function locLink(loc) {
+  const m = loc.match(/^\/Users\/yulong\/code\/dotfiles\/(.+?)(?::([\d,\-]+))?$/);
+  if (!m) return esc(loc);
+  const rel = m[1], lines = m[2] || "";
+  const first = lines.split(/[,-]/)[0], range = lines.includes("-") && !lines.includes(",") ? lines.split("-") : null;
+  const anchor = range ? `#L${range[0]}-L${range[1]}` : first ? `#L${first}` : "";
+  return `<a href="https://github.com/yulonglin/dotfiles/blob/${COMMIT}/${esc(rel)}${anchor}">${esc(rel)}${lines ? ":" + esc(lines) : ""}</a>`;
+}
+const leanLabel = d => d.startsWith("merge") ? "merge" : d;
+
+function renderGrid() {
+  const vc = document.getElementById("vc");
+  const lv = ["H", "M", "L"], ef = ["L", "M", "H"];
+  let html = `<div></div>` + ef.map(e => `<div class="ax">effort ${e}</div>`).join("");
+  for (const v of lv) {
+    html += `<div class="ax">value ${v}</div>`;
+    for (const e of ef) {
+      const items = CHECKS.filter(c => c.value === v && c.effort === e);
+      const cls = (v === "H" && e === "L") ? "cell win" : (v === "L" && e === "H") ? "cell cost" : "cell";
+      html += `<div class="${cls}">` + items.map(c =>
+        `<button class="idchip${decided[c.id]?.decision ? " decided" : ""}" data-r="${c.risk}" data-id="${c.id}" title="${esc(c.check)}">${c.id}</button>`).join("") + `</div>`;
+    }
+  }
+  vc.innerHTML = html;
+}
+
+function rowHtml(c) {
+  const d = decided[c.id] || {};
+  const opts = DECISIONS.map(x => `<option value="${x}"${(d.decision || "") === x ? " selected" : ""}>${x || "undecided"}</option>`).join("");
+  return `<article class="row" id="${c.id}">
+    <div class="rid">${c.id}</div>
+    <div class="txt">
+      <div class="check">${esc(c.check)}</div>
+      <div class="tags">
+        <span class="tag">${esc(c.stage)}</span>
+        <span class="tag enf">${esc(c.enforced)}</span>
+        <span class="tag lvl-${c.effort}" title="effort per iteration">effort ${c.effort}</span>
+        <span class="tag val lvl-${c.value}" title="${esc(c.value_reason)}">value ${c.value}</span>
+        <span class="tag lvl-${c.risk}" title="${esc(c.risk_reason)}">risk ${c.risk}</span>
+        <span class="tag lean">suggested: ${esc(c.disposition)}</span>
+      </div>
+      <div class="why">Value: ${esc(c.value_reason)}. Risk: ${esc(c.risk_reason)}. Why this lean: ${esc(c.disposition_why)}</div>
+      <details><summary>${c.locations.length} location${c.locations.length > 1 ? "s" : ""}</summary><ul>${c.locations.map(l => `<li>${locLink(l)}</li>`).join("")}</ul></details>
+    </div>
+    <div class="decide">
+      <label class="status" for="dec-${c.id}">Decision</label>
+      <select id="dec-${c.id}" data-id="${c.id}" ${db ? "" : "disabled"}>${opts}</select>
+      <input type="text" id="note-${c.id}" data-id="${c.id}" placeholder="note (optional)" value="${esc(d.note || "")}" ${db ? "" : "disabled"}>
+      <div class="who" id="who-${c.id}"></div>
+    </div>
+  </article>`;
+}
+
+function renderRows() {
+  const st = document.getElementById("f-stage").value, ln = document.getElementById("f-lean").value, dc = document.getElementById("f-dec").value;
+  const shown = CHECKS.filter(c => (!st || c.stage === st) && (!ln || leanLabel(c.disposition) === ln)
+    && (!dc || (dc === "none" ? !decided[c.id]?.decision : !!decided[c.id]?.decision)));
+  document.getElementById("rows").innerHTML = shown.map(rowHtml).join("") || `<p class="status">No checks match these filters.</p>`;
+  const n = CHECKS.filter(c => decided[c.id]?.decision).length;
+  document.getElementById("progress").textContent = `${n} of ${CHECKS.length} decided`;
+}
+
+function render() { renderGrid(); renderRows(); }
+
+document.getElementById("n-total").textContent = CHECKS.length;
+const counts = {};
+CHECKS.forEach(c => { const k = leanLabel(c.disposition); counts[k] = (counts[k] || 0) + 1; });
+document.getElementById("disp-counts").textContent = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ");
+document.getElementById("f-lean").insertAdjacentHTML("beforeend", Object.keys(counts).sort().map(k => `<option>${esc(k)}</option>`).join(""));
+["f-stage", "f-lean", "f-dec"].forEach(id => document.getElementById(id).addEventListener("change", renderRows));
+document.getElementById("vc").addEventListener("click", e => {
+  const b = e.target.closest(".idchip"); if (!b) return;
+  const f = ["f-stage", "f-lean", "f-dec"].some(id => document.getElementById(id).value);
+  if (f) { ["f-stage", "f-lean", "f-dec"].forEach(id => document.getElementById(id).value = ""); renderRows(); }
+  const row = document.getElementById(b.dataset.id);
+  if (row) { row.scrollIntoView({behavior: "smooth", block: "start"}); row.classList.add("flash"); setTimeout(() => row.classList.remove("flash"), 1600); }
+});
+document.querySelectorAll('a[href^="#"]').forEach(a => a.addEventListener("click", () => {
+  ["f-stage", "f-lean", "f-dec"].forEach(id => document.getElementById(id).value = ""); renderRows();
+}));
+
+async function save(id) {
+  if (!db) return;
+  const decision = document.getElementById("dec-" + id).value;
+  const note = document.getElementById("note-" + id).value.trim();
+  const who = document.getElementById("who-" + id);
+  try {
+    const by = user ? await user.id() : null;
+    await db.collection("decisions").doc(id).set({decision, note, by, at: new Date().toISOString()});
+    who.textContent = "Saved";
+  } catch (e) { who.textContent = "Not saved: " + (e?.message || e?.code || "error"); }
+}
+document.getElementById("rows").addEventListener("change", e => {
+  const id = e.target.dataset.id; if (id) save(id);
+});
+
+render();
+
+(async () => {
+  try { db = await window.claude?.use?.("db"); user = await window.claude?.use?.("user"); } catch { db = null; }
+  const status = document.getElementById("db-status");
+  if (!db) { status.textContent = "Decisions cannot be saved in this view (signed out or offline). Ratings and leans still read in full."; return; }
+  status.textContent = "Decisions save for everyone who opens this page; Claude reads them back.";
+  db.collection("decisions").onSnapshot(snap => {
+    for (const d of snap.docs) { const v = d.data(); if (v) decided[d.id] = {decision: v.decision || "", note: v.note || ""}; }
+    const active = document.activeElement;
+    const keep = active && active.id && active.id.startsWith("note-") ? {id: active.id, val: active.value, pos: active.selectionStart} : null;
+    render();
+    if (keep) { const el = document.getElementById(keep.id); if (el) { el.value = keep.val; el.focus(); el.setSelectionRange(keep.pos, keep.pos); } }
+  }, err => { status.textContent = "Lost the connection to saved decisions: " + (err?.code || "error"); });
+  renderRows();
+})();
+</script>

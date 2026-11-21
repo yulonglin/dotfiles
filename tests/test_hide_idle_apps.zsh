@@ -337,6 +337,7 @@ rm -rf "$FAKEHOME/.cache"; seed_state 60 "107=hidden=1000"
 run 0
 check     "closes the hidden app"          "$ESC" "--only Notion"
 check     "capped so it cannot quit"       "$ESC" "--max-action close"
+check     "and may take focus to close"    "$ESC" "--allow-focus-steal"
 check     "phase advances to closed"       "$(state_line 107)" "closed"
 check     "says what it did"               "$OUT" "Escalated close: Notion"
 

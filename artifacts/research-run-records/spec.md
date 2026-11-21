@@ -35,7 +35,8 @@ Nothing existing records a run index, and nothing caps GPU dollars: the Modal ap
 - The `launch` object MUST hold: `schema` (`run-launch/1`), `run_id`, `slug`, `backend`, `argv`, `cwd`, `host`, `git_sha`, `git_dirty`, `config` (each `--config` file copied into the run directory, with its sha256), `caps` (cost cap, burn rate, max idle, timeout, API cap), `started_at`, `heartbeat_at`, `ended_at`, `status`, `exit_code`, `spend` (GPU estimate, API upper bound), and `progress` (done, expected).
 - `status` takes one of: `running`, `succeeded`, `failed`, `stopped:cost`, `stopped:idle`, `stopped:timeout`, `stopped:api`, `interrupted`. The board adds `lost` for a `running` run whose heartbeat is older than three intervals, which is what a killed wrapper, an OOM kill or a host reboot leaves behind. A dropped ssh session sends SIGHUP, which `runrec` handles as `interrupted`.
 - On Linux the command MUST die with the wrapper: it is started with `PR_SET_PDEATHSIG`, so a SIGKILLed `runrec` takes `modal run` with it, and `modal run` stops its app when it exits.
-- `<out-root>/runs.jsonl` MUST receive one `launch` event at start and one `finish` event at end, each a single locked append. The index plus `launch.json`, not the manifest, is what the board reads.
+- `<out-root>/runs.jsonl` MUST receive one `launch` event at start and one `finish` event at end, each a single locked append. The index plus `launch.json`, not the manifest, is what the board reads. A `launch.json` overlays only the index record with the same `run_id`, so a resumed `--run-dir` keeps its earlier runs distinct.
+- Only one launch at a time MUST own a run directory: `runrec` holds an exclusive lock on `RUN_DIR/.runrec.lock`, and a second launch into a busy `--run-dir` is refused.
 - The child MUST receive `RUN_ID`, `RUN_DIR`, `RUN_COST_CAP_USD` and `RUN_API_CAP_USD`, and its stdout and stderr MUST be teed to `RUN_DIR/launch.log`.
 
 ### R2. A GPU launch without caps is refused, and a running one is stopped at its cap
@@ -49,6 +50,7 @@ Nothing existing records a run index, and nothing caps GPU dollars: the Modal ap
   - **Cost:** burn rate times elapsed time reaches the cap. Labelled an estimate, since Modal billing lags by hours.
   - **Idle:** the run made no progress for `--max-idle`. With `--progress-path`, only that path counts, so a command that logs retries without finishing work still goes idle. Without it, anything the command writes into `RUN_DIR` or prints counts. `runrec`'s own files never count.
   - **Timeout:** `--timeout` has elapsed.
+- The run MUST stay supervised until the whole process group is gone, not just the direct child. A leader that exits while its workers keep calling paid APIs is still a live run, and the manifest merge waits for it. So a command that leaves a daemon behind holds the run open until `--timeout` or an idle stop.
 - A RunPod launch is bounded only as far as the wrapped command: `runrec` stops the process, not the pod. The pod's teardown must live inside the command, as the EXIT trap in `runpod/launch_rl.sh` does. The board says so on every RunPod row.
 
 ### R3. LLM credit is checked before launch and tracked during the run
@@ -69,6 +71,7 @@ Nothing existing records a run index, and nothing caps GPU dollars: the Modal ap
 - Progress MUST count only what this run adds: the count at launch is recorded as a baseline and subtracted, so a resumed `--run-dir` does not credit old lines as new work.
 - If `<out-root>/runrec.json` names a `board` path, `runrec` MUST rewrite that file atomically on launch, every 5 minutes while running, and at finish. For nla-vs-cot on hn that path is `~/vault/research/monitorability/docs/run-board.md`. hn's vault syncs bidirectionally (checked 2026-10-12), so the board reaches the phone.
 - Nothing rewrites the board after the last wrapper dies, so the page MUST lead with its "as of" time and say that a page older than 5 minutes with running rows means a dead wrapper. A periodic `runrec board --write` on hn would close this; it is a follow-up.
+- The board path comes from `runrec.json`, which a cloned repo could ship, so `runrec` MUST write only to a `.md` path that is new or already starts with `# Run board:`, and never through a symlink.
 - `runrec ls` SHOULD print the same running and recent rows as a terminal table.
 
 ### Deliberately out of scope
@@ -90,6 +93,7 @@ Nothing existing records a run index, and nothing caps GPU dollars: the Modal ap
 - a script that overwrites `manifest.json` mid-run keeps its own keys and gains `launch` at finish;
 - a resumed `--run-dir` counts only new progress lines;
 - an account with no credit refuses even when the key has headroom;
+- workers that outlive their leader stay supervised and under the caps, a resumed `--run-dir` keeps both runs on the board, a busy run directory refuses a second launch, and the board never overwrites a non-board file or follows a symlink;
 - four concurrent launches into one out-root produce exactly eight well-formed index lines;
 - the board renders `lost` for a run with a stale heartbeat, and "no ETA" without a denominator.
 
@@ -107,3 +111,5 @@ The pilot records its actual spend in the PR and in `docs/runrec.md`.
 The PR is reviewed by GPT-6.1 Sol through `model-router:adversarial-code-reviewer` before merge. It stays a draft unless that review is clean and the change is limited to the script, its tests and its doc.
 
 GPT-6.1 Sol also reviewed this spec before the build, on 2026-10-12, and found six defects; this version carries the fixes. Mid-run manifest writes could revert a research script's own update, so the live record moved to `launch.json`. The API cap was described as enforced when it is advisory, so R3 now says so. The OpenRouter key endpoint reports a key ceiling, not account credit, so the preflight also reads `/credits`. The wrapper's own writes and log chatter could reset the idle clock, so idle now has a defined signal. A resumed run directory would credit old progress lines, so progress has a baseline. And a frozen board looks current after its last writer dies, so it leads with its age.
+
+GPT-6.1 Sol then reviewed the code (PR 248) and found two more defects, both fixed with regression tests that fail on the earlier commit. Supervision ended when the direct child exited, so workers it left behind ran uncapped; it now lasts until the whole process group is gone. And a resumed run directory made every older run on the board a copy of the newest; records now overlay only by matching `run_id`, and a run directory is locked while in use. A background security review separately flagged that a cloned repo's `runrec.json` could aim the board at any file, which the `.md`-and-board-header rule closes.

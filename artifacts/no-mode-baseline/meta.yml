@@ -1,0 +1,29 @@
+title: The No-Mode Baseline
+url: https://claude.ai/artifact/BGS1pzT1t5dZS5A3UFnD36
+org: lin.yulong@gmail.com's Organization   # session auth (lin.yulong@gmail.com, claude.ai), 2026-11-01
+first_published: 2026-11-01
+last_updated: 2026-11-01
+status: live
+
+summary: >-
+  discussion page: with no focus mode running, ScreenZen passes fewer sites (31) than any mode
+  (37 to 72), the reverse of Cold Turkey; five options for the no-mode baseline, lean B (union
+  of every mode, 97 sites)
+
+source: no-mode-baseline.html
+built: no-mode-baseline.html
+builds_with: |
+  Hand-written HTML with the annotation layer added by `annotate-html`. Publish the file directly
+  with capabilities {"downloads": true}.
+  Site counts came from `sz_allow_sites` and `desired_exceptions` in custom_bins/focus, run on
+  /Users/yulong/vault/tooling/dotfiles/config/cold-turkey.md as of 2026-11-01 00:10 PDT (after
+  google-docs moved to always_allow). Cold Turkey schedules were read from
+  /Library/Application Support/Cold Turkey/data-app.db and ScreenZen groups from its
+  group-container preferences at the same time; both are live state and will move on.
+
+established: |
+  Cold Turkey treats no mode as the widest state (only the always-on blocks apply), but
+  ScreenZen with no mode turns on "✅ focus: shared", which holds only always_allow plus
+  no_mode_allow, so it is stricter than every mode. A break inherits this, so a research break
+  pauses arXiv. Cold Turkey's blocked-site log has no Drive URL, so the Drive block of
+  2026-11-01 came from ScreenZen. Frozen Turkey leaves 00:00-00:55 unlocked on purpose (wrap-up time at home). Decided: option B, 2026-11-01.

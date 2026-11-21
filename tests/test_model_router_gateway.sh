@@ -87,17 +87,25 @@ committed_url="$(git -C "$REPO" show HEAD:claude/settings.json 2>/dev/null | pyt
 # supported state for as long as the fleet is part-migrated, so it skips rather
 # than fails -- otherwise this suite is red on every un-migrated machine and the
 # noise teaches you to ignore it. Only a machine that has BOTH is drift.
+# The proxy wiring (`wiring = "proxy"`) puts HTTPS_PROXY in the drop-in instead
+# of a base URL; the route probes below still go through the router's base-URL
+# front, which it serves alongside the proxy.
+managed_proxy="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("env",{}).get("HTTPS_PROXY",""))' "$MANAGED" 2>/dev/null)"
+case "$managed_proxy" in http://127.0.0.1:*) managed_kind=proxy ;; *) managed_kind="" ;; esac
 case "$managed_url" in
   http://127.0.0.1:*) ok "settings  managed drop-in wired to loopback" ;;
-  "")
+  "") if [ "$managed_kind" = proxy ]; then ok "settings  managed drop-in wired as HTTPS proxy $managed_proxy (Remote Control works)"; else
     case "$deployed_url" in
       http://127.0.0.1:*) skip "settings  no drop-in yet; gateway is in $SETTINGS (pre-migration state; run: model-router-wire apply, then its sudo line)" ;;
       *) fail "settings  no managed drop-in at $MANAGED and no base URL in $SETTINGS (run: model-router-wire apply, then its sudo line)" ;;
     esac
+    fi
     ;;
   *) fail "settings  managed ANTHROPIC_BASE_URL is not loopback: $managed_url" ;;
 esac
-if [ -z "$managed_url" ]; then
+if [ -z "$managed_url" ] && [ "$managed_kind" = proxy ]; then
+  if [ -n "$deployed_url" ]; then fail "settings  deployed $SETTINGS carries ANTHROPIC_BASE_URL under the proxy drop-in (run: model-router-wire apply)"; else ok "settings  deployed user file carries no base URL"; fi
+elif [ -z "$managed_url" ]; then
   :  # pre-migration: the user file is meant to carry the URL, already reported above
 elif [ -n "$deployed_url" ]; then
   fail "settings  deployed $SETTINGS still carries ANTHROPIC_BASE_URL as well as the drop-in (run: model-router-wire apply)"
@@ -130,7 +138,7 @@ if [ "$skip_probes" -eq 0 ]; then
   model_probe() {
     env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDECODE ANTHROPIC_BASE_URL="$probe_url" \
       timeout 150 "$CLAUDE_BIN" -p 'Which model are you? Reply with your model family and version in at most six words.' \
-      --model "$1" --max-budget-usd 0.5 --output-format json 2>/dev/null \
+      --model "$1" --max-budget-usd 1.5 --output-format json 2>/dev/null \
       | python3 -c 'import json,sys
 t=sys.stdin.read().strip()
 try:
@@ -139,8 +147,11 @@ except Exception:
     print("NO-JSON " + t[:160].replace("\n"," ")); sys.exit()
 if isinstance(d, list):  # some versions emit the message stream as an array
     d=next((m for m in d if isinstance(m, dict) and m.get("type")=="result"), d[-1] if d else {})
-print("ERROR " + str(d.get("result") or d.get("error") or "")[:120] if d.get("is_error") else (d.get("result") or "EMPTY").replace("\n"," ")[:120])'
+print("ERROR " + str(d.get("result") or d.get("error") or d.get("errors") or d.get("subtype") or "")[:120] if d.get("is_error") else (d.get("result") or "EMPTY").replace("\n"," ")[:120])'
   }
+  # 1.5, not 0.5: one probe carries the whole Claude Code system prompt and
+  # tool list, and on Fable 5.1 that alone cost $0.59 (2026-10-14), so the
+  # old cap failed it with an empty "ERROR" (the reason sat in `errors`).
   for id in $routes; do
     before="$(wc -l < "$LOG" 2>/dev/null || echo 0)"
     answer="$(model_probe "$id")"
@@ -209,7 +220,8 @@ agents_dir, config = sys.argv[1], sys.argv[2]
 served = set()
 try:
     cfg = tomllib.loads(pathlib.Path(config).read_text())
-    served = {m["routing-id"] for m in cfg.get("models", [])} | {m["routing-id"] for p in cfg.get("openai-providers", []) for m in p.get("models", [])}
+    codex = [*cfg.get("model-overrides", []), *cfg.get("models", [])]  # [[models]] is the pre-2026-11-17 form
+    served = {m["routing-id"] for m in codex} | {m["routing-id"] for p in cfg.get("openai-providers", []) for m in p.get("models", [])}
 except FileNotFoundError:
     pass
 bad = []

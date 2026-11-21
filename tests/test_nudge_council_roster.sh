@@ -36,9 +36,12 @@ printf 'nudges.council-roster = on\n' > "$FEATURES"
 export CLAUDE_HOOK_FEATURES_FILE="$FEATURES"
 
 fails=0
-TODAY=$(date -u +%Y-%m-%d)
+# `reviewed` is a local date (council refresh writes date.today(), the hook
+# compares against it), so these two must be local too; with `date -u` every
+# evening west of UTC read 89 days and failed. The liveness stamp is UTC.
+TODAY=$(date +%Y-%m-%d)
 FRESH=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-LONG_AGO=$(date -u -d '90 days ago' +%Y-%m-%d 2>/dev/null || date -u -v-90d +%Y-%m-%d)
+LONG_AGO=$(date -d '90 days ago' +%Y-%m-%d 2>/dev/null || date -v-90d +%Y-%m-%d)
 
 # A config the hook can read: $1 is the `reviewed` stamp, $2 the seat slug.
 write_config() {

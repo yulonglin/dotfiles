@@ -24,6 +24,7 @@ The rule governs how **results are presented**. It does not govern the per-examp
 - **A results paragraph carries at most one measured quantity, with its interval and sample size n.** A second measured quantity in the same paragraph is a figure or a table you have not drawn yet. This results-prose rule does not require confidence intervals in a paper abstract: follow the abstract's audience and venue, and place detailed uncertainty in the figures and results.
 - Chunks of prose are fine and skimmable, so length is not what is being policed here — the problem is density of digits.
 - Conceptual material — system design, UML, infra, experiment design, eval structure — wants a **mermaid diagram**, not a paragraph describing a diagram.
+- **Draw flows, states and graphs in Mermaid, not ASCII art, wherever Yulong reads.** Everything he reads in renders a ```` ```mermaid ```` fence: Artifacts through `md2artifact`, Bear notes, and `.md` files opened in Lettera on the Mac (Yulong, 2026-11-18). ASCII in a plain code block stays for what Mermaid lays out poorly, where position carries the meaning (a timeline, two columns side by side), and for terminal replies, which render nothing.
 
 ## Headings assert, sections elaborate
 
@@ -60,6 +61,10 @@ This deliberately pulls against `writing.md`, which says chains of "because A, t
 
 Bold follows the same genre split. In papers, bold is scarce: defined terms at first use, headline numbers, and paragraph leads of at most ~6 words — never a whole claim sentence. A page with ten bolded sentences has zero emphasised ones.
 
+## Findings arrive rated, so fixing is a choice
+
+A review, audit or backlog handed to Yulong rates each item on **value, risk and effort** (H/M/L) and recommends fix now, follow up, or drop. Effort is coding-agent wall-clock plus Yulong's review time; risk is the chance the change breaks something, adds a bug or slows experiment iteration. Past about eight items, plot them — value against effort, risk as colour — so the quick wins and the costly low-value tail show at a glance. There is almost always something left to address, and each fix can bring a new bug, so another review round is itself an item with a cost: run it only when the last round found something that changes a real output (`coding-conventions.md`).
+
 ## Manage attention deliberately
 
 Callouts, bolding and colour draw the eye to what matters; syntax highlighting on code. Show the high-level takeaway first; collapse transcripts, prompts, logs and JSON by default, expandable on demand. Progressive disclosure is the default — full transparency without cognitive overload.
@@ -67,6 +72,8 @@ Callouts, bolding and colour draw the eye to what matters; syntax highlighting o
 Long or repeated units — samples, episodes, runs — each collapse independently, and the **collapsed row carries its outcome** so the page is skimmable closed.
 
 Pages are explorable, not just readable: a table of contents with jump links, cross-links between related analyses and examples, and important context kept visible while scrolling long transcripts.
+
+**A page generated from linked text keeps its links and its line structure.** A diff, comparison, digest or export keeps the source's links clickable and its nested lists and indentation, via real lists or `white-space: pre-wrap`; a diff treats a line's indent as part of the line, not a word gap. A script may strip links to count or compare words, but must put them back in what it shows (2026-10-12).
 
 ## Slides: the first slide sets what the meeting is about
 
@@ -97,9 +104,11 @@ If a figure takes more than a few seconds to understand, simplify it.
 - **One claim per figure**: a figure makes one claim, stated as the bold first sentence of its caption, and only that claim. Several panels or series are fine when they support that same claim; a second claim is a second figure. The one exception is a figure explicitly presented as a summary of a section or the paper (the hero-figure pattern), which may gather several results; the individual results figures still make their single claims. Dense is good, double-headed is not (Yulong, 2026-09-06, on the judge paper's figures pairing an APPS result with a Ctrl-Alt-Deceit or SAE one).
 - **Claims shown across datasets**: a claim's figure shows it on every dataset where it was measured; datasets that support the same single claim share the figure, and a dataset where the claim fails sits beside the one where it holds, under a caption whose one claim covers both outcomes (Yulong, 2026-09-06: "in general, we should show our claims generalise across datasets").
 - **Figure and caption match**: the caption names every drawn element (each series, marker, dashed line, reference line, panel) in the figure's own vocabulary (title, legend, axis labels), and nothing that is not drawn. Fix the figure text and the caption together, not one side.
+- **One heading per diagram**: every diagram (Mermaid, SVG or drawn) sits under its own heading that states its point, followed by a one-line caption saying how to read it; two diagrams never share a heading, because stacked under one they read as a single figure and the reader cannot tell where one ends (Yulong, 2026-10-30).
 - **Readability**: as large as reasonably possible, and still readable over screen sharing.
 - **Simplicity**: prefer simple bar charts and line plots; avoid complicated visualizations such as dense heatmaps unless they communicate substantially better; avoid diagonal axis labels.
 - **Labels**: label every axis, define every metric, and say whether **higher or lower is better**.
+- **Condition labels explain their settings on hover**: every condition or setting label in a plot or table on an Artifact or report page carries a tooltip, shown on hover, tap and keyboard focus, that spells out its hyperparameters — for example the model or lens and its source, the layer, k and the position rule, top-k and the ranking, the layout, the prompt or note version, the span, the monitor and its reasoning effort, the number of draws, and the baseline it is compared against. Generate the tooltip text from the run's own config or manifest, so that it cannot drift from what ran. A static image, as in a paper, carries the same detail in its caption or in a legend table (Yulong, 2026-10-15).
 - **Numbers and uncertainty**: put important values directly on the marks — numbers on bars, points, segments. Report sample sizes, and include error bars or confidence intervals so it is obvious whether a difference could be noise.
 - **Grouping and order**: group categorical points by what they represent (for example, dataset, then actor model, then judge or method), not by the observed metric. Keep the same identity-based order across related panels so readers can find the same condition. Preserve natural numeric order for budgets, time and other ordered interventions; use performance-ranked order only when the reader explicitly asks for a ranking.
 - **Visual complexity**: roughly three to five colours unless there is a good reason not to, and few models or conditions per slide.

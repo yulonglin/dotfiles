@@ -5,11 +5,13 @@
 //! expected strings. Rebuild every platform asset you can and check
 //! scripts/check-claude-tools-fresh.sh — the committed binary is what runs.
 //!
-//! Layout: line 1 is location (machine, profiles, directory, branch); then the
+//! Layout: line 1 is location (OS icon, machine, profiles, directory, branch); then the
 //! session segments; then every coding agent's usage (Claude, the other Claude
 //! account, Codex). The session and usage rows are packed to the terminal width
 //! by pack_groups, so they stay one line each on a wide screen and wrap at
-//! segment boundaries on a phone. The only square brackets are the model's.
+//! segment boundaries when narrow. On a phone (is_phone_width) the usage rows
+//! and the session's timing, price and cache segments are left out. The only
+//! square brackets are the model's.
 
 use serde::Deserialize;
 use unicode_width::UnicodeWidthStr;
@@ -26,6 +28,7 @@ struct Input {
     context_window: Option<ContextWindow>,
     effort: Option<Effort>,
     prompt_cache: Option<PromptCache>,
+    transcript_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -113,7 +116,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut output = String::with_capacity(256);
 
-    // 1. Machine name (SSH sessions only)
+    // 1. OS icon, then machine name (registered machines and SSH sessions)
+    format_os_icon(&mut output);
     format_machine_name(&mut output);
 
     // 2. Context profiles from context.yaml
@@ -129,17 +133,32 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
     let width = available_width(std::env::var("COLUMNS").ok().as_deref());
+    let phone = is_phone_width(width);
 
-    // Session state: one group, so it splits only between segments.
+    // Session state: one group, so it splits only between segments. A phone
+    // keeps model, context and the classifier flag; the timing, price and
+    // cache segments would wrap to a row of their own, so they are left out.
+    let timing_parts: Vec<Option<String>> = if phone {
+        Vec::new()
+    } else {
+        let transcript = input.transcript_path.as_deref().map(std::path::Path::new);
+        let started = transcript.and_then(transcript_started_at);
+        let last_active = transcript.and_then(transcript_last_active_at);
+        vec![
+            format_duration_str(&input.cost),
+            format_since_str("age", started, now),
+            format_since_str("idle", last_active, now),
+            format_cost_str(input.cost.as_ref()),
+            format_prompt_cache_str(input.prompt_cache.as_ref(), now),
+        ]
+    };
     let session_parts: Vec<String> = [
         format_model_str(input.model.as_ref(), input.effort.as_ref()),
         format_context_usage_str(input.context_window.as_ref()),
-        format_duration_str(&input.cost),
-        format_cost_str(input.cost.as_ref()),
-        format_prompt_cache_str(input.prompt_cache.as_ref(), now),
-        format_classifier_str(),
     ]
     .into_iter()
+    .chain(timing_parts)
+    .chain([format_classifier_str()])
     .flatten()
     .collect();
     if !session_parts.is_empty() {
@@ -150,12 +169,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Every coding agent's usage on one row: Claude (plus the other account),
-    // then Codex, whose window durations come from its own API.
-    let mut usage_groups = crate::usage::usage_groups();
-    usage_groups.extend(crate::codex_usage::usage_group());
-    for line in pack_groups(&usage_groups, width) {
-        output.push('\n');
-        output.push_str(&line);
+    // then Codex, whose window durations come from its own API. A phone has
+    // no room for it — it wraps to one row per bucket — so it is left out.
+    if !phone {
+        let mut usage_groups = crate::usage::usage_groups();
+        usage_groups.extend(crate::codex_usage::usage_group());
+        for line in pack_groups(&usage_groups, width) {
+            output.push('\n');
+            output.push_str(&line);
+        }
     }
 
     print!("{}", output);
@@ -184,6 +206,16 @@ const WIDTH_MARGIN: usize = 4;
 fn available_width(columns: Option<&str>) -> Option<usize> {
     let cols: usize = columns?.trim().parse().ok().filter(|c| *c > 0)?;
     Some(cols.saturating_sub(WIDTH_MARGIN).max(1))
+}
+
+/// Below this many usable columns the terminal is taken to be a phone, and the
+/// usage rows are dropped. An iPhone in portrait gives roughly 40–50 columns;
+/// a laptop split pane is rarely under 80.
+const PHONE_MAX_WIDTH: usize = 56;
+
+/// True when the usable width is phone-sized. Unknown width is not a phone.
+fn is_phone_width(width: Option<usize>) -> bool {
+    width.is_some_and(|w| w < PHONE_MAX_WIDTH)
 }
 
 /// Terminal columns a string occupies, ignoring ANSI CSI sequences.
@@ -256,6 +288,40 @@ fn pack_groups(groups: &[Vec<String>], width: Option<usize>) -> Vec<String> {
 }
 
 // --- Section formatters ---
+
+/// Nerd Font glyph for the OS, so a Mac and a Linux box read apart at a glance.
+/// The glyphs match p10k's `os_icon` under `nerdfont-complete`.
+fn format_os_icon(output: &mut String) {
+    let os_release = if cfg!(target_os = "linux") {
+        std::fs::read_to_string("/etc/os-release").ok()
+    } else {
+        None
+    };
+    if let Some(icon) = os_icon(std::env::consts::OS, os_release.as_deref()) {
+        let _ = write!(output, "{} ", icon);
+    }
+}
+
+/// Glyph for `os` (`std::env::consts::OS`); on Linux the distro comes from the
+/// `ID=` line of /etc/os-release, falling back to Tux.
+fn os_icon(os: &str, os_release: Option<&str>) -> Option<&'static str> {
+    match os {
+        "macos" => Some("\u{f179}"),
+        "linux" => {
+            let id = os_release
+                .into_iter()
+                .flat_map(str::lines)
+                .find_map(|l| l.strip_prefix("ID="))
+                .map(|v| v.trim().trim_matches('"'));
+            Some(match id {
+                Some("ubuntu") => "\u{f31b}",
+                Some("debian") => "\u{f306}",
+                _ => "\u{f17c}",
+            })
+        }
+        _ => None,
+    }
+}
 
 /// Machine name for registered machines + SSH fallback.
 /// Shells out to `machine-name` (custom_bins/) which checks the machine registry
@@ -521,9 +587,63 @@ fn active_anthropic_key_label() -> Option<String> {
     None
 }
 
+/// The one toggle for the approval classifier, read from the same file as
+/// claude/hooks/hook_feature.py: `permissions.approval-classifier = off` in
+/// features.conf stops the PermissionRequest hook AND hides this segment, so the
+/// two can never disagree.
+const CLASSIFIER_FEATURE: &str = "permissions.approval-classifier";
+
+/// Mirror of hook_feature.py's `feature_enabled`: the most specific key present
+/// wins (`a.b.c`, then `a.b`, then `a`), a missing key or unreadable file means
+/// on, `#` starts a comment, and values outside the known on/off words are
+/// ignored. Pinned in tests/test_statusline_classifier.sh.
+fn hook_feature_enabled(feature: &str) -> bool {
+    let path = match std::env::var_os("CLAUDE_HOOK_FEATURES_FILE") {
+        Some(p) => std::path::PathBuf::from(p),
+        None => match std::env::var_os("HOME") {
+            Some(home) => std::path::PathBuf::from(home).join(".claude/hooks/features.conf"),
+            None => return true,
+        },
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return true;
+    };
+    let mut flags = std::collections::HashMap::new();
+    for raw in text.lines() {
+        let line = raw.split('#').next().unwrap_or("").trim();
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "on" | "true" | "yes" => flags.insert(key.to_string(), true),
+            "0" | "off" | "false" | "no" => flags.insert(key.to_string(), false),
+            _ => None,
+        };
+    }
+    let mut key = feature;
+    loop {
+        if let Some(&enabled) = flags.get(key) {
+            return enabled;
+        }
+        match key.rfind('.') {
+            Some(i) => key = &key[..i],
+            None => return true,
+        }
+    }
+}
+
 /// Which backend last served an auto-approval, and on which key.
 /// Healthy renders dim and minimal; anything else is meant to be noticed.
 fn format_classifier_str() -> Option<String> {
+    // Switched off: the hook no longer runs, so its health file only goes stale
+    // and would render a misleading `auto?` for hours.
+    if !hook_feature_enabled(CLASSIFIER_FEATURE) {
+        return None;
+    }
     let home = std::env::var("HOME").ok()?;
     let path = std::path::PathBuf::from(home)
         .join(".cache/claude/approval-classifier-health.json");
@@ -585,6 +705,101 @@ fn format_duration_str(cost: &Option<Cost>) -> Option<String> {
         format!("{}m", total_mins)
     };
     Some(format!("\x1b[2m{}\x1b[0m", display))
+}
+
+/// The fields of a transcript line that date it. Every line is one JSON object;
+/// the metadata lines at the head (title, mode, file-history snapshot) carry no
+/// timestamp and are rewritten in place, so the file's mtime says nothing about
+/// when the conversation was last used.
+#[derive(Deserialize)]
+struct TranscriptEntry {
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    timestamp: Option<String>,
+    #[serde(rename = "isMeta")]
+    is_meta: Option<bool>,
+}
+
+/// Lines read from the head before giving up on finding a timestamp.
+const TRANSCRIPT_HEAD_LINES: usize = 200;
+/// First tail read; quadrupled on a miss up to the cap. Tool results make single
+/// lines run to hundreds of KB, so the last user/assistant line can sit well
+/// back from the end.
+const TRANSCRIPT_TAIL_CHUNK: u64 = 256 * 1024;
+const TRANSCRIPT_TAIL_MAX: u64 = 16 * 1024 * 1024;
+
+/// When the conversation started: the first timestamped line. Resumes append to
+/// the same file and compaction writes into it, so this spans both; `/clear`
+/// starts a new transcript and so a new age.
+fn transcript_started_at(path: &std::path::Path) -> Option<i64> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path).ok()?;
+    std::io::BufReader::new(file)
+        .lines()
+        .take(TRANSCRIPT_HEAD_LINES)
+        .map_while(Result::ok)
+        .filter_map(|line| serde_json::from_str::<TranscriptEntry>(&line).ok())
+        .find_map(|e| e.timestamp.as_deref().and_then(parse_utc_timestamp))
+}
+
+/// When the conversation was last used: the newest user or assistant line.
+/// Attachments, system lines and meta user lines are skipped because a resume
+/// writes them before anyone types, which would zero the idle time at exactly
+/// the moment it is worth reading.
+fn transcript_last_active_at(path: &std::path::Path) -> Option<i64> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut chunk = TRANSCRIPT_TAIL_CHUNK;
+    loop {
+        let start = len.saturating_sub(chunk);
+        file.seek(SeekFrom::Start(start)).ok()?;
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).ok()?;
+        let text = String::from_utf8_lossy(&buf);
+        // Mid-file, the first line is a fragment.
+        let whole = if start == 0 { &text[..] } else { text.split_once('\n').map_or("", |(_, rest)| rest) };
+        let found = whole
+            .lines()
+            .rev()
+            .filter_map(|line| serde_json::from_str::<TranscriptEntry>(line).ok())
+            .filter(|e| matches!(e.kind.as_deref(), Some("user" | "assistant")) && e.is_meta != Some(true))
+            .find_map(|e| e.timestamp.as_deref().and_then(parse_utc_timestamp));
+        if found.is_some() || start == 0 || chunk >= TRANSCRIPT_TAIL_MAX {
+            return found;
+        }
+        chunk *= 4;
+    }
+}
+
+/// "2026-10-14T04:59:26.105Z" → Unix seconds, in-process: the statusline runs
+/// on a timer in every session, so spawning `date` like usage.rs does is too
+/// dear. Only the UTC `Z` form Claude Code writes is accepted.
+fn parse_utc_timestamp(s: &str) -> Option<i64> {
+    let (date, time) = s.strip_suffix('Z')?.split_once('T')?;
+    let mut d = date.splitn(3, '-').map(|p| p.parse::<i64>().ok());
+    let (y, m, day) = (d.next()??, d.next()??, d.next()??);
+    let mut t = time.split('.').next()?.splitn(3, ':').map(|p| p.parse::<i64>().ok());
+    let (h, min, sec) = (t.next()??, t.next()??, t.next()??);
+    // Days since 1970-01-01 (Howard Hinnant's days_from_civil).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * ((m + 9) % 12) + 2) / 5 + day - 1;
+    let days = era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468;
+    Some(days * 86_400 + h * 3_600 + min * 60 + sec)
+}
+
+/// "age 2d3h" (since the conversation started) or "idle 12m" (since it was last
+/// used). Omitted under a minute, so an active session shows no "idle 0m".
+/// Between events the value is as of the last run, which is why the statusLine
+/// in claude/settings.json sets a refreshInterval.
+fn format_since_str(label: &str, at: Option<i64>, now: i64) -> Option<String> {
+    let secs = now - at?;
+    if secs < 60 {
+        return None;
+    }
+    Some(format!("\x1b[2m{} {}\x1b[0m", label, crate::usage::fmt_time_remaining(secs as f64)))
 }
 
 /// Session price so far from `cost.total_cost_usd`: "$7.42". Omitted until the
@@ -717,6 +932,14 @@ mod tests {
     }
 
     #[test]
+    fn phone_width_only_when_narrow() {
+        assert!(is_phone_width(available_width(Some("45"))));
+        assert!(!is_phone_width(available_width(Some("60"))));
+        assert!(!is_phone_width(available_width(Some("120"))));
+        assert!(!is_phone_width(None));
+    }
+
+    #[test]
     fn visible_width_ignores_ansi_and_counts_wide_glyphs() {
         assert_eq!(visible_width("\x1b[2m\x1b[36mabc\x1b[0m"), 3);
         assert_eq!(visible_width("\x1b[38;2;255;176;85m5h \u{25D4} 24%\x1b[0m"), 8);
@@ -762,6 +985,17 @@ mod tests {
     }
 
     #[test]
+    fn os_icon_picks_mac_ubuntu_and_falls_back_to_tux() {
+        assert_eq!(os_icon("macos", None), Some("\u{f179}"));
+        let ubuntu = "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n";
+        assert_eq!(os_icon("linux", Some(ubuntu)), Some("\u{f31b}"));
+        assert_eq!(os_icon("linux", Some("ID=\"debian\"\n")), Some("\u{f306}"));
+        assert_eq!(os_icon("linux", Some("ID=fedora\n")), Some("\u{f17c}"));
+        assert_eq!(os_icon("linux", None), Some("\u{f17c}"));
+        assert_eq!(os_icon("windows", None), None);
+    }
+
+    #[test]
     fn profiles_render_without_brackets() {
         let dir = std::env::temp_dir().join(format!("statusline-profiles-{}", std::process::id()));
         std::fs::create_dir_all(dir.join(".claude")).unwrap();
@@ -770,6 +1004,46 @@ mod tests {
         format_context_profiles(&mut out, dir.to_str().unwrap());
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(out, "\x1b[36mcode python\x1b[0m ");
+    }
+
+    #[test]
+    fn utc_timestamps_parse_to_unix_seconds() {
+        assert_eq!(parse_utc_timestamp("1970-01-01T00:00:00Z"), Some(0));
+        assert_eq!(parse_utc_timestamp("2026-10-14T04:59:26.105Z"), Some(1_791_953_966));
+        assert_eq!(parse_utc_timestamp("2024-02-29T12:00:00Z"), Some(1_709_208_000));
+        assert_eq!(parse_utc_timestamp("2026-10-14T04:59:26+01:00"), None);
+        assert_eq!(parse_utc_timestamp("garbage"), None);
+    }
+
+    #[test]
+    fn since_renders_age_and_idle_and_hides_under_a_minute() {
+        assert_eq!(format_since_str("age", Some(0), 2 * 86_400 + 3 * 3_600).unwrap(), "\x1b[2mage 2d3h\x1b[0m");
+        assert_eq!(format_since_str("idle", Some(100), 100 + 12 * 60).unwrap(), "\x1b[2midle 12m\x1b[0m");
+        assert_eq!(format_since_str("idle", Some(100), 159), None);
+        assert_eq!(format_since_str("idle", None, 159), None);
+    }
+
+    #[test]
+    fn transcript_times_skip_metadata_and_resume_lines() {
+        let path = std::env::temp_dir().join(format!("statusline-transcript-{}.jsonl", std::process::id()));
+        // Untimestamped metadata first; after the last real turn, a resume's
+        // attachment, system line and meta user line, which must not count.
+        let filler = "x".repeat(300 * 1024);
+        let lines = [
+            r#"{"type":"ai-title","title":"t"}"#.to_string(),
+            r#"{"type":"attachment","timestamp":"2026-10-12T07:44:37.735Z"}"#.to_string(),
+            r#"{"type":"user","timestamp":"2026-10-12T07:45:00.000Z","message":{"role":"user"}}"#.to_string(),
+            r#"{"type":"assistant","timestamp":"2026-10-14T04:59:29.770Z"}"#.to_string(),
+            format!(r#"{{"type":"attachment","timestamp":"2026-10-17T20:00:00.000Z","pad":"{}"}}"#, filler),
+            r#"{"type":"system","timestamp":"2026-10-17T20:00:01.000Z"}"#.to_string(),
+            r#"{"type":"user","isMeta":true,"timestamp":"2026-10-17T20:00:02.000Z"}"#.to_string(),
+        ];
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+        let started = transcript_started_at(&path);
+        let last = transcript_last_active_at(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(started, parse_utc_timestamp("2026-10-12T07:44:37Z"));
+        assert_eq!(last, parse_utc_timestamp("2026-10-14T04:59:29Z"));
     }
 }
 

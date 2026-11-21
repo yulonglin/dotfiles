@@ -2,7 +2,7 @@ title: Research Run Records
 url: https://claude.ai/artifact/RKXV7RT4bXVs3mUArR8MU7
 org: lin.yulong@gmail.com's Organization
 first_published: 2026-10-12
-last_updated: 2026-10-12
+last_updated: 2026-10-12   # v2: code-review fixes (group supervision, run-dir lock, board-path guard)
 status: live
 
 public: no
