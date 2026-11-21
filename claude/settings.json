@@ -171,8 +171,8 @@
         "description": "Claude subscription"
       },
       {
-        "model": "claude-fable-5-1",
-        "label": "Fable 5.1",
+        "model": "claude-fable-5-2",
+        "label": "Fable 5.2",
         "description": "Claude subscription"
       },
       {
@@ -182,22 +182,22 @@
       },
       {
         "model": "astra",
-        "label": "GPT-6 Astra",
+        "label": "GPT-6.2 Astra",
+        "description": "ChatGPT subscription (Codex)"
+      },
+      {
+        "model": "sol",
+        "label": "GPT-6.2 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
         "model": "gemini",
-        "label": "Gemini 4 Argon",
+        "label": "Gemini 4 Neon",
         "description": "OpenRouter, pay per token"
       },
       {
-        "model": "sol",
-        "label": "GPT-6.1 Sol",
-        "description": "ChatGPT subscription (Codex)"
-      },
-      {
-        "model": "kimi",
-        "label": "Kimi K3.1 Pro",
+        "model": "deepseek",
+        "label": "DeepSeek V4.1 Flash",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -206,27 +206,26 @@
         "description": "OpenRouter, pay per token"
       },
       {
+        "model": "kimi",
+        "label": "Kimi K3.1 Pro",
+        "description": "More models · OpenRouter, pay per token"
+      },
+      {
         "model": "muse",
         "label": "Muse Wonder",
-        "description": "OpenRouter, pay per token"
+        "description": "More models · OpenRouter, pay per token"
       },
       {
         "model": "grok",
         "label": "Grok 4.7",
-        "description": "OpenRouter, pay per token"
+        "description": "More models · OpenRouter, pay per token"
       },
       {
         "model": "qwen",
-        "label": "Qwen3.8 Max",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "deepseek",
-        "label": "DeepSeek V4.1 Flash",
-        "description": "OpenRouter, pay per token"
+        "label": "Qwen4 Max",
+        "description": "More models · OpenRouter, pay per token"
       }
-    ],
-    "replaceBuiltInOptions": true
+    ]
   },
   "skillOverrides": {
     "claude-api": "off",
@@ -260,6 +259,15 @@
       }
     ],
     "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.elapsed-stamp -- $HOME/.claude/hooks/elapsed_stamp.sh",
+            "timeout": 3
+          }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [
@@ -685,6 +693,15 @@
             "async": true
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'rex __internal session-start --agent claude --feature-session-naming=false 2>/dev/null || true'",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
@@ -746,6 +763,15 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.prompt-stamp -- $HOME/.claude/hooks/inject_timestamp.sh",
+            "timeout": 3
+          }
+        ]
       }
     ]
   },
@@ -770,7 +796,7 @@
     "codex@codex-plugin-cc": true,
     "core@ai-safety-plugins": false,
     "dev-browser@dev-browser-marketplace": false,
-    "hookify@claude-plugins-official": true,
+    "hookify@claude-plugins-official": false,
     "llms-fetch-mcp@alignment-hive": true,
     "model-router@alignment-hive": true,
     "playground@claude-plugins-official": false,
@@ -957,6 +983,9 @@
       "trash",
       "pueue:*",
       "systemctl:*",
+      "ps:*",
+      "top:*",
+      "pgrep:*",
       "jguard",
       "bearcli",
       "modal",
@@ -986,49 +1015,115 @@
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
-    "gpt-6-astra": {
+    "gpt-6.2-astra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-astra-fast": {
       "autoCompactWindow": 258400
     },
     "astra": {
       "autoCompactWindow": 258400
     },
-    "gemini-4-argon": {
-      "autoCompactWindow": 1000000
+    "astra-fast": {
+      "autoCompactWindow": 258400
     },
-    "gemini": {
-      "autoCompactWindow": 1000000
+    "gpt-6-astra": {
+      "autoCompactWindow": 258400
     },
-    "gpt-6.1-sol": {
+    "gpt-6-astra-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.2-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol": {
       "autoCompactWindow": 258400
     },
+    "sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gemini-4-neon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini-4-carbon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
+    "gpt-6.1-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6.1-terra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-terra-fast": {
       "autoCompactWindow": 258400
     },
     "terra": {
       "autoCompactWindow": 258400
     },
+    "terra-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-sol-fast": {
       "autoCompactWindow": 258400
     },
     "sol6": {
       "autoCompactWindow": 258400
     },
+    "sol6-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-6-luna": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6-luna-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-sol": {
       "autoCompactWindow": 258400
     },
+    "gpt-5.6-sol-fast": {
+      "autoCompactWindow": 258400
+    },
     "gpt-5.6-terra": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-5.6-terra-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-5.6-luna": {
       "autoCompactWindow": 258400
+    },
+    "gpt-5.6-luna-fast": {
+      "autoCompactWindow": 258400
+    },
+    "deepseek-v4.1-flash": {
+      "autoCompactWindow": 1000000
+    },
+    "deepseek": {
+      "autoCompactWindow": 1000000
+    },
+    "glm-5.3": {
+      "autoCompactWindow": 262124
+    },
+    "glm": {
+      "autoCompactWindow": 262124
     },
     "kimi-k3.1-pro": {
       "autoCompactWindow": 250000
@@ -1038,12 +1133,6 @@
     },
     "kimi-k3": {
       "autoCompactWindow": 250000
-    },
-    "glm-5.3": {
-      "autoCompactWindow": 262124
-    },
-    "glm": {
-      "autoCompactWindow": 262124
     },
     "muse-wonder": {
       "autoCompactWindow": 1000000
@@ -1057,16 +1146,13 @@
     "grok": {
       "autoCompactWindow": 500000
     },
-    "qwen3.8-max": {
+    "qwen4-max": {
       "autoCompactWindow": 1000000
     },
     "qwen": {
       "autoCompactWindow": 1000000
     },
-    "deepseek-v4.1-flash": {
-      "autoCompactWindow": 1000000
-    },
-    "deepseek": {
+    "qwen3.8-max": {
       "autoCompactWindow": 1000000
     }
   },
@@ -1078,6 +1164,7 @@
     "enabled": true,
     "mode": "hold"
   },
+  "prefersReducedMotion": false,
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
@@ -1092,8 +1179,9 @@
   "theme": "auto",
   "editorMode": "normal",
   "verbose": false,
+  "autoCompactEnabled": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": false,
+  "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,

@@ -4,6 +4,18 @@ Hooks for automating task and agent management workflows.
 
 ## Available Hooks
 
+### inject_timestamp.sh + elapsed_stamp.sh (time awareness)
+
+**Purpose:** Keep the model clock-aware. `inject_timestamp.sh` (UserPromptSubmit, flag `time.prompt-stamp`) prints `[Now: Thu 2026-08-27 02:40 PDT (UTC-07:00) · 09:40 UTC · 2h13m since your last message]`; the gap clause appears only past `CLAUDE_TIME_GAP_MIN` (10). `elapsed_stamp.sh` (PostToolUse on every tool, flag `time.elapsed-stamp`) emits `[Time check: 25m elapsed in this turn · now …]` as `additionalContext`, because plain stdout on PostToolUse never reaches Claude, at most once per `CLAUDE_TIME_STAMP_INTERVAL_MIN` (5). That in-turn stamp is the piece Ofengenden & Andriushchenko (2026) show agents need most: scrubbing timestamps roughly doubles their elapsed-time error. Shared code and rationale: `lib_time_stamp.sh`. Literature page: https://claude.ai/code/artifact/842dfe8e-e902-416d-86eb-aa7d5042b659
+
+**Zone:** `CLAUDE_LOCAL_TZ` → `TZ` → `/etc/timezone` → `/etc/localtime` → UTC; an invalid zone warns in the stamp. `config/zshrc.sh` sets `CLAUDE_LOCAL_TZ=America/Los_Angeles` on non-macOS hosts only (servers run on UTC); a Mac uses `/etc/localtime`, which follows travel.
+
+**Off switches:** `time = off` in `features.conf` (global, or `time.prompt-stamp` / `time.elapsed-stamp` singly); `touch .claude/no-time-stamps` (per repo; use it in model-organism repos, since a stated date is a backdoor-trigger surface); `CLAUDE_TIME_STAMPS=off` (per shell).
+
+**The remember plugin stamps too.** Its UserPromptSubmit hook adds `[HH:MM <zone> — <user>]` (time only, no date). This repo does not change it. For one owner of time, set `"prompt_stamp": "stable"` in `~/.remember/config.json` (keeps the username and remember's 95% context warning) or `"off"` (drops both), per machine.
+
+**Test:** `tests/test_time_stamps.zsh`.
+
 ### agent_spawned.sh
 
 **Purpose:** Reminds user to save agent IDs when agents are spawned

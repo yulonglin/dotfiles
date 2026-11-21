@@ -77,7 +77,10 @@ class RouterGuardTests(unittest.TestCase):
         return subprocess.CompletedProcess(args, code, output, "")
 
     def run_guard(self, event="UserPromptSubmit", **kwargs):
-        return self.guard.ensure_router(event, home=self.home, env={}, system="Darwin", **kwargs)
+        # Point the drop-in lookup into the temp home: an empty env falls back to the
+        # machine's real managed drop-in, whose token never matches this fixture's.
+        env = {"MODEL_ROUTER_MANAGED": str(self.home / "no-managed-drop-in.json")}
+        return self.guard.ensure_router(event, home=self.home, env=env, system="Darwin", **kwargs)
 
     def actions(self):
         return [args[1] for args in self.calls]

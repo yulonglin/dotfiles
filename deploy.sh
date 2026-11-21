@@ -88,6 +88,7 @@ COMPONENTS:
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
     --codex           Deploy Codex CLI config (~/.codex symlink)
+    --antigravity     Deploy Antigravity global config (~/.gemini/config)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
@@ -324,7 +325,7 @@ export PATH="\$DOT_DIR/custom_bins:\$PATH"
 
 # Tool integrations
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
-[ -d "\$HOME/.cargo" ] && . "\$HOME/.cargo/env"
+[ -f "\$HOME/.cargo/env" ] && . "\$HOME/.cargo/env"
 [ -d "\$HOME/.local/bin" ] && [ -f "\$HOME/.local/bin/env" ] && source "\$HOME/.local/bin/env"
 
 # ASCII art in interactive shells
@@ -455,6 +456,15 @@ if [[ "$DEPLOY_GIT_CONFIG" == "true" ]]; then
     if git -C "$DOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
         git -C "$DOT_DIR" config --local filter.zed-ssh.clean scripts/git-filters/zed-strip-ssh-connections
         log_success "Configured the zed-ssh clean filter for $DOT_DIR"
+        # codex-local: the clean side keeps this machine's Codex tables (trusted
+        # projects, app preferences, local marketplaces) out of
+        # codex/config.toml blobs and saves them; the smudge side appends them
+        # back when a pull rewrites the file. --save seeds the saved copy so the
+        # first pull after deploy already keeps them.
+        git -C "$DOT_DIR" config --local filter.codex-local.clean 'scripts/git-filters/codex-config-local --clean %f'
+        git -C "$DOT_DIR" config --local filter.codex-local.smudge 'scripts/git-filters/codex-config-local --smudge'
+        "$DOT_DIR/scripts/git-filters/codex-config-local" --save || true
+        log_success "Configured the codex-local clean/smudge filter for $DOT_DIR"
     fi
 fi
 
@@ -1059,6 +1069,23 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
         log_info "  Config: AGENTS.md, skills/"
     else
         log_warning "Codex directory not found at $DOT_DIR/codex"
+    fi
+fi
+
+# ─── Antigravity ──────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_ANTIGRAVITY" == "true" ]]; then
+    log_section "DEPLOYING ANTIGRAVITY CONFIGURATION"
+
+    if [[ -x "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" || -f "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" ]]; then
+        if bash "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" --dotfiles-dir "$DOT_DIR"; then
+            log_success "Antigravity global configuration deployed"
+            log_info "  Config: ~/.gemini/config/{skills.json,AGENTS.md,GEMINI.md,rules/,mcp_config.json}"
+        else
+            log_warning "Antigravity configuration sync failed"
+        fi
+    else
+        log_warning "Antigravity sync script not found at $DOT_DIR/scripts/sync_claude_to_antigravity.sh"
     fi
 fi
 

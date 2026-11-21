@@ -328,13 +328,10 @@ class CodexUsageTests(unittest.TestCase):
         self.assertEqual(self.render()[0], "")
         self.assertEqual(self.count_calls(), 1)
 
-    def test_narrow_terminal_moves_codex_to_its_own_line(self) -> None:
-        # COLUMNS=30 leaves 26 usable columns: the Claude group (19) fits, the
-        # Codex group (14) does not fit beside it, so it moves down whole.
-        self.render()  # warm the Codex cache through the normal path
+    def render_at(self, columns: str) -> list[str]:
         process = subprocess.run(
             [str(BINARY), "statusline"],
-            env=dict(self.env, COLUMNS="30"),
+            env=dict(self.env, COLUMNS=columns),
             input=json.dumps(
                 {
                     "workspace": {"current_dir": str(self.root)},
@@ -346,8 +343,19 @@ class CodexUsageTests(unittest.TestCase):
             timeout=5,
             check=True,
         )
-        lines = ANSI.sub("", process.stdout).splitlines()
-        self.assertEqual(lines[2:], ["5h ◔ 25% · 7d ◑ 50%", "Codex 7d ◕ 64%"])
+        return ANSI.sub("", process.stdout).splitlines()
+
+    def test_phone_width_drops_the_usage_rows(self) -> None:
+        # Below 60 COLUMNS the usage buckets are left out entirely (#294); before
+        # that they wrapped to one row each, three of five rows on an iPhone.
+        self.render()  # warm the Codex cache through the normal path
+        self.assertFalse([ln for ln in self.render_at("30") if "%" in ln])
+
+    def test_wide_terminal_keeps_claude_and_codex_usage(self) -> None:
+        self.render()
+        rows = [ln for ln in self.render_at("120") if "%" in ln]
+        self.assertTrue(any("5h ◔ 25%" in ln for ln in rows), rows)
+        self.assertTrue(any("Codex 7d ◕ 64%" in ln for ln in rows), rows)
 
     def test_missing_executable_omits_line(self) -> None:
         (self.bin / "codex").unlink()

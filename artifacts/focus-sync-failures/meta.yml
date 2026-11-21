@@ -1,0 +1,21 @@
+title: Focus Sync Failures
+url: https://claude.ai/artifact/PFYyPomW6Gy2UGvfw6y2Wv
+org: lin.yulong@gmail.com's Organization
+first_published: 2026-11-05
+last_updated: 2026-11-05
+status: live
+
+public: "no"
+
+summary: >-
+  why `focus sync` stopped at Cold Turkey's "isn't responding" error whether or not the change had
+  landed, what PR 319 fixed, and the one site the CLI really dropped, with the real runs and what one
+  more run would decide
+
+source: report.md
+built: focus-sync-failures.html
+builds_with: |
+  md2artifact report.md -o focus-sync-failures.html --title "Focus Sync Failures"
+  publish with the capabilities md2artifact --capabilities prints
+evidence: |
+  terminal output pasted by Yulong on 4 Nov 2026; Cold Turkey database and file times read at 22:18 HST

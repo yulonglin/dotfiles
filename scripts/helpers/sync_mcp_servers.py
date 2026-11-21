@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Sync shared MCP servers from a neutral source into Claude and Codex config.
+"""Sync shared MCP servers from a neutral source into Claude, Codex, and Antigravity config.
 
 Default mode is check-only. Apply mode only adds or updates entries named in the
-neutral source, preserves unmanaged Claude servers, and rewrites only the Codex
-managed block plus duplicate unmanaged tables for those same managed names.
+neutral source, preserves unmanaged Claude/Antigravity servers, and rewrites
+only the Codex managed block plus duplicate unmanaged tables for those same
+managed names.
 """
 
 from __future__ import annotations
@@ -53,6 +54,22 @@ def load_source_servers(path: Path) -> dict[str, dict[str, Any]]:
 
 def desired_claude_text(path: Path, servers: dict[str, dict[str, Any]]) -> str:
     data = load_json_object(path)
+    existing = data.get("mcpServers")
+    if existing is None:
+        existing = {}
+    if not isinstance(existing, dict):
+        raise SystemExit(f"{path}: mcpServers must be an object when present")
+    merged = dict(existing)
+    merged.update(servers)
+    data["mcpServers"] = merged
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def desired_antigravity_text(path: Path, servers: dict[str, dict[str, Any]]) -> str:
+    if path.exists():
+        data = load_json_object(path)
+    else:
+        data = {}
     existing = data.get("mcpServers")
     if existing is None:
         existing = {}
@@ -177,6 +194,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         type=Path,
         default=Path("codex/config.toml"),
     )
+    parser.add_argument(
+        "--antigravity-config",
+        type=Path,
+        default=None,
+        help="optional Antigravity mcp_config.json path to sync",
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="report drift without writing")
     mode.add_argument("--apply", action="store_true", help="apply managed updates")
@@ -195,14 +218,27 @@ def main(argv: list[str] | None = None) -> int:
     claude_drift = report_drift("Claude MCP", current_claude, desired_claude)
     codex_drift = report_drift("Codex MCP", current_codex, desired_codex)
 
+    ag_drift = False
+    desired_ag = ""
+    if args.antigravity_config is not None:
+        desired_ag = desired_antigravity_text(args.antigravity_config, servers)
+        current_ag = (
+            args.antigravity_config.read_text()
+            if args.antigravity_config.exists()
+            else ""
+        )
+        ag_drift = report_drift("Antigravity MCP", current_ag, desired_ag)
+
     if args.check:
-        return 1 if claude_drift or codex_drift else 0
+        return 1 if claude_drift or codex_drift or ag_drift else 0
 
     if claude_drift:
         atomic_write(args.claude_settings, desired_claude)
     if codex_drift:
         atomic_write(args.codex_config, desired_codex)
-    if claude_drift or codex_drift:
+    if ag_drift and args.antigravity_config is not None:
+        atomic_write(args.antigravity_config, desired_ag)
+    if claude_drift or codex_drift or ag_drift:
         print("Applied shared MCP updates")
     return 0
 

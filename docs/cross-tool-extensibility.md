@@ -1,28 +1,22 @@
 # Cross-Tool Extensibility Map
 
-How extensibility concepts map across Claude Code, Codex CLI, and Gemini CLI.
+How extensibility concepts map across Claude Code, Codex CLI, and Antigravity (`agy` CLI, Antigravity 2.0 App, and Antigravity IDE).
 
-> **Note:** Gemini CLI was retired by Google on 2026-06-18. Its successor is
-> Antigravity CLI (`agy`), synced via `scripts/sync_claude_to_antigravity.sh`
-> (skills + permissions; Antigravity reuses the `~/.gemini/antigravity-cli/` dir).
-> The Gemini-specific rows below are retained for historical reference; the
-> Antigravity permission schema is not yet verified end-to-end (see that script's header).
+> **Note:** Gemini CLI was retired by Google on 2026-06-18. Its successor is Antigravity, whose shared global customization root is `~/.gemini/config/`. Portable Claude Code config projects one-way into `~/.gemini/config/` via `deploy.sh --antigravity` (`scripts/sync_claude_to_antigravity.sh`): `skills.json` references `~/.claude/skills` with Claude-only excludes, `GEMINI.md` symlinks to `claude/CLAUDE.md`, `AGENTS.md` provides the Antigravity tool-compatibility shim (`antigravity/AGENTS.md`), portable `claude/rules/*.md` are projected into `~/.gemini/config/rules/` with `trigger: always_on` frontmatter, and `mcp_config.json` is synced via `scripts/helpers/sync_mcp_servers.py`. Hooks and permissions are intentionally not auto-imported from Claude Code because of incompatible JSON contracts and synchronous-only hook execution.
 
 ## Concept Mapping
 
-| Concept | Claude Code | Codex CLI | Gemini CLI |
-|---------|-------------|-----------|------------|
-| **Skills** | `~/.claude/skills/` (SKILL.md) | `~/.codex/skills/` (SKILL.md) | `~/.gemini/skills/` (SKILL.md) |
-| **Agents** | `~/.claude/agents/*.md` | Not native | Not native |
-| **Plugins/Extensions** | Plugins (`installed_plugins.json`) | Not supported | Extensions (`~/.gemini/extensions/`) |
-| **Hooks** | `settings.json` (12+ events) | `config.toml` (notify only) | `settings.json` (4 events) |
-| **MCP Servers** | `.mcp.json` / `~/.claude.json` (JSON) | `config.toml` (TOML, stdio only) | `settings.json` (JSON) |
-| **Context File** | `CLAUDE.md` | `instructions.md` | `GEMINI.md` |
-| **Slash Commands** | Via skills | `~/.codex/*.md` | `~/.gemini/commands/*.toml` |
+| Concept | Claude Code | Codex CLI | Antigravity (`~/.gemini/config/`) |
+|---------|-------------|-----------|-----------------------------------|
+| **Skills** | `~/.claude/skills/` (`SKILL.md`) | `~/.codex/skills/` (symlink to `../claude/skills`) | `~/.gemini/config/skills.json` (points at `~/.claude/skills` with `exclude`) |
+| **Agents** | `~/.claude/agents/*.md` | Not native | Native `define_subagent` / `swarm` / `run_workflow` (do not mirror `claude/agents/`) |
+| **Plugins/Extensions** | Plugins (`settings.json` `enabledPlugins`) | Marketplaces + `[plugins]` in `config.toml` | `~/.gemini/config/plugins/` (`plugin.json`) |
+| **Hooks** | `settings.json` (snake_case, exit 2 blockers, async supported) | `codex/hooks.json` (curated via `sync_codex_hooks.py`) | `~/.gemini/config/hooks.json` (camelCase, JSON stdout, sync-only — curate separately) |
+| **MCP Servers** | `settings.json` / `~/.claude.json` (JSON) | `config.toml` (TOML, synced via `sync_mcp_servers.py`) | `~/.gemini/config/mcp_config.json` (JSON, synced via `sync_mcp_servers.py`) |
+| **Global Rules** | `~/.claude/CLAUDE.md` + `~/.claude/rules/*.md` | `~/.codex/AGENTS.md` + `tool-compatibility.md` | `~/.gemini/config/GEMINI.md` + `AGENTS.md` + `rules/*.md` (24 KB per-file cap, `trigger:` frontmatter) |
 | **Output Styles** | `output-styles/*.md` | Not supported | Not supported |
-| **Custom Tools** | Via MCP only | Via MCP only | MCP + discoveryCommand |
-| **Task Management** | TodoWrite/TaskCreate | Not supported | Not supported |
-| **LSP Servers** | Via plugins | Not supported | Not supported |
+| **Task Management** | TodoWrite/TaskCreate | Native plan tool | Artifacts / checklist |
+| **LSP Servers** | Via plugins | Not supported | IDE-native |
 
 ## What Syncs Cleanly
 
@@ -82,23 +76,19 @@ Claude Code's plugin system creates symlinks in `~/.claude/skills/` pointing to 
 ### Usage
 
 ```bash
-# Sync skills + permissions to Antigravity CLI (Gemini CLI's successor)
+# Deploy Antigravity global config (skills.json, rules, AGENTS.md/GEMINI.md, MCP)
+./deploy.sh --only antigravity
+# Or run the sync script directly:
 scripts/sync_claude_to_antigravity.sh
 
-# Sync skills + permissions to Codex CLI
+# Sync skills, permissions, hooks, and MCP to Codex CLI
 scripts/sync_claude_to_codex.sh
 ```
 
 ### What They Do
 
-Both scripts use `scripts/helpers/enumerate_claude_skills.sh` to discover and deduplicate all skill sources:
-
-1. **User skills** — real directories in `~/.claude/skills/` → symlinked
-2. **Standalone skills** — `.md` files in `~/.claude/skills/` → wrapped in dir with SKILL.md symlink
-3. **Plugin skills** — from `marketplaces/` and `cache/` → symlinked (deduplicated by name, first-wins)
-4. **Agent skills** — `~/.claude/agents/*.md` → wrapped in dir with SKILL.md symlink
-
-Each skill name appears exactly once in the output. The enumerate helper handles deduplication so sync scripts don't need to.
+- **`scripts/sync_claude_to_antigravity.sh`** projects one-way into `~/.gemini/config/` (never bidirectional): symlinks `antigravity/skills.json` (referencing `~/.claude/skills` with Claude-only excludes), symlinks `antigravity/AGENTS.md` and `claude/CLAUDE.md` (`GEMINI.md`), renders portable `claude/rules/*.md` into `~/.gemini/config/rules/` with `trigger: always_on` frontmatter (pruning deleted managed rules, preserving hand-authored rules), and syncs `mcp_config.json` via `sync_mcp_servers.py`.
+- **`scripts/sync_claude_to_codex.sh`** shares user skills via the `codex/skills -> ../claude/skills` symlink, translates Claude permissions to `codex/rules/default.rules`, syncs shared MCP servers, and applies curated Codex hooks via `scripts/setup/sync_codex_hooks.py`.
 
 ### `.gitignore` Strategy
 

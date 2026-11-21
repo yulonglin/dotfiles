@@ -12,7 +12,11 @@ What would this number be with no signal at all? Put that beside it, not in a fo
 
 **Every comparison names its test, its effect size and `n` per condition.** Which test — Fisher, McNemar, a bootstrap — and what its significance means for this comparison (`presentation.md`); how large the difference is in the units of the metric; and how many units of analysis sat in each arm. A p-value on its own is incomplete: it says the difference is unlikely under the null, not that it is large enough to matter.
 
+**Many uncorrected contrasts: put the count beside each hit.** When a page computes many contrasts without correction, state beside each number whose interval excludes 0 how many contrasts were computed and how many chance alone would give (about 5% of the count). Separate the expected hits (controls, or repeats of one identical result) from the unpredicted ones, and label a single unpredicted hit as a hypothesis, not a finding (Yulong, 2026-10-15).
+
 **The null a detector is judged against is CHANCE, not a confound baseline.** Chance means the simulated chance band at that n, not an assumed 0.5. A behaviour-free baseline — a length or style classifier, a scaffold-only predictor, anything that cannot see the behaviour — is a **diagnostic of the model organism, not the bar the detector must clear**. Reporting “the detector failed to beat the style null” converts the organism’s leakiness into the detector’s failure, which is the wrong attribution and reads as a stronger negative result than the data supports. Report both, separately and labelled for what each is: *does it detect* (versus chance) and *can this dataset support a detection claim at all* (how high the behaviour-free baseline sits). A dataset whose style baseline is near ceiling cannot support attribution either way, and that is a finding about the organism to fix, not a verdict on the detector.
+
+**A baseline near its ceiling gets its headroom drawn.** On the comparison plot, draw the headroom (the most any condition could gain, 1 − baseline), and report each gain also as a share of that headroom. A null near the ceiling says little about the treatment, and the page must say so (Yulong, 2026-10-15).
 
 **A number appears only where it discriminates.** A failed attempt is “we could not get it to work”, not take-rates with Wilson bounds; precision on an uninformative quantity dresses a null in rigor it does not have. In prose, one measured quantity per paragraph, with its interval and n; further numbers are a figure or table not yet drawn, and each is attributed to its metric, method, setting and the dataset/model it was measured on.
 
@@ -37,6 +41,8 @@ What would this number be with no signal at all? Put that beside it, not in a fo
 **One sample per judge prompt.** The invariant is no cross-sample influence inside a single prompt, not that calls run one at a time — provider-side batch submission is fine, and often the right runner (`experiments.md`).
 
 **A judge ships with its validation**: agreement against a human-labelled gold subset, with `n` and the statistic named — raw agreement, Cohen's κ, whichever, but say which — and paired comparisons run in both orders, or position bias measured and reported. Which judge produced the numbers goes in the provenance.
+
+**A label-only verdict gets its rationale from the scored call first.** When a scored monitor or judge protocol returns only a label, take the rationale from the scored call itself (its reasoning summary) where one exists. Otherwise ask for the explanation as a follow-up turn in the scored conversation. A fresh, separate call is the last resort. Always record whether the label in the rationale agrees with the scored verdict, and show the disagreements (Yulong, 2026-10-15).
 
 Analysing monitors and judges themselves — errors, disagreements, comparative advantage — is its own checklist: `results-analysis/monitoring.md`.
 
