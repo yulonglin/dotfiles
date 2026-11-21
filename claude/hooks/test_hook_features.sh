@@ -121,6 +121,7 @@ external = {
     "check_git_root.sh",
     "check_venv.sh",
     "anthropic_keycheck.py",
+    "nudge_advisor_skipped.py",
 }
 mixed = {
     "session_rename_commit.sh": (
