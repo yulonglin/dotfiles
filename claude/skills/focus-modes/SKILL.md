@@ -34,7 +34,7 @@ Run `focus` with `dangerouslyDisableSandbox: true`: Cold Turkey's CLI writes the
 | "what's running", "is it in sync", "is X locked strongly enough" | `focus status` |
 | "show me the modes", "let me pick a mode" | bare `focus` at a terminal opens a menu (`claude-tools select`) of the modes, timers, `only`, `break`, `off` and `status`, asks minutes where the command takes them, then runs the pick as if typed; off a terminal (an agent, a pipe) it prints the list instead, as `focus list` always does |
 | "add X to travel / admin" | `focus add travel x.com` (edits the note, then runs sync and screenzen); `--app` for an app |
-| "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled and the next `focus screenzen` overwrites them |
+| "I added something inside Cold Turkey" | `focus pull --dry-run`, then `focus pull`: copies sites and apps Cold Turkey has but the note lacks into `from-<block>` groups that the owning mode, timer or blocklist names. Additions only; ScreenZen edits are not pulled, and the next launchd tick overwrites them within a minute |
 | after editing the note by hand | `focus status`, then `focus sync` (applies the note to Cold Turkey and to ScreenZen for the running mode) |
 | new mode blocks needed | `focus export`, then Yulong imports `~/Downloads/focus-blocks.ctbbl` (Blocks → menu → Import blocks from another installation…) |
 
@@ -95,6 +95,7 @@ When Claude runs it, `focus` delays anything that loosens blocking: stopping a m
 - **A start or stop is sent twice before it fails:** on a second miss `focus` shows a macOS notification as well as the error, so a run from Alfred cannot fail silently. A mode switch ends by stopping every other unlocked mode block it finds running, read fresh, so two modes never stay on together (20 Nov 2026: research stayed on beside comms and kept Messages blocked).
 - **A failed command is not gone:** it stays in the slot and runs when Cold Turkey next comes to the front. Never probe with a real command by calling the CLI by hand. `defaults read com.getcoldturkey.blocker commandArgs` shows what is waiting: a missing key means nothing is.
 - **Mode changes return before ScreenZen finishes:** for a person, `focus` starts a detached `focus sz-apply`, which reads what is running once it holds the lock and sends a notification if it fails. An agent stays in the foreground so that it sees the delay. `sz-apply` is internal.
+- **The launchd tick keeps ScreenZen in line:** every minute, after its own work and even when a Cold Turkey command went unread, it writes ScreenZen from what Cold Turkey runs now, only when the two differ. Failures go to `~/Library/Logs/focus-tick.log`. So a missed switch heals within a minute, and nobody needs to run `focus screenzen` by hand (21 Nov 2026: a messaging stretch kept "🚫 distractions" on and paused Instagram DMs).
 
 ## Changing the lists
 

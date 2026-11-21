@@ -1575,6 +1575,40 @@ def cmd_sz_apply(cfg: dict) -> None:
             notify(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
 
 
+def cmd_tick(cfg: dict) -> None:
+    """Internal: the launchd job, once a minute. Ends what is overdue and starts what
+    is due, else silent; then makes ScreenZen follow Cold Turkey."""
+    try:
+        catch_up(cfg)
+        default_start(cfg)
+        scheduled_start(cfg)
+        window_start(cfg)
+    finally:
+        # A Cold Turkey command that is not read exits before ScreenZen is written,
+        # and the queued command can land minutes later, so ScreenZen kept the old
+        # mode's groups: on 20 Nov a messaging stretch left "🚫 distractions" on and
+        # Instagram DMs paused. Each tick writes ScreenZen from what Cold Turkey runs
+        # now, and only on a difference, so a quiet tick leaves ScreenZen alone.
+        sz_reconcile(cfg)
+
+
+def sz_reconcile(cfg: dict) -> None:
+    """The tick's ScreenZen pass: write ScreenZen from what Cold Turkey runs now when the
+    two differ. A failure goes to the tick log, not a notification, since it would
+    repeat every minute."""
+    if not Path(f"{SZ_DOMAIN}.plist").exists():
+        return  # ScreenZen is not installed here
+    SZ_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with SZ_LOCK.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            cmd_screenzen(cfg, dry_run=False, quiet=True)
+        except (subprocess.CalledProcessError, OSError, ValueError, SystemExit) as e:
+            print(
+                f"{dt.datetime.now():%Y-%m-%d %H:%M} focus tick: ScreenZen not updated: {e}"
+            )
+
+
 def cmd_off(cfg: dict) -> None:
     refuse_if_committed("'off'")
     if read_only():
@@ -4172,10 +4206,7 @@ def main() -> None:
         case "resume":  # internal: the detached waiter that 'break' starts
             cmd_resume(cfg)
         case "tick":  # internal: the launchd job; ends what is overdue, else silent
-            catch_up(cfg)
-            default_start(cfg)
-            scheduled_start(cfg)
-            window_start(cfg)
+            cmd_tick(cfg)
         case "capped-wait":  # internal: the detached waiter that a capped start leaves
             cmd_capped_wait(cfg)
         case "allow":

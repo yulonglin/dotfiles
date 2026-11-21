@@ -4,6 +4,7 @@ import datetime as dt
 import importlib.machinery
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -3371,3 +3372,36 @@ def test_an_agent_is_delayed_not_asked(cfg, reasons, monkeypatch):
     with pytest.raises(SystemExit) as e:
         ct.cmd_start(cfg, "writing")
     assert e.value.code == 3 and asked == []  # queued by the gate, no prompt
+
+
+def test_a_tick_writes_screenzen_even_when_cold_turkey_misses_a_command(
+    cfg, tmp_path, monkeypatch
+):
+    # 20 Nov 2026: a Cold Turkey command went unread, the tick exited before ScreenZen,
+    # and ScreenZen kept the old mode's 🚫 group on through a messaging stretch.
+    plist = tmp_path / "sz" / "prefs.plist"
+    plist.parent.mkdir()
+    plist.write_text("")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", plist.with_suffix(""))
+    monkeypatch.setattr(ct, "SZ_LOCK", tmp_path / "screenzen.lock")
+
+    def unread(cfg):
+        sys.exit("focus: Cold Turkey did not start 'mode: research'")
+
+    monkeypatch.setattr(ct, "catch_up", unread)
+    writes = []
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda cfg, dry_run, **k: writes.append(dry_run)
+    )
+    with pytest.raises(SystemExit):
+        ct.cmd_tick(cfg)
+    assert writes == [False]
+
+
+def test_a_tick_without_screenzen_installed_writes_nothing(cfg, monkeypatch):
+    for step in ("catch_up", "default_start", "scheduled_start", "window_start"):
+        monkeypatch.setattr(ct, step, lambda cfg: None)
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda *a, **k: pytest.fail("wrote ScreenZen")
+    )
+    ct.cmd_tick(cfg)
