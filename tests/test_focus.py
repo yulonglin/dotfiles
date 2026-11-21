@@ -43,6 +43,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "CAPPED_DAY_FILE", tmp_path / "capped-day.json")
     monkeypatch.setattr(ct, "COMMIT_LOG", tmp_path / "commit-log.jsonl")
     monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
+    monkeypatch.setattr(ct, "TICK_APP", tmp_path / "Focus Tick.app")
     monkeypatch.setattr(ct, "COMMIT_FILE", tmp_path / "commit.json")
     monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
     monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
@@ -2532,9 +2533,41 @@ def test_a_refused_install_leaves_no_plist(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(ct.subprocess, "run", run)
+    monkeypatch.setattr(ct, "build_tick_app", lambda: False)
     with pytest.raises(SystemExit, match="refused"):
         ct.cmd_install_agent()
     assert not ct.AGENT_PLIST.exists()
+
+
+def test_the_job_runs_focus_behind_the_launcher_once_it_is_installed():
+    plain = ct.tick_args()
+    assert plain[-1] == "tick" and "focus-tick" not in plain[0]
+    ct.tick_exe().parent.mkdir(parents=True)
+    ct.tick_exe().write_text("")
+    assert ct.tick_args() == [str(ct.tick_exe())] + plain
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin" or not ct.shutil.which("swiftc"), reason="needs swiftc"
+)
+def test_the_launcher_is_built_signed_once_and_passes_the_exit_status(capsys):
+    assert ct.build_tick_app()
+    info = ct.plistlib.loads((ct.TICK_APP / "Contents/Info.plist").read_bytes())
+    assert info["CFBundleIdentifier"] == ct.AGENT_LABEL
+    signed = ct.subprocess.run(
+        ["codesign", "-dv", str(ct.TICK_APP)], capture_output=True, text=True
+    ).stderr
+    assert f"Identifier={ct.AGENT_LABEL}" in signed and "Info.plist entries=" in signed
+    exe = ct.tick_exe()
+    r = ct.subprocess.run(
+        [str(exe), "/bin/sh", "-c", "echo hi; exit 3"], capture_output=True, text=True
+    )
+    assert (r.returncode, r.stdout) == (3, "hi\n")
+    # An unchanged source is not rebuilt: a rebuild would cost the macOS grant.
+    before = exe.stat().st_mtime_ns
+    capsys.readouterr()
+    assert ct.build_tick_app()
+    assert exe.stat().st_mtime_ns == before and capsys.readouterr().out == ""
 
 
 def test_a_commitment_leaves_a_keeper_that_ticks_until_it_ends(commit_env, monkeypatch):

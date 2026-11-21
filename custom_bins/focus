@@ -152,6 +152,7 @@ import argparse
 import copy
 import datetime as dt
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -175,6 +176,15 @@ DEFAULT_CONFIG = Path.home() / "vault/tooling/dotfiles/config/cold-turkey.md"
 CONFIG_PATH = DEFAULT_CONFIG  # set from --config in main; children are given the same
 AGENT_LABEL = "com.yulonglin.focus.tick"
 AGENT_PLIST = Path.home() / f"Library/LaunchAgents/{AGENT_LABEL}.plist"
+# The launcher app the launchd job runs, so macOS holds a stable app responsible for
+# the tick, not uv: see tools/focus-tick/main.swift for why.
+TICK_APP = Path(
+    os.environ.get(
+        "FOCUS_TICK_APP",
+        Path.home() / "Library/Application Support/focus/Focus Tick.app",
+    )
+)
+TICK_SRC = Path(__file__).resolve().parent.parent / "tools/focus-tick/main.swift"
 CT_BIN = Path(
     "/Applications/Cold Turkey Blocker.app/Contents/MacOS/Cold Turkey Blocker"
 )
@@ -1124,6 +1134,7 @@ def cmd_install_agent() -> None:
     A plist launchctl refuses is removed, so its presence never reads as a job."""
     path = os.environ.get("PATH", "")
     extra = ["/opt/homebrew/bin", str(Path.home() / ".local/bin"), "/usr/bin", "/bin"]
+    build_tick_app()
     plist = {
         "Label": AGENT_LABEL,
         "ProgramArguments": tick_args(),
@@ -1155,8 +1166,75 @@ def cmd_install_agent() -> None:
 
 
 def tick_args() -> list[str]:
-    """The arguments the launchd job must run: this focus, this note, 'tick'."""
-    return [str(Path(sys.argv[0]).resolve()), "--config", str(CONFIG_PATH), "tick"]
+    """The arguments the launchd job must run: this focus, this note, 'tick', behind
+    the Focus Tick launcher when it is installed."""
+    focus = [str(Path(sys.argv[0]).resolve()), "--config", str(CONFIG_PATH), "tick"]
+    return ([str(tick_exe())] if tick_exe().exists() else []) + focus
+
+
+def tick_exe() -> Path:
+    return TICK_APP / "Contents/MacOS/focus-tick"
+
+
+def build_tick_app() -> bool:
+    """Build, sign and install the Focus Tick launcher from tools/focus-tick when its
+    source changed; True when it is in place. A rebuild changes the ad-hoc signature,
+    and macOS then asks again for the App Data grant, so an unchanged source is never
+    rebuilt. Without swiftc or the source, the job runs focus directly, as before."""
+    if not TICK_SRC.exists() or not shutil.which("swiftc"):
+        return tick_exe().exists()
+    digest = hashlib.sha256(TICK_SRC.read_bytes()).hexdigest()
+    stamp = TICK_APP / "Contents/Resources/source.sha256"
+    if tick_exe().exists() and stamp.exists() and stamp.read_text().strip() == digest:
+        return True
+    with tempfile.TemporaryDirectory() as tmp:
+        app = Path(tmp) / TICK_APP.name
+        (app / "Contents/MacOS").mkdir(parents=True)
+        (app / "Contents/Resources").mkdir()
+        (app / "Contents/Info.plist").write_bytes(
+            plistlib.dumps(
+                {
+                    "CFBundleIdentifier": AGENT_LABEL,
+                    "CFBundleName": "Focus Tick",
+                    "CFBundleDisplayName": "Focus Tick",
+                    "CFBundleExecutable": "focus-tick",
+                    "CFBundlePackageType": "APPL",
+                    "CFBundleVersion": digest[:12],
+                    "CFBundleShortVersionString": "1.0",
+                    "LSUIElement": True,  # no Dock icon, no menu bar
+                    "LSBackgroundOnly": True,
+                }
+            )
+        )
+        # The stamp is written before signing, so the signature seals it.
+        (app / "Contents/Resources/source.sha256").write_text(digest + "\n")
+        exe = app / "Contents/MacOS/focus-tick"
+        for cmd in (
+            ["swiftc", "-O", "-o", str(exe), str(TICK_SRC)],
+            [
+                "codesign",
+                "--force",
+                "--sign",
+                "-",
+                "--identifier",
+                AGENT_LABEL,
+                str(app),
+            ],
+        ):
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            if r.returncode:
+                print(
+                    f"focus: Focus Tick not built ({cmd[0]}: {r.stderr.strip()[-300:]}); "
+                    "the job runs focus directly",
+                    file=sys.stderr,
+                )
+                return tick_exe().exists()
+        TICK_APP.parent.mkdir(parents=True, exist_ok=True)
+        if TICK_APP.exists():
+            shutil.rmtree(TICK_APP)
+        shutil.copytree(app, TICK_APP, symlinks=True)
+    print(f"built {TICK_APP}: allow it once when macOS asks about ScreenZen's data")
+    return True
 
 
 def launchd_print() -> str | None:
