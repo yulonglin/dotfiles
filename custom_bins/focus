@@ -3411,7 +3411,8 @@ def refuse_if_committed(what: str, mode: str | None = None) -> None:
         sys.exit(
             f"focus: a committed block runs ({s['block']!r} until {end:%H:%M}), so "
             f"{what} is refused. 'focus allow SITE' allows a site and 'focus end' ends "
-            "it, each once Cold Turkey's lock runs out."
+            "it, each after you type back a long random text, once Cold Turkey's lock "
+            "runs out."
         )
 
 
