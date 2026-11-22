@@ -1102,14 +1102,13 @@ def next_break_at(cfg: dict) -> float | None:
     return at if time.time() < at else None
 
 
-def cmd_break(cfg: dict, args: list[str]) -> None:
-    """Stop the running modes for N minutes; they start again when the break ends."""
+def cmd_break(cfg: dict, args: list[str], emergency: bool = False) -> None:
+    """Stop the running modes for N minutes; they start again when the break ends.
+    `emergency` (--emergency) skips only the spacing between breaks, after a
+    typed-back text: the cap, a commitment and an only session still hold (Yulong,
+    2026-11-22)."""
     refuse_if_committed("a break")
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
-    # --emergency skips only the spacing between breaks, after a typed-back text: the
-    # cap, a commitment and an only session still hold (Yulong, 2026-11-22).
-    emergency = "--emergency" in args
-    args = [x for x in args if x != "--emergency"]
     minutes = args[0] if args else "15"
     if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
         sys.exit(f"focus: a break is 1 to {cap} minutes, got {minutes!r}")
@@ -4370,7 +4369,7 @@ def cmd_overview(cfg: dict) -> None:
     )
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="focus",
         description="Switch Cold Turkey and ScreenZen between work modes defined in one note.",
@@ -4410,8 +4409,17 @@ def main() -> None:
         help="a mode: keep its block locked for MINUTES (default 60); only "
         "'focus allow' and 'focus end' change it",
     )
+    p.add_argument(
+        "--emergency",
+        action="store_true",
+        help="break: skip the wait between breaks after typing back a random text",
+    )
+    return p
+
+
+def main() -> None:
     # Intermixed, so a flag may come before or after the minutes: 'focus x --day 90'.
-    a = p.parse_intermixed_args()
+    a = build_parser().parse_intermixed_args()
     # Before load_config: uninstalling must work when the config note is gone.
     if a.command == "uninstall-agent":
         cmd_uninstall_agent()
@@ -4443,7 +4451,7 @@ def main() -> None:
         case "off":
             cmd_off(cfg)
         case "break":
-            cmd_break(cfg, a.args)
+            cmd_break(cfg, a.args, emergency=a.emergency)
         case "resume":  # internal: the detached waiter that 'break' starts
             cmd_resume(cfg)
         case "tick":  # internal: the launchd job; ends what is overdue, else silent
