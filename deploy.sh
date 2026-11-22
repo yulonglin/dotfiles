@@ -1514,6 +1514,15 @@ queue_scheduled_job() {
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
     fi
 
+    # Weekly nudge before the Sunday review: lists Things to-dos with no project
+    # or area as one Today to-do of links. Read-only on the Things database.
+    if [[ "$DEPLOY_THINGS_ORPHANS" == "true" ]] && is_macos; then
+        queue_scheduled_job things-orphans "$DOT_DIR/scripts/cleanup/setup_things_orphans.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)THINGS_ORPHANS]} )); then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_things_orphans.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_things_orphans.sh" --uninstall >/dev/null 2>&1 || true
+    fi
+
     if [[ "$DEPLOY_COREAUDIO_WATCH" == "true" ]] && is_macos; then
         queue_scheduled_job coreaudio-watch "$DOT_DIR/scripts/cleanup/setup_coreaudio_watch.sh"
     fi
