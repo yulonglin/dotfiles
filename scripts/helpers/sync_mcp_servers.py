@@ -66,7 +66,7 @@ def desired_claude_text(path: Path, servers: dict[str, dict[str, Any]]) -> str:
 
 
 def desired_antigravity_text(path: Path, servers: dict[str, dict[str, Any]]) -> str:
-    if path.exists():
+    if path.exists() and path.read_text().strip():
         data = load_json_object(path)
     else:
         data = {}

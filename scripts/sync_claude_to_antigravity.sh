@@ -222,9 +222,11 @@ target = Path(sys.argv[1])
 data = {"mcpServers": {}}
 if target.exists():
     try:
-        loaded = json.loads(target.read_text(encoding="utf-8"))
-        if isinstance(loaded, dict):
-            data = loaded
+        raw = target.read_text(encoding="utf-8").strip()
+        if raw:
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                data = loaded
     except (OSError, json.JSONDecodeError) as exc:
         print(f"  Warning: {target} is not valid JSON ({exc}); leaving untouched", file=sys.stderr)
         sys.exit(0)

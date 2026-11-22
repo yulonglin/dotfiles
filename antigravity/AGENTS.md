@@ -20,3 +20,4 @@ Shared Claude guidance describes intent; adapt tool-specific wording to the tool
 - The five standards checklists stay at `~/.claude/checklists/` (writing, presentation, results-analysis, research, experiments); read them from there when a rule or skill points to them.
 - `claude/rules/background-jobs.md` applies only to Claude Code background jobs (`~/.claude/jobs/`) and is intentionally excluded here.
 - Claude-only hooks, plugins, `model-router` subagent routing, and `mcp__claude_ai_*` hosted connectors are not active in Antigravity unless configured natively in `~/.gemini/config/`.
+- **Never put a copyable code block or shell command inside a `>` blockquote** — `agy` draws `│` sidebar pipes on every quoted line, which copy into the clipboard and break pasted commands. Put the warning/caveat in the blockquote if needed, and place the fenced code block immediately below it.

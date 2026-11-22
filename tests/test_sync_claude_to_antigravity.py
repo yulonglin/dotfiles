@@ -81,6 +81,18 @@ def test_sync_projects_skills_rules_and_mcp(tmp_path: Path) -> None:
     assert mcp["mcpServers"]["context7"] == {"url": "https://mcp.context7.com/mcp"}
 
 
+def test_sync_handles_preexisting_empty_mcp_config(tmp_path: Path) -> None:
+    dotfiles, claude_dir = make_fixture_dotfiles(tmp_path)
+    target = tmp_path / "gemini-config"
+    target.mkdir(parents=True)
+    (target / "mcp_config.json").write_text("")
+
+    res = run_sync(target, dotfiles, claude_dir)
+    assert res.returncode == 0, res.stderr
+    mcp = json.loads((target / "mcp_config.json").read_text())
+    assert mcp["mcpServers"]["context7"] == {"url": "https://mcp.context7.com/mcp"}
+
+
 def test_sync_prunes_stale_managed_rules_and_preserves_custom_rules(tmp_path: Path) -> None:
     dotfiles, claude_dir = make_fixture_dotfiles(tmp_path)
     target = tmp_path / "gemini-config"

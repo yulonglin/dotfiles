@@ -143,3 +143,21 @@ def test_antigravity_config_creates_and_preserves_unmanaged(tmp_path: Path) -> N
     assert recheck.returncode == 0, recheck.stdout
     assert "Antigravity MCP: up to date" in recheck.stdout
     assert "context7" in json.loads(ag.read_text())["mcpServers"]
+
+
+def test_antigravity_config_handles_empty_zero_byte_file(tmp_path: Path) -> None:
+    source, claude, codex = write_sample_files(tmp_path)
+    ag = tmp_path / "gemini-config" / "mcp_config.json"
+    ag.parent.mkdir(parents=True)
+    ag.write_text("")
+
+    apply_res = run_sync(source, claude, codex, "--antigravity-config", str(ag), "--apply")
+    assert apply_res.returncode == 0, apply_res.stderr
+    assert json.loads(ag.read_text()) == {
+        "mcpServers": {
+            "bear": {
+                "command": "/Applications/Bear.app/Contents/MacOS/bearcli",
+                "args": ["mcp-server"],
+            }
+        }
+    }
