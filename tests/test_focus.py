@@ -3295,6 +3295,53 @@ def test_automatic_starts_wait_for_an_open_window(capped_env, tmp_path):
     assert ct.read_state(ct.SCHEDULED_FILE) is None  # the day is not used up
 
 
+def asleep_display(monkeypatch):
+    """Drop every Cold Turkey command while asleep[0] is True, as the agent does with
+    the display off (21 Nov 2026: the 21:30 start and the 22:00 stop were never read)."""
+    send, asleep = ct.ct_send, [True]
+    monkeypatch.setattr(ct, "ct_send", lambda *a: None if asleep[0] else send(*a))
+    return asleep
+
+
+def test_a_scheduled_start_cold_turkey_missed_is_retried(
+    capped_env, tmp_path, monkeypatch
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + SCHEDULED))
+    asleep = asleep_display(monkeypatch)
+    at = dt.datetime(2026, 11, 17, 21, 30)
+    clock.now = at.timestamp()
+    with pytest.raises(SystemExit, match="did not"):
+        ct.scheduled_start(cfg, at)
+    assert ct.read_state(ct.SCHEDULED_FILE) is None  # the day is not used up
+    asleep[0] = False
+    at += dt.timedelta(minutes=6)
+    clock.now = at.timestamp()
+    assert ct.scheduled_start(cfg, at) == "writing"
+    assert on(blocks) == ["mode: writing"] and ct.read_capped()["off_after"]
+
+
+def test_a_window_stop_cold_turkey_missed_is_retried(
+    capped_env, tmp_path, monkeypatch
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    asleep = asleep_display(monkeypatch)
+    at = dt.datetime(2026, 11, 17, 12, 30)
+    clock.now = at.timestamp()
+    with pytest.raises(SystemExit, match="did not stop 'mode: research'"):
+        ct.window_start(cfg, at)
+    assert ct.read_state(ct.WINDOW_FILE) is None and on(blocks) == ["mode: research"]
+    asleep[0] = False
+    at += dt.timedelta(minutes=18)
+    clock.now = at.timestamp()
+    assert ct.window_start(cfg, at) == "12:30-13:00"
+    assert on(blocks) == [] and ct.read_break()["modes"] == ["research"]
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
 def test_a_window_close_that_fails_is_retried(capped_env, tmp_path, monkeypatch):
     _, blocks, clock, _, _ = capped_env
     cfg = ct.load_config(note_with(tmp_path, WINDOWS))
