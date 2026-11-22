@@ -117,9 +117,11 @@ external = {
     "nudge_remember.sh",
     "simplify_nudge.sh",
     "nudge_vault_lint.sh",
+    "nudge_silent_turn.sh",
     "check_git_root.sh",
     "check_venv.sh",
     "anthropic_keycheck.py",
+    "nudge_advisor_skipped.py",
 }
 mixed = {
     "session_rename_commit.sh": (
@@ -155,8 +157,10 @@ operational = {
     "auto_commit.sh",
     "clean_plugin_symlinks_session.sh",
     "detect_repo_trust.sh",
+    "elapsed_stamp.sh",
     "fix_hook_permissions.sh",
     "hook_feature.sh",
+    "inject_timestamp.sh",
     "inject_vault_layout.sh",
     "mark_failed_sync.sh",
     "network_audit.py",

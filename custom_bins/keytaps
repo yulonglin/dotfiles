@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""List the processes holding macOS keyboard event taps, and flag Claude computer use.
+
+A key that works in the Accessibility Keyboard but does nothing in every app is
+being swallowed by an event tap. Only a tap that is not listen-only can drop a
+key, so those are marked BLOCKING. The process named in Claude Code's
+computer-use lock is flagged: its Esc-to-abort hotkey is a blocking key-down tap
+that eats Esc system-wide while computer use stays connected (2026-11-21).
+
+Usage:
+  keytaps                  table of keyboard taps
+  keytaps --json           same, as JSON
+  keytaps --computer-use   exit 0 and print the computer-use holder (JSON) if its
+                           blocking tap is live; exit 1 if not; exit 2 on error
+"""
+
+from __future__ import annotations
+
+import argparse
+import ctypes
+import ctypes.util
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+KEY_DOWN, KEY_UP, FLAGS_CHANGED = 10, 11, 12
+KEYBOARD_MASK = (1 << KEY_DOWN) | (1 << KEY_UP) | (1 << FLAGS_CHANGED)
+LISTEN_ONLY = 1
+LOCK = Path(
+    os.environ.get(
+        "CLAUDE_COMPUTER_USE_LOCK", Path.home() / ".claude/computer-use.lock"
+    )
+)
+
+
+class TapInfo(ctypes.Structure):
+    _fields_ = [
+        ("eventTapID", ctypes.c_uint32),
+        ("tapPoint", ctypes.c_uint32),
+        ("options", ctypes.c_uint32),
+        ("eventsOfInterest", ctypes.c_uint64),
+        ("tappingProcess", ctypes.c_int32),
+        ("processBeingTapped", ctypes.c_int32),
+        ("enabled", ctypes.c_bool),
+        ("minUsecLatency", ctypes.c_float),
+        ("avgUsecLatency", ctypes.c_float),
+        ("maxUsecLatency", ctypes.c_float),
+    ]
+
+
+def list_taps() -> list[TapInfo]:
+    cg = ctypes.CDLL(
+        ctypes.util.find_library("CoreGraphics")
+        or "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+    )
+    count = ctypes.c_uint32(0)
+    if cg.CGGetEventTapList(0, None, ctypes.byref(count)) != 0:
+        raise OSError("CGGetEventTapList failed")
+    taps = (TapInfo * count.value)()
+    if cg.CGGetEventTapList(count, taps, ctypes.byref(count)) != 0:
+        raise OSError("CGGetEventTapList failed")
+    return list(taps[: count.value])
+
+
+_libproc = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib")
+
+
+def proc_path(pid: int) -> str:
+    buf = ctypes.create_string_buffer(4096)
+    n = _libproc.proc_pidpath(pid, buf, ctypes.sizeof(buf))
+    return buf.value.decode(errors="replace") if n > 0 else "?"
+
+
+def proc_name(path: str) -> str:
+    if path == "?":
+        return "?"
+    for part in path.split("/"):
+        if part.endswith(".app"):
+            return part[:-4]
+    return os.path.basename(path)
+
+
+def computer_use_lock() -> dict | None:
+    try:
+        data = json.loads(LOCK.read_text())
+        return {
+            "pid": int(data["pid"]),
+            "sessionId": str(data.get("sessionId", "")),
+            "acquiredAt": data.get("acquiredAt"),
+        }
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def keyboard_taps() -> list[dict]:
+    lock = computer_use_lock()
+    seen, rows = set(), []
+    for t in list_taps():
+        mask = t.eventsOfInterest & KEYBOARD_MASK
+        if not mask:
+            continue
+        blocking = t.options != LISTEN_ONLY
+        key = (t.tappingProcess, blocking, mask, t.enabled)
+        if key in seen:
+            continue
+        seen.add(key)
+        path = proc_path(t.tappingProcess)
+        events = [
+            n
+            for b, n in (
+                (KEY_DOWN, "keyDown"),
+                (KEY_UP, "keyUp"),
+                (FLAGS_CHANGED, "flags"),
+            )
+            if mask & (1 << b)
+        ]
+        row = {
+            "pid": t.tappingProcess,
+            "process": proc_name(path),
+            "path": path,
+            "blocking": blocking,
+            "enabled": bool(t.enabled),
+            "events": events,
+        }
+        if lock and lock["pid"] == t.tappingProcess:
+            row["computer_use"] = lock
+        rows.append(row)
+    rows.sort(key=lambda r: (not (r["blocking"] and r["enabled"]), r["pid"]))
+    return rows
+
+
+def live_computer_use_tap(rows: list[dict]) -> dict | None:
+    for r in rows:
+        if (
+            "computer_use" in r
+            and r["blocking"]
+            and r["enabled"]
+            and "keyDown" in r["events"]
+        ):
+            return r
+    return None
+
+
+def paint(text: str, code: str) -> str:
+    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+        return f"\033[{code}m{text}\033[0m"
+    return text
+
+
+def since(ms) -> str:
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000).strftime("%a %H:%M")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return "?"
+
+
+def print_table(rows: list[dict]) -> None:
+    if not rows:
+        print("No process holds a keyboard event tap.")
+        return
+    print(
+        paint(f"{'PID':>7}  {'MODE':<11}  {'STATE':<8}  {'EVENTS':<20}  PROCESS", "2")
+    )
+    for r in rows:
+        mode = (
+            paint(f"{'BLOCKING':<11}", "33")
+            if r["blocking"]
+            else paint(f"{'listen-only':<11}", "2")
+        )
+        state = (
+            paint(f"{'enabled':<8}", "32")
+            if r["enabled"]
+            else paint(f"{'disabled':<8}", "2")
+        )
+        print(
+            f"{r['pid']:>7}  {mode}  {state}  {','.join(r['events']):<20}  {paint(r['process'], '1')}"
+        )
+        if "computer_use" in r:
+            cu = r["computer_use"]
+            note = f"Claude computer use, session {cu['sessionId'][:8]}, lock since {since(cu['acquiredAt'])}"
+            if r["blocking"] and r["enabled"] and "keyDown" in r["events"]:
+                note += " -- swallows Esc system-wide; disconnect computer-use via /mcp in that session, or end it"
+                print("         " + paint(f"^ {note}", "31"))
+            else:
+                print("         " + paint(f"^ {note}", "2"))
+    print(
+        paint(
+            "BLOCKING taps can drop keys. A key dead in every app usually belongs to one of them.",
+            "2",
+        )
+    )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__.split("\n\n", 2)[2],
+    )
+    ap.add_argument("--json", action="store_true", help="print the taps as JSON")
+    ap.add_argument(
+        "--computer-use",
+        action="store_true",
+        help="exit 0 if the computer-use lock holder has a live blocking key-down tap",
+    )
+    args = ap.parse_args()
+    if sys.platform != "darwin":
+        print("keytaps: macOS only", file=sys.stderr)
+        return 2
+    try:
+        rows = keyboard_taps()
+    except OSError as e:
+        print(f"keytaps: {e}", file=sys.stderr)
+        return 2
+    if args.computer_use:
+        hit = live_computer_use_tap(rows)
+        if hit:
+            print(json.dumps(hit))
+            return 0
+        return 1
+    if args.json:
+        print(json.dumps(rows, indent=2))
+    else:
+        print_table(rows)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

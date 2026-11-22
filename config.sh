@@ -67,6 +67,7 @@ DEPLOY_REGISTRY=(
     "gitui|gitui theme (theme-reactive, symlinked)|all|true|Shell & Editors"
     "claude|Claude Code config symlink (~/.claude)|all|true|AI & Apps"
     "codex|Codex CLI config symlink (~/.codex)|all|true|AI & Apps"
+    "antigravity|Antigravity global config (~/.gemini/config)|all|true|AI & Apps"
     "serena|Serena MCP server config (symlinked)|all|false|AI & Apps"
     "git-config|gitconfig, global gitignore, ripgrep config|all|true|Git"
     "git-hooks|Global pre-commit secret detection|all|true|Git"
@@ -90,6 +91,7 @@ DEPLOY_REGISTRY=(
     "file-apps|Default editor for coding file types|macos|true|macOS"
     "keyboard|Keyboard repeat rate enforcement at login|macos|true|macOS"
     "kill-sky-cua|Kill OpenAI Sky Computer Use helpers (AX-polling lag watchdog)|macos|true|macOS"
+    "things-orphans|Weekly Sunday check for Things to-dos with no project or area (adds a Today to-do linking them)|macos|true|macOS"
     "coreaudio-watch|Notify when CoreAudio wedges and audio apps hang (and when it recovers)|macos|true|macOS"
     "bedtime|Bedtime timezone enforcement|macos|false|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
@@ -364,6 +366,7 @@ apply_profile() {
             DEPLOY_GIT_HOOKS=true
             DEPLOY_CLAUDE=true
             DEPLOY_CODEX=true
+            DEPLOY_ANTIGRAVITY=true
             DEPLOY_PKG_CONFIGS=true
             DEPLOY_CLAUDE_TOOLS=true
             ;;

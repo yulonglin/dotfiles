@@ -4,6 +4,7 @@ import datetime as dt
 import importlib.machinery
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ def load():
 ct = load()
 REAL_CAN_SHOW_DIALOG = ct.can_show_dialog
 REAL_WAKE = ct.wake_agent  # the autouse fixture stubs ct.wake_agent
+REAL_LOOSENING_REASON = ct.loosening_reason  # stubbed too; its own tests restore it
 
 
 @pytest.fixture(autouse=True)
@@ -41,15 +43,19 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "CAPPED_DAY_FILE", tmp_path / "capped-day.json")
     monkeypatch.setattr(ct, "COMMIT_LOG", tmp_path / "commit-log.jsonl")
     monkeypatch.setattr(ct, "AGENT_PLIST", tmp_path / "agent.plist")
+    monkeypatch.setattr(ct, "TICK_APP", tmp_path / "Focus Tick.app")
     monkeypatch.setattr(ct, "COMMIT_FILE", tmp_path / "commit.json")
     monkeypatch.setattr(ct, "COMMIT_LOCK", tmp_path / "commit.lock")
     monkeypatch.setattr(ct, "CAPPED_LOCK", tmp_path / "capped.lock")
     monkeypatch.setattr(ct, "DEFAULT_FILE", tmp_path / "default.json")
     monkeypatch.setattr(ct, "SCHEDULED_FILE", tmp_path / "scheduled.json")
+    monkeypatch.setattr(ct, "WINDOW_FILE", tmp_path / "window.json")
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
+    # Most tests switch modes without a person to ask; the reason tests restore it.
+    monkeypatch.setattr(ct, "loosening_reason", lambda *a, **k: None)
     monkeypatch.setattr(ct, "SZ_DOMAIN", tmp_path / "no-screenzen" / "prefs")
     monkeypatch.setattr(
         ct, "sz_export", lambda: pytest.fail("test reached real ScreenZen prefs")
@@ -1762,7 +1768,7 @@ def test_the_picker_offers_contents_and_hides_keep_and_current_picks(
 
 def test_cancelling_the_picker_changes_nothing(only_cfg, session_env, monkeypatch):
     blocks, writes, *_ = session_env
-    monkeypatch.setattr(ct, "pick_groups", lambda cfg, exclude: [])
+    monkeypatch.setattr(ct, "pick_groups", lambda cfg, exclude, preset=(): [])
     ct.cmd_only(only_cfg, [])
     assert ct.read_only() is None and not writes
     assert blocks["mode: research"]["enabled"] == "true"
@@ -1827,7 +1833,9 @@ def test_an_app_token_without_spaces_names_an_ungrouped_app(
         ct.resolve_pick(only_cfg, "app:Telegram")  # grouped, so not offered as an app
 
 
-def test_alfred_only_piles_picks_into_the_query(only_cfg, tmp_path, capsys, monkeypatch):
+def test_alfred_only_piles_picks_into_the_query(
+    only_cfg, tmp_path, capsys, monkeypatch
+):
     fake_app(tmp_path, "Zotero")
     fake_app(tmp_path, "iPhone Mirroring")
     monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
@@ -2232,15 +2240,58 @@ def test_renewing_straight_away_keeps_the_mode_from_before(capped_env, monkeypat
     assert on(blocks) == ["mode: research"]
 
 
-def test_an_empty_reason_changes_nothing(capped_env, monkeypatch):
+def test_a_blank_reason_is_refused_and_asked_again(capped_env, monkeypatch, capsys):
     cfg, blocks, clock, *_ = capped_env
     ct.cmd_capped(cfg, "writing", [])
     clock.advance(30)
     ct.end_capped(cfg)
-    at_terminal(monkeypatch, ["  "])
+    prompts = at_terminal(monkeypatch, ["", "  \t ", "the draft is due"])
+    ct.cmd_capped(cfg, "writing", [])
+    assert len(prompts) == 3
+    assert capsys.readouterr().err.count("cannot be empty or only spaces") == 2
+    (entry,) = log_lines()
+    assert entry["reason"] == "the draft is due"
+    assert on(blocks) == ["mode: writing"]
+
+
+def test_ctrl_c_at_the_reason_prompt_changes_nothing(capped_env, monkeypatch):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    answers = ["  "]
+    at_terminal(monkeypatch, answers)
+
+    def give_up(prompt=""):
+        if answers:
+            return answers.pop(0)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", give_up)
     with pytest.raises(SystemExit, match="no reason"):
         ct.cmd_capped(cfg, "writing", [])
     assert on(blocks) == ["mode: research"] and log_lines() == []
+
+
+def test_a_blank_dialog_answer_shows_the_dialog_again_with_an_error(
+    capped_env, monkeypatch
+):
+    cfg, blocks, clock, *_ = capped_env
+    ct.cmd_capped(cfg, "writing", [])
+    clock.advance(30)
+    ct.end_capped(cfg)
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: True)
+    answers, calls = [" \n", "email the landlord\n"], []
+
+    def fake_run(cmd, **k):
+        calls.append(cmd)
+        return ct.subprocess.CompletedProcess(cmd, 0, stdout=answers.pop(0))
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_run)
+    ct.cmd_capped(cfg, "writing", [])
+    assert calls[0][-1] == "writing again today"
+    assert "cannot be empty" in calls[1][-1]
+    assert log_lines()[0]["reason"] == "email the landlord"
 
 
 def test_a_new_day_starts_free_again(capped_env):
@@ -2482,9 +2533,41 @@ def test_a_refused_install_leaves_no_plist(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(ct.subprocess, "run", run)
+    monkeypatch.setattr(ct, "build_tick_app", lambda: False)
     with pytest.raises(SystemExit, match="refused"):
         ct.cmd_install_agent()
     assert not ct.AGENT_PLIST.exists()
+
+
+def test_the_job_runs_focus_behind_the_launcher_once_it_is_installed():
+    plain = ct.tick_args()
+    assert plain[-1] == "tick" and "focus-tick" not in plain[0]
+    ct.tick_exe().parent.mkdir(parents=True)
+    ct.tick_exe().write_text("")
+    assert ct.tick_args() == [str(ct.tick_exe())] + plain
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin" or not ct.shutil.which("swiftc"), reason="needs swiftc"
+)
+def test_the_launcher_is_built_signed_once_and_passes_the_exit_status(capsys):
+    assert ct.build_tick_app()
+    info = ct.plistlib.loads((ct.TICK_APP / "Contents/Info.plist").read_bytes())
+    assert info["CFBundleIdentifier"] == ct.AGENT_LABEL
+    signed = ct.subprocess.run(
+        ["codesign", "-dv", str(ct.TICK_APP)], capture_output=True, text=True
+    ).stderr
+    assert f"Identifier={ct.AGENT_LABEL}" in signed and "Info.plist entries=" in signed
+    exe = ct.tick_exe()
+    r = ct.subprocess.run(
+        [str(exe), "/bin/sh", "-c", "echo hi; exit 3"], capture_output=True, text=True
+    )
+    assert (r.returncode, r.stdout) == (3, "hi\n")
+    # An unchanged source is not rebuilt: a rebuild would cost the macOS grant.
+    before = exe.stat().st_mtime_ns
+    capsys.readouterr()
+    assert ct.build_tick_app()
+    assert exe.stat().st_mtime_ns == before and capsys.readouterr().out == ""
 
 
 def test_a_commitment_leaves_a_keeper_that_ticks_until_it_ends(commit_env, monkeypatch):
@@ -2978,3 +3061,403 @@ def test_bare_focus_piped_gets_the_list_though_stdin_is_a_terminal(cfg, monkeypa
     monkeypatch.setattr(ct.shutil, "which", lambda name: "/bin/claude-tools")
     monkeypatch.setattr(ct.subprocess, "run", lambda *a, **k: pytest.fail("menu drawn"))
     assert ct.cmd_menu(cfg) is False
+
+
+def avoid_blocks(cfg):
+    avoid = {
+        "enabled": "true",
+        "lock": "none",
+        "web": ["x.com", "*casino*"],
+        "exceptions": ["file://*.*"],
+        "apps": [],
+    }
+    return {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+        "avoid": avoid,
+    }
+
+
+def test_sync_adds_an_always_on_blocks_missing_allowed_site(cfg, monkeypatch, capsys):
+    # status says "Run 'focus sync', which adds it" for this; sync used to skip it.
+    blocks = avoid_blocks(cfg)
+    fake_cold_turkey(monkeypatch, blocks)
+    assert "avoid:localhost" in ct.sync_loosen(cfg, blocks)  # an agent waits for it
+    ct.cmd_sync(cfg)
+    assert blocks["avoid"]["exceptions"] == ["file://*.*", "localhost"]
+    assert "avoid: added localhost" in capsys.readouterr().out
+
+
+def test_a_locked_always_on_block_that_refuses_an_allowed_site_is_a_hand_edit(
+    cfg, monkeypatch, capsys
+):
+    fake_cold_turkey(monkeypatch, avoid_blocks(cfg), refuse={"avoid"})
+    ct.cmd_sync(cfg)  # not a failed sync: a lock is expected on these blocks
+    out = capsys.readouterr().out
+    assert "avoid: could not add localhost" in out
+    assert "did not take the new allowed site localhost" in out
+
+
+@pytest.fixture
+def picks_cfg(only_cfg, tmp_path, monkeypatch):
+    """The only note with defaults: a group, an installed app, and one not installed."""
+    fake_app(tmp_path, "Zotero")
+    monkeypatch.setattr(ct, "APP_DIRS", [tmp_path])
+    p = tmp_path / "default.md"
+    p.write_text(
+        ONLY_NOTE.replace(
+            "  minutes: 30", "  minutes: 30\n  default: [bear, Zotero, Missing]"
+        )
+    )
+    return ct.load_config(p)
+
+
+def test_defaults_name_groups_and_installed_apps(picks_cfg):
+    assert ct.only_defaults(picks_cfg) == ["bear", "app:Zotero"]
+
+
+def test_named_picks_bring_the_defaults_and_no_leaves_one_out(picks_cfg, session_env):
+    ct.cmd_only(picks_cfg, ["llms", "no:zotero", "45"])
+    assert ct.read_only()["groups"] == ["bear", "llms"]
+
+
+def test_the_picker_starts_with_the_defaults_ticked(picks_cfg, monkeypatch):
+    monkeypatch.setattr(ct.sys, "stdin", type("T", (), {"isatty": lambda s: True})())
+    monkeypatch.setattr(ct.shutil, "which", lambda n: "/bin/fzf")
+    seen = {}
+
+    def fake_fzf(cmd, input, **k):
+        seen["cmd"], seen["rows"] = cmd, input.split("\n")
+        return ct.subprocess.CompletedProcess(cmd, 0, stdout=seen["rows"][1] + "\n")
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_fzf)
+    # Unticking bear in fzf leaves Zotero, and that is all that comes back.
+    picked = ct.pick_groups(picks_cfg, [], ct.only_defaults(picks_cfg))
+    assert picked == ["app:Zotero"]
+    assert [r.split("\t")[0] for r in seen["rows"][:2]] == ["bear", "app:Zotero"]
+    assert "--bind=load:pos(1)+select+pos(2)+select+first" in seen["cmd"]
+    assert f"--header={ct.PICK_HELP}\nPicked 2: bear, Zotero" in seen["cmd"]
+
+
+def test_a_bare_only_offers_the_defaults_to_the_picker(
+    picks_cfg, session_env, monkeypatch
+):
+    got = []
+    monkeypatch.setattr(
+        ct, "pick_groups", lambda cfg, exclude, preset=(): got.append(preset) or []
+    )
+    ct.cmd_only(picks_cfg, [])
+    assert got == [["bear", "app:Zotero"]]
+
+
+def test_no_takes_a_pick_out_of_a_running_session(picks_cfg, session_env):
+    _, writes, *_ = session_env
+    ct.write_only({"groups": ["bear", "llms"], "until": 2e9, "back": []})
+    ct.cmd_only(picks_cfg, ["no:bear"])
+    assert ct.read_only()["groups"] == ["llms"]
+    assert writes == [[ct.ONLY]]
+
+
+def test_alfred_starts_from_the_defaults_and_no_drops_one(picks_cfg, capsys):
+    rows = alfred_rows(capsys, picks_cfg, "only ")
+    assert rows[0]["arg"] == "only bear app:Zotero 30"
+    bear = next(r for r in rows if r["title"] == "✓ bear")
+    assert bear["subtitle"].startswith("default")
+    assert bear["autocomplete"] == "only no:bear "
+
+    rows = alfred_rows(capsys, picks_cfg, "only no:bear ")
+    assert rows[0]["arg"] == "only app:Zotero no:bear 30"
+    back = next(r for r in rows if r["title"] == "bear")
+    assert back["autocomplete"] == "only "  # picking it again drops the no: word
+
+
+def test_screenzen_leaves_out_apps_the_running_mode_blocks_in_cold_turkey(
+    tmp_path, monkeypatch
+):
+    note = tmp_path / "note.md"
+    note.write_text(
+        "```yaml\ngroups:\n  chat: {apps: [WhatsApp]}\n  maps: {apps: [Maps]}\n"
+        "modes:\n  research: {allow: [], block: [chat]}\n"
+        "blocklists:\n  screenzen:\n    '🚫 x': {block: [chat, maps]}\n```\n"
+    )
+    cfg = ct.load_config(note)
+    group = {"groupName": "🚫 x", "isDisabled": False, "customSites": [], "apps": []}
+    allow = {
+        "groupName": "✅ focus: research",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+        "id": "A",
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: b"")
+    monkeypatch.setattr(ct, "sz_groups", lambda raw: [group, allow])
+    monkeypatch.setattr(
+        ct, "sz_app", lambda name, t: {**t, "appName": name, "appBundle": f"id.{name}"}
+    )
+    held = {"enabled": "true", "apps": ["app:WhatsApp.app:id.WhatsApp"]}
+    monkeypatch.setattr(ct, "read_blocks", lambda: {ct.PREFIX + "research": held})
+    loosen = ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert [a["appName"] for a in group["apps"]] == ["Maps"]
+    assert not any("WhatsApp" in x for x in loosen)
+    # With no mode Cold Turkey holds nothing, so ScreenZen pauses both again.
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
+    assert [a["appName"] for a in group["apps"]] == ["WhatsApp", "Maps"]
+    # In an open window with no mode, every focus group in ScreenZen is off.
+    cfg["windows"] = ["00:00-23:59"]
+    ct.cmd_screenzen(cfg, dry_run=True, modes=[], quiet=True)
+    assert group["isDisabled"] and allow["isDisabled"]
+    # A mode started by hand in a window still gets its usual groups.
+    ct.cmd_screenzen(cfg, dry_run=True, modes=["research"], quiet=True)
+    assert not allow["isDisabled"]
+
+
+WINDOWS = 'windows: ["12:30-13:00"]'
+
+
+def test_a_window_stops_the_mode_until_it_ends_then_the_mode_comes_back(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, notes = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    assert ct.window_start(cfg, dt.datetime(2026, 11, 17, 12, 29)) is None
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    assert ct.window_start(cfg, at) == "12:30-13:00"
+    assert on(blocks) == [] and "open until 13:00" in notes[-1]
+    assert ct.in_off_hours(cfg, at)  # 'focus off' works in a window
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]  # the break the window took has ended
+    # once a day: a mode started by hand later in the window stays on
+    assert ct.window_start(cfg, at + dt.timedelta(minutes=5)) is None
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_commitment_keeps_the_window_closed(capped_env, tmp_path):
+    _, blocks, _, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    ct.write_commit(
+        {"mode": "research", "until": 2_000_000_000, "locked_to": 0, "pending": []}
+    )
+    assert ct.window_start(cfg, dt.datetime(2026, 11, 17, 12, 45)) is None
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_bad_window_is_refused(tmp_path):
+    with pytest.raises(SystemExit, match="windows"):
+        ct.load_config(note_with(tmp_path, 'windows: ["12:30"]'))
+
+
+def test_a_window_ends_a_capped_stretch_and_comes_back_to_the_mode_before_it(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    clock.now = dt.datetime(2026, 11, 17, 12, 15).timestamp()
+    ct.cmd_capped(cfg, "writing", [])
+    assert on(blocks) == ["mode: writing"]
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    ct.window_start(cfg, at)
+    assert on(blocks) == [] and ct.read_capped() is None
+    assert ct.read_break()["modes"] == ["research"]
+    # whichever runs first at the end, writing never comes back without its cap
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.end_capped(cfg)
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research"]
+
+
+def test_a_break_that_ends_inside_a_window_is_stretched_to_its_end(
+    capped_env, tmp_path
+):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, WINDOWS))
+    ct.switch("mode: research", on=False)
+    end_of_break = dt.datetime(2026, 11, 17, 12, 40).timestamp()
+    ct.BREAK_FILE.write_text(json.dumps({"modes": ["research"], "until": end_of_break}))
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    ct.window_start(cfg, at)
+    assert ct.read_break()["until"] == dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    clock.now = end_of_break
+    ct.catch_up(cfg)
+    assert on(blocks) == []  # still open at 12:40
+
+
+def test_automatic_starts_wait_for_an_open_window(capped_env, tmp_path):
+    _, blocks, _, _, _ = capped_env
+    sched = 'scheduled_mode: {mode: writing, start: "12:00", until: "13:30"}'
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS + "\n" + sched))
+    assert ct.scheduled_start(cfg, dt.datetime(2026, 11, 17, 12, 45)) is None
+    assert on(blocks) == ["mode: research"]
+    assert ct.read_state(ct.SCHEDULED_FILE) is None  # the day is not used up
+
+
+def test_a_window_close_that_fails_is_retried(capped_env, tmp_path, monkeypatch):
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, WINDOWS))
+    ct.switch("mode: research", on=False)
+    ct.write_state(ct.WINDOW_FILE, {"key": "k", "until": clock.now - 1})
+    results = [False, True]
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: results.pop(0))
+    assert ct.window_end(cfg) is False
+    assert ct.window_end(cfg) is True
+    assert ct.window_end(cfg) is False and results == []  # done: no third write
+
+
+def test_a_dropped_stop_is_sent_again_and_the_old_mode_ends(cfg, monkeypatch):
+    # 20 Nov 2026: a switch to comms left research running, so Messages stayed blocked.
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    calls = fake_cold_turkey(monkeypatch, blocks)
+    send = ct.ct_send
+    dropped = []
+
+    def drop_first_stop(*args):
+        if args[0] == "-stop" and not dropped:
+            dropped.append(args)  # the agent never read it
+            return
+        send(*args)
+
+    monkeypatch.setattr(ct, "ct_send", drop_first_stop)
+    ct.cmd_start(cfg, "writing")
+    assert blocks["mode: research"]["enabled"] == "false"
+    assert dropped and calls[-1][:2] == ("-stop", "mode: research")
+
+
+def test_a_stop_that_never_lands_notifies_as_well_as_exits(cfg, monkeypatch):
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks, refuse={"mode: research"})
+    told = []
+    monkeypatch.setattr(ct, "notify", told.append)
+    with pytest.raises(SystemExit, match="did not stop 'mode: research'"):
+        ct.cmd_start(cfg, "writing")
+    assert told and "mode: research" in told[0]
+
+
+def test_a_mode_started_during_the_switch_is_stopped_too(cfg, monkeypatch):
+    # The running list is read before the gate and the reason prompt; a mode a waiter
+    # or the tick starts in between must not stay on beside the new one.
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "false"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+
+    def prepare():
+        blocks["mode: research"]["enabled"] = "true"
+
+    ct.cmd_start(cfg, "writing", prepare=prepare)
+    assert blocks["mode: writing"]["enabled"] == "true"
+    assert blocks["mode: research"]["enabled"] == "false"
+
+
+@pytest.fixture
+def reasons(cfg, monkeypatch):
+    """research running, the real reason prompt back in place."""
+    monkeypatch.setattr(ct, "loosening_reason", REAL_LOOSENING_REASON)
+    blocks = {
+        "mode: research": mode_block(cfg, "research", "true"),
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    monkeypatch.setattr(ct, "spawn_self", lambda *a: None)
+    return blocks
+
+
+def test_a_switch_that_opens_an_app_needs_a_reason(cfg, reasons, monkeypatch):
+    # research blocks Telegram and writing does not (Yulong, 2026-11-20).
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_start(cfg, "writing")
+    assert on(reasons) == ["mode: research"]
+    prompts = at_terminal(monkeypatch, ["need to message the editor"])
+    ct.cmd_start(cfg, "writing")
+    assert prompts == ["Why switching from research to writing? One line: "]
+    (entry,) = log_lines()
+    assert entry["command"] == "focus writing"
+    assert entry["reason"] == "need to message the editor"
+    assert on(reasons) == ["mode: writing"]
+
+
+def test_a_blank_switch_reason_is_asked_again(cfg, reasons, monkeypatch):
+    prompts = at_terminal(monkeypatch, [" ", "need to message the editor"])
+    ct.cmd_start(cfg, "writing")
+    assert len(prompts) == 2 and on(reasons) == ["mode: writing"]
+
+
+def test_a_switch_that_opens_no_app_asks_nothing(cfg, reasons, monkeypatch):
+    reasons["mode: research"]["enabled"] = "false"
+    reasons["mode: writing"]["enabled"] = "true"
+    prompts = at_terminal(monkeypatch, [])
+    ct.cmd_start(cfg, "research")  # research blocks more apps than writing
+    assert prompts == [] and on(reasons) == ["mode: research"]
+
+
+def test_a_capped_target_always_loosens(tmp_path):
+    cfg = ct.load_config(note_with(tmp_path, CAPPED))
+    assert ct.switch_loosens(cfg, ["research"], "writing")
+    assert ct.switch_loosens(cfg, [], "writing")  # leaving an only session for it
+    assert not ct.switch_loosens(cfg, ["writing"], "research")
+
+
+def test_a_break_and_off_need_a_reason(cfg, reasons, monkeypatch):
+    monkeypatch.setattr(ct, "in_off_hours", lambda cfg, now=None: True)
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_break(cfg, ["10"])
+    with pytest.raises(SystemExit, match="only in a terminal"):
+        ct.cmd_off(cfg)
+    assert on(reasons) == ["mode: research"]
+    at_terminal(monkeypatch, ["lunch with Mia"])
+    ct.cmd_break(cfg, ["10"])
+    assert on(reasons) == []
+    assert log_lines()[-1]["command"] == "focus break 10"
+
+
+def test_an_agent_is_delayed_not_asked(cfg, reasons, monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")
+    asked = []
+    monkeypatch.setattr(ct, "ask_reason", lambda what: asked.append(what) or "x")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_start(cfg, "writing")
+    assert e.value.code == 3 and asked == []  # queued by the gate, no prompt
+
+
+def test_a_tick_writes_screenzen_even_when_cold_turkey_misses_a_command(
+    cfg, tmp_path, monkeypatch
+):
+    # 20 Nov 2026: a Cold Turkey command went unread, the tick exited before ScreenZen,
+    # and ScreenZen kept the old mode's 🚫 group on through a messaging stretch.
+    plist = tmp_path / "sz" / "prefs.plist"
+    plist.parent.mkdir()
+    plist.write_text("")
+    monkeypatch.setattr(ct, "SZ_DOMAIN", plist.with_suffix(""))
+    monkeypatch.setattr(ct, "SZ_LOCK", tmp_path / "screenzen.lock")
+
+    def unread(cfg):
+        sys.exit("focus: Cold Turkey did not start 'mode: research'")
+
+    monkeypatch.setattr(ct, "catch_up", unread)
+    writes = []
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda cfg, dry_run, **k: writes.append(dry_run)
+    )
+    with pytest.raises(SystemExit):
+        ct.cmd_tick(cfg)
+    assert writes == [False]
+
+
+def test_a_tick_without_screenzen_installed_writes_nothing(cfg, monkeypatch):
+    for step in ("catch_up", "default_start", "scheduled_start", "window_start"):
+        monkeypatch.setattr(ct, step, lambda cfg: None)
+    monkeypatch.setattr(
+        ct, "cmd_screenzen", lambda *a, **k: pytest.fail("wrote ScreenZen")
+    )
+    ct.cmd_tick(cfg)

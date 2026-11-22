@@ -48,7 +48,7 @@ Codex has one configured owner in `config/codex-install.conf`: `homebrew` by def
 
 **`mas list` hangs on macOS 26 with mas 7.0.0**, so anything that shells out to it stalls rather than failing. `app-picker --audit` avoids it by detecting App Store apps from `Contents/_MASReceipt/receipt` under `/Applications`, but `custom_bins/mas-get` and `install.sh`'s post-check still call it and will hang until they get a `timeout`.
 
-**A repo script that imports `tomllib` needs the `uv run --script` shebang, not `#!/usr/bin/env python3`.** On macOS that shebang resolves to Apple's Python 3.9 even in an interactive shell, since there is no Homebrew python on the Macs here, and 3.9 has no `tomllib` — so the script cannot run at all. Use the repo's `uv run --script` header with `requires-python >= 3.11`.
+**A repo script that imports `tomllib` needs the `uv run --script` shebang, not `#!/usr/bin/env python3`.** The global python3 is uv's default Python in `~/.local/bin` (`install.sh`), which is not on PATH everywhere: on a fresh Mac, under launchd, or in a shell that never read `config/zshenv.sh`, that shebang resolves to Apple's Python 3.9, which has no `tomllib` — so the script cannot run at all. Use the repo's `uv run --script` header with `requires-python >= 3.11`.
 
 ## Symlink vs Copy vs Sourced
 

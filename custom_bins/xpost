@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""xpost - read X/Twitter posts and profiles without a login, via the fxtwitter API.
+
+x.com, xcancel and nitter mirrors refuse scripted reads; api.fxtwitter.com
+returns the post as JSON to a plain GET. One post per call: it cannot list a
+timeline, so find post IDs first (web search with site:x.com, or links quoted
+on other pages).
+
+Examples:
+  xpost https://x.com/BronsonSchoen/status/2083215259876417834
+  xpost 2083215259876417834 2064593906915041757
+  xpost --parents 3 2083215259876417834      # walk up the reply chain
+  xpost @BronsonSchoen                         # profile: bio, counts
+  xpost --json 2083215259876417834 | jq .
+
+In the Claude Code sandbox, pass allowed_domains=["api.fxtwitter.com"].
+Exit codes: 0 all fetched, 1 one or more fetches failed, 2 bad arguments.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import signal
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+if hasattr(signal, "SIGPIPE"):
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+API = "https://api.fxtwitter.com"
+STATUS_RE = re.compile(
+    r"(?:twitter\.com|x\.com|fxtwitter\.com|vxtwitter\.com|xcancel\.com)/(?:[^/]+|i(?:/web)?)/status(?:es)?/(\d+)"
+)
+ID_RE = re.compile(r"^\d{5,25}$")
+HANDLE_RE = re.compile(r"^@?([A-Za-z0-9_]{1,15})$")
+
+
+def get(path: str) -> dict:
+    req = Request(f"{API}{path}", headers={"User-Agent": "Mozilla/5.0 (xpost)"})
+    with urlopen(req, timeout=20) as resp:
+        return json.load(resp)
+
+
+def classify(arg: str) -> tuple[str, str]:
+    if m := STATUS_RE.search(arg):
+        return "status", m.group(1)
+    if ID_RE.match(arg):
+        return "status", arg
+    if m := HANDLE_RE.match(arg) or re.search(
+        r"(?:twitter\.com|x\.com)/([A-Za-z0-9_]{1,15})/?$", arg
+    ):
+        return "profile", m.group(1)
+    raise ValueError(f"not a post URL, post ID or @handle: {arg}")
+
+
+def fetch_status(post_id: str) -> dict:
+    data = get(f"/i/status/{post_id}")
+    if data.get("code") != 200 or "tweet" not in data:
+        raise RuntimeError(f"{post_id}: {data.get('code')} {data.get('message')}")
+    return data["tweet"]
+
+
+def fetch_profile(handle: str) -> dict:
+    data = get(f"/{handle}")
+    if data.get("code") != 200 or "user" not in data:
+        raise RuntimeError(f"@{handle}: {data.get('code')} {data.get('message')}")
+    return data["user"]
+
+
+def slim(t: dict) -> dict:
+    quote = t.get("quote")
+    return {
+        "id": t.get("id"),
+        "url": t.get("url"),
+        "author": (t.get("author") or {}).get("screen_name"),
+        "created_at": t.get("created_at"),
+        "replying_to": t.get("replying_to"),
+        "replying_to_status": t.get("replying_to_status"),
+        "text": t.get("text"),
+        "quote": None
+        if not quote
+        else {
+            "url": quote.get("url"),
+            "author": (quote.get("author") or {}).get("screen_name"),
+            "text": quote.get("text"),
+        },
+        "likes": t.get("likes"),
+    }
+
+
+def show_post(p: dict) -> None:
+    reply = (
+        f"  (reply to @{p['replying_to']}, {p['replying_to_status']})"
+        if p["replying_to"]
+        else ""
+    )
+    print(f"@{p['author']} · {p['created_at']}{reply}\n{p['url']}\n\n{p['text']}")
+    if q := p["quote"]:
+        body = "\n".join(f"  > {line}" for line in (q["text"] or "").splitlines())
+        print(f"\n  quoting @{q['author']} {q['url']}\n{body}")
+    print("\n" + "─" * 60)
+
+
+def show_profile(u: dict) -> None:
+    print(
+        f"@{u.get('screen_name')} · {u.get('name')}\n{u.get('url')}\n"
+        f"bio: {u.get('description')}\nlocation: {u.get('location')} · joined {u.get('joined')}\n"
+        f"posts {u.get('tweets')} · followers {u.get('followers')} · following {u.get('following')}\n"
+        + "─"
+        * 60
+    )
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="xpost",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument("targets", nargs="+", help="post URL, post ID, or @handle")
+    ap.add_argument(
+        "--parents",
+        type=int,
+        default=0,
+        metavar="N",
+        help="also fetch up to N posts up the reply chain",
+    )
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        help="print one JSON object per line instead of text",
+    )
+    args = ap.parse_args()
+    if args.parents < 0:
+        ap.error("--parents must be non-negative")
+
+    try:
+        jobs = [classify(a) for a in args.targets]
+    except ValueError as e:
+        print(f"xpost: {e}", file=sys.stderr)
+        return 2
+
+    failed = False
+    for kind, key in jobs:
+        try:
+            if kind == "profile":
+                u = fetch_profile(key)
+                print(json.dumps(u, ensure_ascii=False)) if args.json else show_profile(
+                    u
+                )
+                continue
+            chain, next_id = [], key
+            while next_id and len(chain) <= args.parents:
+                p = slim(fetch_status(next_id))
+                chain.append(p)
+                next_id = p["replying_to_status"]
+            for p in reversed(chain):
+                print(json.dumps(p, ensure_ascii=False)) if args.json else show_post(p)
+        except (HTTPError, URLError, RuntimeError, TimeoutError) as e:
+            print(f"xpost: {key}: {e}", file=sys.stderr)
+            failed = True
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

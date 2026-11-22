@@ -186,18 +186,18 @@
         "description": "ChatGPT subscription (Codex)"
       },
       {
-        "model": "gemini",
-        "label": "Gemini 4 Carbon",
-        "description": "OpenRouter, pay per token"
-      },
-      {
         "model": "sol",
         "label": "GPT-6.2 Sol",
         "description": "ChatGPT subscription (Codex)"
       },
       {
-        "model": "kimi",
-        "label": "Kimi K3.1 Pro",
+        "model": "gemini",
+        "label": "Gemini 4 Neon",
+        "description": "OpenRouter, pay per token"
+      },
+      {
+        "model": "deepseek",
+        "label": "DeepSeek V4.1 Flash",
         "description": "OpenRouter, pay per token"
       },
       {
@@ -206,24 +206,24 @@
         "description": "OpenRouter, pay per token"
       },
       {
+        "model": "kimi",
+        "label": "Kimi K3.1 Pro",
+        "description": "More models · OpenRouter, pay per token"
+      },
+      {
         "model": "muse",
         "label": "Muse Wonder",
-        "description": "OpenRouter, pay per token"
+        "description": "More models · OpenRouter, pay per token"
       },
       {
         "model": "grok",
         "label": "Grok 4.7",
-        "description": "OpenRouter, pay per token"
+        "description": "More models · OpenRouter, pay per token"
       },
       {
         "model": "qwen",
-        "label": "Qwen3.8 Max",
-        "description": "OpenRouter, pay per token"
-      },
-      {
-        "model": "deepseek",
-        "label": "DeepSeek V4.1 Flash",
-        "description": "OpenRouter, pay per token"
+        "label": "Qwen4 Max",
+        "description": "More models · OpenRouter, pay per token"
       }
     ]
   },
@@ -259,6 +259,15 @@
       }
     ],
     "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.elapsed-stamp -- $HOME/.claude/hooks/elapsed_stamp.sh",
+            "timeout": 3
+          }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [
@@ -725,8 +734,23 @@
           },
           {
             "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.silent-turn -- bash $HOME/.claude/hooks/nudge_silent_turn.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.vault-lint -- bash $HOME/.claude/hooks/nudge_vault_lint.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.advisor-skipped -- python3 $HOME/.claude/hooks/nudge_advisor_skipped.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.computer-use-esc -- python3 $HOME/.claude/hooks/nudge_computer_use_esc.py",
+            "timeout": 10
           }
         ]
       }
@@ -746,6 +770,15 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/watchdog_mark.sh working",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.prompt-stamp -- $HOME/.claude/hooks/inject_timestamp.sh",
             "timeout": 3
           }
         ]
@@ -960,6 +993,9 @@
       "trash",
       "pueue:*",
       "systemctl:*",
+      "ps:*",
+      "top:*",
+      "pgrep:*",
       "jguard",
       "bearcli",
       "modal",
@@ -989,7 +1025,7 @@
   "effortLevel": "high",
   "modelSettings": {
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
     "gpt-6.2-astra": {
       "autoCompactWindow": 258400
@@ -1009,21 +1045,6 @@
     "gpt-6-astra-fast": {
       "autoCompactWindow": 258400
     },
-    "gemini-4-carbon": {
-      "autoCompactWindow": 1000000
-    },
-    "gemini": {
-      "autoCompactWindow": 1000000
-    },
-    "gemini-4-argon": {
-      "autoCompactWindow": 1000000
-    },
-    "gpt-6.1-sol": {
-      "autoCompactWindow": 258400
-    },
-    "gpt-6.1-sol-fast": {
-      "autoCompactWindow": 258400
-    },
     "gpt-6.2-sol": {
       "autoCompactWindow": 258400
     },
@@ -1034,6 +1055,24 @@
       "autoCompactWindow": 258400
     },
     "sol-fast": {
+      "autoCompactWindow": 258400
+    },
+    "gemini-4-neon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini-4-carbon": {
+      "autoCompactWindow": 1000000
+    },
+    "gemini-4-argon": {
+      "autoCompactWindow": 1000000
+    },
+    "gpt-6.1-sol": {
+      "autoCompactWindow": 258400
+    },
+    "gpt-6.1-sol-fast": {
       "autoCompactWindow": 258400
     },
     "gpt-6.1-terra": {
@@ -1084,6 +1123,18 @@
     "gpt-5.6-luna-fast": {
       "autoCompactWindow": 258400
     },
+    "deepseek-v4.1-flash": {
+      "autoCompactWindow": 1000000
+    },
+    "deepseek": {
+      "autoCompactWindow": 1000000
+    },
+    "glm-5.3": {
+      "autoCompactWindow": 262124
+    },
+    "glm": {
+      "autoCompactWindow": 262124
+    },
     "kimi-k3.1-pro": {
       "autoCompactWindow": 250000
     },
@@ -1092,12 +1143,6 @@
     },
     "kimi-k3": {
       "autoCompactWindow": 250000
-    },
-    "glm-5.3": {
-      "autoCompactWindow": 262124
-    },
-    "glm": {
-      "autoCompactWindow": 262124
     },
     "muse-wonder": {
       "autoCompactWindow": 1000000
@@ -1111,16 +1156,13 @@
     "grok": {
       "autoCompactWindow": 500000
     },
-    "qwen3.8-max": {
+    "qwen4-max": {
       "autoCompactWindow": 1000000
     },
     "qwen": {
       "autoCompactWindow": 1000000
     },
-    "deepseek-v4.1-flash": {
-      "autoCompactWindow": 1000000
-    },
-    "deepseek": {
+    "qwen3.8-max": {
       "autoCompactWindow": 1000000
     }
   },
@@ -1132,6 +1174,7 @@
     "enabled": true,
     "mode": "hold"
   },
+  "prefersReducedMotion": false,
   "autoMemoryDirectory": "memory",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
@@ -1146,8 +1189,9 @@
   "theme": "auto",
   "editorMode": "normal",
   "verbose": false,
+  "autoCompactEnabled": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": false,
+  "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,

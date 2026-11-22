@@ -18,6 +18,7 @@ Each component in `deploy.sh` is deployed with inline logic or helper functions:
 - gitui - Theme (symlinked to ~/.config/gitui/theme.ron). Theme-reactive: uses named ANSI colors so gitui inherits whichever Ghostty theme the active window uses (default, g0-g9, SSH themes). Fixes gitui's default `disabled_fg: DarkGray`, which is unreadable on Catppuccin Mocha and similar dark backgrounds.
 - Claude Code - AI assistant configuration (symlinked)
 - Codex - CLI tool configuration (symlinked)
+- Antigravity - One-way projection from `claude/` and `antigravity/` into `~/.gemini/config/` (shared by `agy` CLI, Antigravity 2.0 App, and IDE: `skills.json` referencing `~/.claude/skills` with Claude-only excludes, `GEMINI.md` symlinked to `claude/CLAUDE.md`, `AGENTS.md` tool-compatibility shim, `rules/*.md` projected with `trigger: always_on`, and `mcp_config.json` merged via `sync_mcp_servers.py`)
 - Serena - MCP server configuration (symlinked, dashboard auto-open disabled)
 - Mouseless - Keyboard-driven mouse control (macOS only, copied not symlinked)
 - Alfred prefs repair - Fixes Dropbox-synced Alfred breakage (macOS only): strips `com.apple.quarantine` xattrs that block workflow scripts (`posix_spawn: error 1`), restores lost script `+x` bits, and seeds the per-machine summon hotkey from a golden snapshot. Runs `custom_bins/alfred-fix`; capture a new golden hotkey with `alfred-fix --capture`. Clipboard history is intentionally local-only and never syncs (Alfred design) — it starts fresh on each machine.

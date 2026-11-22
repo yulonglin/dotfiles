@@ -4,6 +4,26 @@ Hooks for automating task and agent management workflows.
 
 ## Available Hooks
 
+### inject_timestamp.sh + elapsed_stamp.sh (time awareness)
+
+**Purpose:** Keep the model clock-aware. `inject_timestamp.sh` (UserPromptSubmit, flag `time.prompt-stamp`) prints `[Now: Thu 2026-08-27 02:40 PDT (UTC-07:00) · 09:40 UTC · 2h13m since your last message]`; the gap clause appears only past `CLAUDE_TIME_GAP_MIN` (10). `elapsed_stamp.sh` (PostToolUse on every tool, flag `time.elapsed-stamp`) emits `[Time check: 25m elapsed in this turn · now …]` as `additionalContext`, because plain stdout on PostToolUse never reaches Claude, at most once per `CLAUDE_TIME_STAMP_INTERVAL_MIN` (5). That in-turn stamp is the piece Ofengenden & Andriushchenko (2026) show agents need most: scrubbing timestamps roughly doubles their elapsed-time error. Shared code and rationale: `lib_time_stamp.sh`. Literature page: https://claude.ai/code/artifact/842dfe8e-e902-416d-86eb-aa7d5042b659
+
+**Zone:** `CLAUDE_LOCAL_TZ` → `TZ` → `/etc/timezone` → `/etc/localtime` → UTC; an invalid zone warns in the stamp. `config/zshrc.sh` sets `CLAUDE_LOCAL_TZ=America/Los_Angeles` on non-macOS hosts only (servers run on UTC); a Mac uses `/etc/localtime`, which follows travel.
+
+**Off switches:** `time = off` in `features.conf` (global, or `time.prompt-stamp` / `time.elapsed-stamp` singly); `touch .claude/no-time-stamps` (per repo; use it in model-organism repos, since a stated date is a backdoor-trigger surface); `CLAUDE_TIME_STAMPS=off` (per shell).
+
+**The remember plugin stamps too.** Its UserPromptSubmit hook adds `[HH:MM <zone> — <user>]` (time only, no date). This repo does not change it. For one owner of time, set `"prompt_stamp": "stable"` in `~/.remember/config.json` (keeps the username and remember's 95% context warning) or `"off"` (drops both), per machine.
+
+**Test:** `tests/test_time_stamps.zsh`.
+
+### nudge_computer_use_esc.py (computer use swallowing Esc)
+
+**Purpose:** Claude Code's computer use installs a blocking key-down event tap, its Esc-to-stop hotkey, for as long as the computer-use MCP is connected. A session that stops to wait for the user keeps the tap, and Esc then does nothing in any app on the Mac; a background job held it for five hours on 2026-11-21. At Stop, this hook asks `keytaps --computer-use` whether the tap is live and whether `~/.claude/computer-use.lock` names this session, and if so emits a `systemMessage` telling the user to disconnect computer-use via `/mcp` or end the session. The lock file alone is not used as evidence, because it outlived the tap after a `/mcp` disconnect.
+
+**Diagnose by hand:** `keytaps` lists every process holding a keyboard event tap, marks the ones that can drop keys as BLOCKING, and flags the computer-use lock holder.
+
+**Off switch:** `nudges.computer-use-esc = off` in `features.conf`. **Test:** `tests/test_nudge_computer_use_esc.zsh`.
+
 ### agent_spawned.sh
 
 **Purpose:** Reminds user to save agent IDs when agents are spawned
@@ -56,6 +76,19 @@ Hooks for automating task and agent management workflows.
 - Blocks tool call when `AUTO_AGENT_DEPTH >= AUTO_AGENT_MAX_DEPTH`.
 - Intended to cap recursive delegation chains.
 
+### nudge_advisor_skipped.py
+
+**Purpose:** Remind the model when a session changed real files and never consulted the advisor — the stronger reviewer that reads the whole transcript.
+
+**Behavior:**
+- `Stop`, once per session, hands the model a reminder as `hookSpecificOutput.additionalContext` when the transcript says the advisor tool was available, the main agent's transcript holds no advisor call, and the session did substantive work — three or more file-modifying operations, or a `git commit` plus at least two. `Write`/`Edit`/`NotebookEdit` and Bash edits (`sed -i`, `tee`, `cat >`, heredoc writes) both count, since auto mode edits through Bash; a plain output redirect does not.
+- **Never blocks.** Stop `additionalContext` is non-error feedback: the turn continues once so the model can call the advisor, and the transcript labels it `Stop hook feedback` (hooks docs, Stop decision control). It exits on `stop_hook_active` and writes its once-per-session guard before printing, so it cannot loop. Until 2026-11-21 it printed a user-only `systemMessage`.
+- Reads the call from the transcript: the advisor is a server-side tool, recorded as an assistant `server_tool_use` block named `advisor` plus an `advisor_tool_result` (Claude Code 2.1.296, 2026-10-12). No `PostToolUse` marker is used. Detail: `.claude/rules/dotfiles-settings.md`.
+- Silent on a small session, a withdrawn advisor tool, a missing transcript or garbage input. The before-work leg of the advisor contract is deliberately unenforced.
+- Flag: `nudges.advisor-skipped` (on explicitly, since the `nudges` family is off).
+
+**Tests:** `tests/test_advisor_skipped.py`.
+
 ### simplify_mark_dirty.sh / simplify_track_reuse.py / simplify_nudge.sh
 
 **Purpose:** Suggest a `/simplify` pass when the session produced work worth one. Two independent signals feed one `Stop` message; both are soft nudges (`systemMessage`) that never continue the turn.
@@ -67,6 +100,19 @@ Hooks for automating task and agent management workflows.
 - `simplify_nudge.sh` (`Stop`) fires when a script hit `CLAUDE_SIMPLIFY_REUSE_RUNS` (default 3) runs with at least one stable run → "promote it into a permanent component" (criteria and destinations: `rules/coding-conventions.md`). Each candidate is nudged once per session.
 
 **Tests:** `test_simplify_reuse.sh`.
+
+### nudge_silent_turn.sh
+
+**Purpose:** Stop a turn from ending with no user-visible text after a human message. Thinking, tool calls and collapsed agent results are invisible to the user, so a silent turn reads as a crash (incident 2026-08-21).
+
+**Behavior:**
+- `Stop`, behind `nudges.silent-turn` in `features.conf` (explicitly on). The first stop of a silent turn returns `{"decision":"block"}` with a reason telling the model to answer, give pending status, or restate an agent result.
+- One-shot per turn: it returns at once when `stop_hook_active` is set, and a guard file keyed on (session, user message uuid, text) makes the retry pass. If the guard cannot be written, it does not block.
+- The turn starts at the last user entry that is neither a `tool_result` nor `isMeta` (skill bodies and cross-session messages land mid-turn as `isMeta`).
+- Exempt: `AskUserQuestion`, plan mode and `SendMessage` turns, slash-command, `!` shell-mode and interrupt carriers, reminder-only messages, turns with no assistant activity. Fails open on any parse error.
+- Disjoint from `nudge_bg_prose_question.sh`, which needs closing text to inspect.
+
+**Tests:** `test_nudge_silent_turn.sh` (one-shot guarantee, `stop_hook_active`, `isMeta` boundary, uuid key, exemptions, fail-open).
 
 ### fix_hook_permissions.sh / patch_ralph_loop_stop_hook.py
 

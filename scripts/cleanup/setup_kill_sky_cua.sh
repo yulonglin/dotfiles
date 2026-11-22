@@ -37,7 +37,16 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 # screen guardian, the current ChatGPT.app cua_node helpers, and the
 # ~/.codex/computer-use install. Path fragments are slash-delimited so they
 # cannot match ChatGPT.app's own binary or the codex CLI beside them.
-PATTERN="SkyComputerUse|CUALockScreenGuardian|/cua_node/|/computer-use/"
+#
+# ANCHORED TO THE EXECUTABLE (argv0), not anywhere in the command line.
+# ChatGPT.app 26.1117.41037 (installed 2026-11-21 13:04) started passing
+# `--mcp-launch-cwd node_repl .../cua_node/bin/node_repl` to its bundled
+# `codex app-server`. The unanchored pattern then matched the app-server
+# itself, so the watchdog killed Codex's backend every 30s (508 kills on
+# 2026-11-21 vs 12-42/day before) and the app kept "restarting". `^[^ ]*`
+# covers argv0 up to its first space; every helper path has its /cua_node/ or
+# /computer-use/ fragment before the space in "Codex Computer Use.app".
+PATTERN="^[^ ]*(SkyComputerUse|CUALockScreenGuardian|/cua_node/|/computer-use/)"
 
 [[ "$(uname -s)" != "Darwin" ]] && exit 0
 

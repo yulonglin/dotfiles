@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "path": "~/.claude/skills",
+      "exclude": [
+        "^auto-mode-probe$",
+        "^claude-in-chrome$",
+        "^done$",
+        "^my-insights$",
+        "^session-sweep$",
+        "^setup-channel$",
+        "^spawn-session$",
+        "^synced$",
+        "^update-auto-mode$",
+        "^wrap-up$"
+      ]
+    }
+  ]
+}

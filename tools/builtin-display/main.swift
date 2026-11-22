@@ -96,8 +96,17 @@ func onlineBuiltinID() -> CGDirectDisplayID? {
 
 func builtinIsOn() -> Bool { onlineBuiltinID() != nil }
 
+// With the built-in disabled and the last real monitor unplugged, WindowServer
+// does not report zero displays: it brings up a placeholder whose vendor and
+// model read as ASCII "unkn" / "virt" (0x756E6B6E / 0x76697274), serial 0. It
+// shows nothing, so it must not count as an external, or the watcher never sees
+// "last external gone" and leaves the screen dark (seen 2026-11-19, macOS 26).
+func isPlaceholder(_ id: CGDirectDisplayID) -> Bool {
+    CGDisplayVendorNumber(id) == 0x756E_6B6E && CGDisplayModelNumber(id) == 0x7669_7274
+}
+
 func externals() -> [CGDirectDisplayID] {
-    onlineDisplays().filter { CGDisplayIsBuiltin($0) == 0 }
+    onlineDisplays().filter { CGDisplayIsBuiltin($0) == 0 && !isPlaceholder($0) }
 }
 
 // A closed lid also takes the built-in screen offline; read it so "off" is honest.
@@ -258,13 +267,34 @@ func trial(seconds: UInt32) {
     if !back { exit(1) }
 }
 
+// MARK: heal
+
+// One-shot safety net, run by launchd every 2 s as a fresh process (the
+// com.user.builtin-display-heal agent). It does not trust the long-lived
+// watcher: on 2026-11-20 the watcher, 17 h old, never saw an unplug and left
+// the screen dark, while a fresh `builtin-display on` read the state right at
+// once. Silent when there is nothing to do; logs only when it has to act,
+// which means the watcher missed an unplug.
+func heal() {
+    // An empty list means no WindowServer access (a sandbox), not "no display".
+    guard !onlineDisplays().isEmpty else { return }
+    guard externals().isEmpty, !builtinIsOn(), !lidClosed() else { return }
+    let id = savedBuiltinID() ?? 1
+    if let error = trySetEnabled(id, true) {
+        log("heal: no external display and built-in off; turning it on FAILED: \(error)")
+        exit(1)
+    }
+    log("heal: no external display and built-in off; built-in screen on (the watcher missed this)")
+}
+
 // MARK: watcher
 
 // Run by the login agent (`builtin-display auto on`). It acts only on two
 // transitions, so a manual choice sticks until the next plug event:
 //   - an external display that was not connected before appears -> screen off
-//   - the last external display goes away -> screen back on, so you are never
-//     left with no visible screen
+//   - no external display is present (lid open, built-in off) -> screen back
+//     on. This one is checked on every poll, not only on the unplug event, so
+//     you are never left with no visible screen
 // `builtin-display on` while the Studio Display stays connected is therefore
 // left alone. Reconfiguration events arrive in bursts, so each burst is handled
 // once, 2 s after it settles.
@@ -273,6 +303,7 @@ func trial(seconds: UInt32) {
 // reconfiguration (such as re-enabling the built-in) renumbers them and makes an
 // already connected monitor look new.
 var knownExternals: Set<String> = []
+var watchActivity: NSObjectProtocol?
 var pendingCheck: DispatchWorkItem?
 
 func hardwareKey(_ id: CGDirectDisplayID) -> String {
@@ -304,11 +335,18 @@ func reconcile() {
         } else {
             log("external display \(added.sorted()) connected; built-in screen off")
         }
-    } else if now.isEmpty, !knownExternals.isEmpty, !builtinIsOn(), !lidClosed(), let id = savedBuiltinID() {
+    } else if now.isEmpty, !builtinIsOn(), !lidClosed() {
+        // A state rule, not a transition: whenever no real external is present,
+        // the lid is open and the built-in is off, turn it on. The 2 s poll
+        // re-checks it, so a missed unplug event, a placeholder display, an
+        // agent restart while unplugged, or a failed enable all heal on the
+        // next tick instead of leaving the screen dark. ID 1 is the built-in's
+        // usual ID on Apple silicon, a fallback only if the state file is gone.
+        let id = savedBuiltinID() ?? 1
         if let error = trySetEnabled(id, true) {
-            log("last external display gone; turning built-in on FAILED: \(error)")
+            log("no external display; turning built-in on FAILED (retrying next poll): \(error)")
         } else {
-            log("last external display gone; built-in screen on")
+            log("no external display; built-in screen on")
         }
     }
 }
@@ -338,6 +376,13 @@ func watch() {
     // gives the process a real WindowServer connection; the 2 s poll is a
     // backstop in case a notification is missed.
     NSApplication.shared.setActivationPolicy(.prohibited)
+    // A faceless app is a prime App Nap candidate, and App Nap throttles timers
+    // and event delivery. Suspected (not proven) cause of the 2026-11-20 miss.
+    // The activity token must live as long as the process, so it is kept global.
+    watchActivity = ProcessInfo.processInfo.beginActivity(
+        options: .userInitiatedAllowingIdleSystemSleep,
+        reason: "builtin-display watches for display plug events"
+    )
     NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
     ) { _ in scheduleReconcile() }
@@ -366,6 +411,8 @@ commands:
                   `toggle` still work while it runs; your choice holds until the
                   next plug event
   watch           what the agent runs (foreground; logs each action)
+  heal            one-shot: turn the built-in on if no external display is
+                  present and the lid is open; `auto on` runs it every 2 s
 
 Uses a private macOS API, so an update can break it. The change lasts for the
 login session: logging out or rebooting always restores the screen.
@@ -384,6 +431,7 @@ case "try":
     guard let seconds, seconds > 0 else { fail("try takes a positive number of seconds", code: 2) }
     trial(seconds: seconds)
 case "watch": watch()
+case "heal": heal()
 case "-h", "--help", "help": print(usage)
 case nil: print(usage); exit(2)
 default: fail("unknown command '\(args[0])'\n\(usage)", code: 2)

@@ -188,8 +188,22 @@ context-window = 258400
 picker = false           # `astra` is now GPT-6.2 Astra
 agent = false
 
-# Gemini sits right below Astra in /model (Yulong, 2026-10-28), so its block is
-# here although it routes through OpenRouter like the families further down.
+# /model shows rows in file order. Picker priority (Yulong, 2026-11-21):
+# Anthropic, OpenAI, Gemini, then DeepSeek, then GLM. Kimi, Muse, Grok and Qwen
+# are deprioritised, not removed: they sit last under a "More models"
+# description (see that block further down), with routes and agents unchanged.
+
+# `sol` moved here from gpt-6.1-sol on 2026-11-17, with astra (see above).
+[[models]]
+id = "gpt-6.2-sol"
+aliases = ["sol"]
+name = "GPT-6.2 Sol"
+provider = "codex"
+context-window = 258400
+
+# Gemini sits right below the OpenAI rows in /model (Yulong, 2026-10-28; Sol
+# moved up beside Astra 2026-11-21), so its block is here although it routes
+# through OpenRouter like the families further down.
 # Gemini 3.7 Flash once returned "400 Provider returned error" on a full Claude
 # Code request (2026-09-22), not reproduced on 3.7 or 3.8 Flash on 2026-10-12.
 # If a 400 recurs on any Gemini, keep the upstream error.metadata.raw.
@@ -242,14 +256,6 @@ provider = "codex"
 context-window = 258400
 picker = false           # `sol` is now GPT-6.2 Sol; the plugin's agents still call this id
 agent = false
-
-# `sol` moved here from gpt-6.1-sol on 2026-11-17, with astra (see above).
-[[models]]
-id = "gpt-6.2-sol"
-aliases = ["sol"]
-name = "GPT-6.2 Sol"
-provider = "codex"
-context-window = 258400
 
 # GPT-6.1 Terra (released 2026-10-26) is the mid tier of the 6.1 line, listed
 # by the managed CLIProxyAPI 7.3.16 child on 2026-10-28 with no pin change. It
@@ -310,10 +316,31 @@ picker = false
 agent = false
 
 # ---- Other families, through OpenRouter ---------------------------------
-# Slugs match the council roster in config/openrouter-models.toml except Kimi:
-# the council seat is index-picked and Epoch had not scored K3.1 Pro by
-# 2026-10-28, so it stays on K3 there. Windows are the host's guaranteed figure
+# Slugs match the council roster in config/openrouter-models.toml. Windows are the host's guaranteed figure
 # from `verify-providers` on 2026-10-12.
+
+# DeepSeek, then GLM, then the deprioritised families (Yulong, 2026-11-21).
+[[models]]
+id = "deepseek-v4.1-flash"
+aliases = ["deepseek"]
+name = "DeepSeek V4.1 Flash"
+provider = "openrouter"
+slug = "deepseek/deepseek-v4.1-flash"
+context-window = 1000000
+
+[[models]]
+id = "glm-5.3"
+aliases = ["glm"]
+name = "GLM 5.3"
+provider = "openrouter"
+slug = "z-ai/glm-5.3"
+context-window = 262124
+
+# ---- More models: deprioritised, still in /model, below everything above ----
+# `modelPicker` has no section headers (code.claude.com/docs/en/settings-reference
+# #modelpicker: rows take only model, label, description, behavesAs), so the
+# "More models" group is these rows sitting last plus a description that starts
+# with "More models". Routes and agents are unchanged.
 
 # `kimi` moved here from kimi-k3 on 2026-10-28 (K3.1 Pro released 2026-10-23,
 # Moonshot the only host). Artificial Analysis scores it level with K3, at half
@@ -323,6 +350,7 @@ id = "kimi-k3.1-pro"
 aliases = ["kimi"]
 writer-priority = 3
 name = "Kimi K3.1 Pro"
+description = "More models · OpenRouter, pay per token"
 provider = "openrouter"
 slug = "moonshotai/kimi-k3.1-pro"
 context-window = 250000   # K3's host limit, carried over unverified; the catalogue says 1048576 as it did for K3
@@ -337,17 +365,10 @@ picker = false            # `kimi` is now K3.1 Pro; the route stays for anything
 agent = false
 
 [[models]]
-id = "glm-5.3"
-aliases = ["glm"]
-name = "GLM 5.3"
-provider = "openrouter"
-slug = "z-ai/glm-5.3"
-context-window = 262124
-
-[[models]]
 id = "muse-wonder"
 aliases = ["muse"]
 name = "Muse Wonder"
+description = "More models · OpenRouter, pay per token"
 provider = "openrouter"
 slug = "meta/muse-wonder"
 context-window = 1048576
@@ -356,22 +377,28 @@ context-window = 1048576
 id = "grok-4.7"
 aliases = ["grok"]
 name = "Grok 4.7"
+description = "More models · OpenRouter, pay per token"
 provider = "openrouter"
 slug = "x-ai/grok-4.7"
 context-window = 500000
 
+# `qwen` moved here from qwen3.8-max on 2026-11-21, when `council refresh`
+# seated qwen4-max (newest-in-line: no index has scored it yet). $1.43/$4.28
+# per M; 1,000,000 is the catalogue's window, not yet checked by verify-providers.
+[[models]]
+id = "qwen4-max"
+aliases = ["qwen"]
+name = "Qwen4 Max"
+description = "More models · OpenRouter, pay per token"
+provider = "openrouter"
+slug = "qwen/qwen4-max"
+context-window = 1000000
+
 [[models]]
 id = "qwen3.8-max"
-aliases = ["qwen"]
 name = "Qwen3.8 Max"
 provider = "openrouter"
 slug = "qwen/qwen3.8-max-0902"
 context-window = 1000000
-
-[[models]]
-id = "deepseek-v4.1-flash"
-aliases = ["deepseek"]
-name = "DeepSeek V4.1 Flash"
-provider = "openrouter"
-slug = "deepseek/deepseek-v4.1-flash"
-context-window = 1000000
+picker = false            # `qwen` is now Qwen4 Max; the route stays for anything naming qwen3.8-max
+agent = false

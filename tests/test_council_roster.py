@@ -144,6 +144,51 @@ class TestIndexScores:
         assert len(credits) == 1 and orc.AA_ONLY == set()
 
 
+class TestPinnedSeat:
+    """A pin overrides the index for one family. It must never silently fall
+    back to the index pick, or the roster would look honoured while seating a
+    different model."""
+
+    ROWS = [row("g/carbon-4", 10, 100), row("g/neon-4", 15, 200),
+            row("g/pricey-4", 180, 300), row("o/gpt-6", 10, 100)]
+
+    def _propose(self, monkeypatch, pinned):
+        monkeypatch.setattr(orc, "index_scores",
+                            lambda tails: ({"carbon4": 170.0, "gpt6": 160.0}, ["Epoch"]))
+        cfg = {"council": {"families": ["g", "o"], "max_output_price": 60.0,
+                           "max_input_price": 15.0, "pinned": pinned}}
+        picked, gaps, _ = orc.propose_roster(cfg, rows=self.ROWS)
+        return {s["family"]: s for s in picked}, gaps
+
+    def test_pin_beats_the_index_pick(self, monkeypatch):
+        got, _ = self._propose(monkeypatch, {"g": "g/neon-4"})
+        assert got["g"]["slug"] == "g/neon-4" and got["g"]["basis"] == "pinned"
+
+    def test_unpinned_family_still_follows_the_index(self, monkeypatch):
+        got, _ = self._propose(monkeypatch, {"g": "g/neon-4"})
+        assert got["o"]["slug"] == "o/gpt-6" and got["o"]["basis"] == "eci"
+
+    def test_no_pin_keeps_the_index_pick(self, monkeypatch):
+        got, _ = self._propose(monkeypatch, {})
+        assert got["g"]["slug"] == "g/carbon-4"
+
+    def test_pin_missing_from_catalogue_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"g": "g/gone-4"})
+
+    def test_pin_over_the_price_cap_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"g": "g/pricey-4"})
+
+    def test_pin_in_the_wrong_family_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"g": "o/gpt-6"})
+
+    def test_pin_for_an_unseated_family_dies(self, monkeypatch):
+        with pytest.raises(SystemExit):
+            self._propose(monkeypatch, {"zzz": "g/neon-4"})
+
+
 class TestRefreshApplyGuard:
     """Epoch lags releases by weeks, so an Epoch-only --apply would reseat the
     previous generation under a confident "eci" label."""
@@ -667,11 +712,11 @@ class TestPickerFollowsCouncil:
                   {"slug": "x-ai/grok-4.7"}]
         assert orc.picker_gaps(seated, self.ROUTER) == []
 
-    def test_a_moved_seat_and_a_hidden_row_are_both_reported(self):
+    def test_a_moved_seat_is_reported_and_a_hidden_row_is_not(self):
+        """The picker is hand-curated, so a route-only seat is not a gap."""
         gaps = orc.picker_gaps([{"slug": "x-ai/grok-4.8"}, {"slug": "google/gemini-3.8-flash"}],
                                self.ROUTER)
-        assert gaps == ["x-ai/grok-4.8: no route in model-router.toml",
-                        "google/gemini-3.8-flash: routed but picker = false"]
+        assert gaps == ["x-ai/grok-4.8: no route in model-router.toml"]
 
     def test_every_live_seat_has_a_route(self):
         """The committed configs: a refresh that moves a seat must move its route too."""

@@ -88,6 +88,7 @@ COMPONENTS:
     --editor          Deploy VSCode/Cursor settings
     --claude          Deploy Claude Code config (~/.claude symlink)
     --codex           Deploy Codex CLI config (~/.codex symlink)
+    --antigravity     Deploy Antigravity global config (~/.gemini/config)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
@@ -324,7 +325,7 @@ export PATH="\$DOT_DIR/custom_bins:\$PATH"
 
 # Tool integrations
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
-[ -d "\$HOME/.cargo" ] && . "\$HOME/.cargo/env"
+[ -f "\$HOME/.cargo/env" ] && . "\$HOME/.cargo/env"
 [ -d "\$HOME/.local/bin" ] && [ -f "\$HOME/.local/bin/env" ] && source "\$HOME/.local/bin/env"
 
 # ASCII art in interactive shells
@@ -1071,6 +1072,23 @@ if [[ "$DEPLOY_CODEX" == "true" ]]; then
     fi
 fi
 
+# ─── Antigravity ──────────────────────────────────────────────────────────────
+
+if [[ "$DEPLOY_ANTIGRAVITY" == "true" ]]; then
+    log_section "DEPLOYING ANTIGRAVITY CONFIGURATION"
+
+    if [[ -x "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" || -f "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" ]]; then
+        if bash "$DOT_DIR/scripts/sync_claude_to_antigravity.sh" --dotfiles-dir "$DOT_DIR"; then
+            log_success "Antigravity global configuration deployed"
+            log_info "  Config: ~/.gemini/config/{skills.json,AGENTS.md,GEMINI.md,rules/,mcp_config.json}"
+        else
+            log_warning "Antigravity configuration sync failed"
+        fi
+    else
+        log_warning "Antigravity sync script not found at $DOT_DIR/scripts/sync_claude_to_antigravity.sh"
+    fi
+fi
+
 # ─── Serena MCP ──────────────────────────────────────────────────────────────
 
 if [[ "$DEPLOY_SERENA" == "true" ]]; then
@@ -1494,6 +1512,15 @@ queue_scheduled_job() {
 
     if [[ "$DEPLOY_KILL_SKY_CUA" == "true" ]] && is_macos; then
         queue_scheduled_job kill-sky-cua "$DOT_DIR/scripts/cleanup/setup_kill_sky_cua.sh"
+    fi
+
+    # Weekly nudge before the Sunday review: lists Things to-dos with no project
+    # or area as one Today to-do of links. Read-only on the Things database.
+    if [[ "$DEPLOY_THINGS_ORPHANS" == "true" ]] && is_macos; then
+        queue_scheduled_job things-orphans "$DOT_DIR/scripts/cleanup/setup_things_orphans.sh"
+    elif is_macos && (( ${EXPLICIT_OPT_OUTS[(Ie)THINGS_ORPHANS]} )); then
+        [[ -f "$DOT_DIR/scripts/cleanup/setup_things_orphans.sh" ]] && \
+            "$DOT_DIR/scripts/cleanup/setup_things_orphans.sh" --uninstall >/dev/null 2>&1 || true
     fi
 
     if [[ "$DEPLOY_COREAUDIO_WATCH" == "true" ]] && is_macos; then

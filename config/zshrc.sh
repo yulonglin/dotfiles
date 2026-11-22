@@ -73,6 +73,11 @@ fi
 export VISUAL="$EDITOR"
 unset _fa_conf EDITOR_CLI EDITOR_CLI_SSH
 
+# Local zone for the Claude time-awareness hooks (claude/hooks/inject_timestamp.sh,
+# elapsed_stamp.sh). Servers run on UTC but the reader is in California; a Mac
+# already has the right zone in /etc/localtime, which also follows travel.
+[[ $OSTYPE == darwin* ]] || export CLAUDE_LOCAL_TZ="${CLAUDE_LOCAL_TZ:-America/Los_Angeles}"
+
 # Claude Code tmpdir - avoid root-owned /tmp/claude issues
 if [[ -n "$TMPDIR" && -w "$TMPDIR" ]]; then
     # Explicit TMPDIR takes priority (cloud environments, user preference)
@@ -164,8 +169,11 @@ fi
 [ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-if [ -d "$HOME/.cargo" ]; then
+if [ -f "$HOME/.cargo/env" ]; then
   . "$HOME/.cargo/env"
+elif [ -d "$HOME/.cargo/bin" ]; then
+  # Homebrew's rustup writes no ~/.cargo/env, but `cargo install` still lands here
+  add_to_path "$HOME/.cargo/bin"
 fi
 
 # Linuxbrew precedence, re-asserted last. The shellenv near the top of this file

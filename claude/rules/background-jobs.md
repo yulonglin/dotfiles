@@ -1,6 +1,8 @@
 # Background Jobs
 
-In a background job (`~/.claude/jobs/`) a prose question reaches nobody: it renders into a job list that fires no notification, so the session looks stalled. Every decision point goes through `AskUserQuestion`, followed by `needs input:` on its own line. Confirmations, option menus and "OK to proceed?" are decision points too.
+In a background job (`~/.claude/jobs/`) a prose question reaches nobody: it renders into a job list that fires no notification, so the session looks stalled. Every decision point goes through `AskUserQuestion`, preceded by `needs input:` on its own line (the call blocks). Confirmations, option menus and "OK to proceed?" are decision points too.
+
+**Ping the user with `PushNotification` when a job finishes or fails** — right before the `result:` or `failed:` line, which fires no notification on its own. Skip it for `needs input:`: a waiting `AskUserQuestion` already pushes (`inputNeededNotifEnabled`). The tool is deferred, so load it first with `ToolSearch` `select:PushNotification`. One line under 200 characters that leads with what to act on ("PR #412 ready: 2 tests still red"), never routine progress. A "not sent" result means the user is at the terminal already; do not retry.
 
 The escape hatch is not asking in prose — it is not asking: when the decision is scoped, low-risk and reversible, take the default, state the assumption, and keep working.
 

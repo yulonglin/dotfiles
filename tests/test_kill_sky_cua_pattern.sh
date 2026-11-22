@@ -75,6 +75,10 @@ matches no "unrelated node process" \
     "/opt/homebrew/bin/node /Users/x/code/thing/server.mjs"
 matches no "claude CLI" \
     "/Users/x/.local/bin/claude"
+matches no "codex app-server launched with a cua_node MCP argument (2026-11-21)" \
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c features.code_mode_host=true app-server --mcp-launch-cwd node_repl /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl /Users/x/.codex"
+matches yes "SkyComputerUseService inside the spaced Codex Computer Use.app" \
+    "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService"
 
 echo "## canary: the installed ChatGPT.app is still covered"
 APP="/Applications/ChatGPT.app"
