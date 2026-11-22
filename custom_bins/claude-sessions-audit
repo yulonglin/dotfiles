@@ -6,6 +6,14 @@ whether that line still hands something back to the user, and the state of the
 job's worktree: uncommitted files, whether its branch's content has landed in the
 base branch, and whether the repository has a remote at all.
 
+Rows are grouped into a digest: Needs you, New (complete in the last 24 h), In
+progress, and Done earlier (complete, older than 24 h). Each row shows its age
+since the job's timeline last moved, so a stalled session stands out. A closing
+marker the session wrote itself (`✅ **Safe to close this session**` or
+`⚠️ **Keep open:** <what>`, see claude/rules/background-jobs.md) beats the
+follow-up words guessed from the result line, but never a worktree whose work
+has not landed.
+
 "done" in agent view only means the session wrote a `result:` line. This command
 exists because a done session can still be unfinished: a follow-up for the user,
 or a worktree whose commits exist on no remote (2026-11-07: three attention-
@@ -23,9 +31,36 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 JOBS_DIR = Path.home() / ".claude" / "jobs"
+DAY = 86400
+
+# Closing markers a background job writes on its own line just above `result:`.
+# Matched as whole lines, so a session that merely discusses the marker does not
+# match; the bold and the emoji's variation selector are optional. Safe to close
+# counts only in that exact footer position (see find_marker).
+SAFE_MARKER = re.compile(
+    r"^\s*✅️?\s*\**\s*safe to close this session\s*\.?\s*\**\s*$", re.IGNORECASE
+)
+KEEP_MARKER = re.compile(
+    r"^\s*⚠️?\s*\**\s*keep open\s*:?\s*\**\s*:?\s*(?P<what>.*?)\s*$",
+    re.IGNORECASE,
+)
+MARKER_TAIL_LINES = 6
+
+# States a job is in while it is still running its own turn. Any other state
+# that is not `done` (blocked, failed, or one this script has never seen) is
+# put under "Needs you", so an unknown state fails toward attention.
+RUNNING_STATES = {"working", "waiting"}
+
+SECTIONS = (
+    ("needs", "Needs you"),
+    ("new", "New (complete in the last 24 h)"),
+    ("progress", "In progress"),
+    ("earlier", "Done earlier (complete, older than 24 h)"),
+)
 
 # Phrases in a result line that hand work back to the user. A match is a prompt
 # to check the live state, not proof that the follow-up is still open.
@@ -74,6 +109,73 @@ class Job:
     result: str
     follow_up: list[str] = field(default_factory=list)
     worktree: Worktree | None = None
+    age_seconds: int | None = None  # since the timeline (else state.json) last moved
+    marker: str | None = None  # "safe" or "keep", from the final message
+    keep_open: str = ""  # what the "Keep open" marker says remains
+
+
+def parse_ts(s: str | None) -> datetime | None:
+    """An ISO-8601 timestamp as aware UTC.
+
+    The `Z` rewrite and `timezone.utc` (not `datetime.UTC`) keep this running
+    under the Python 3.10 a bare `python3` still is on some Linux servers.
+    """
+    if not s:
+        return None
+    try:
+        t = datetime.fromisoformat(s.replace("Z", "+00:00"))  # noqa: FURB162
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)  # noqa: UP017
+
+
+def last_timeline(job_dir: Path) -> dict:
+    """The last entry of the job's timeline.jsonl, or {} when there is none."""
+    try:
+        lines = (job_dir / "timeline.jsonl").read_text().splitlines()
+    except OSError:
+        return {}
+    for line in reversed(lines):
+        if line.strip():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                return {}
+            return entry if isinstance(entry, dict) else {}
+    return {}
+
+
+def find_marker(text: str, result: str) -> tuple[str | None, str]:
+    """The closing marker of a final message whose footer matches `result`.
+
+    Returns ("keep", what), ("safe", "") or (None, ""). Safe to close is taken
+    only from the line directly above a terminal `result:` line whose text is
+    the job's current result, so a quoted example or an earlier turn's footer
+    cannot certify a later result. Keep open wins whenever it appears in the
+    last few lines, since a stray one can only make the audit more careful.
+    """
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for ln in lines[-MARKER_TAIL_LINES:]:
+        if m := KEEP_MARKER.match(ln):
+            return "keep", m.group("what")
+    if len(lines) < 2 or not result.strip():
+        return None, ""
+    footer = lines[-1]
+    if not footer.startswith("result:"):
+        return None, ""
+    if footer.removeprefix("result:").strip() != result.strip():
+        return None, ""
+    return ("safe", "") if SAFE_MARKER.match(lines[-2]) else (None, "")
+
+
+def fmt_age(seconds: int | None) -> str:
+    if seconds is None:
+        return "?"
+    if seconds < 3600:
+        return f"{max(seconds, 0) // 60}m"
+    if seconds < DAY:
+        return f"{seconds // 3600}h"
+    return f"{seconds // DAY}d"
 
 
 def base_branch(repo: str) -> str | None:
@@ -156,11 +258,12 @@ def inspect_worktree(path: str, branch: str | None, prs: bool) -> Worktree:
     return wt
 
 
-def load(job_dir: Path, prs: bool) -> Job | None:
+def load(job_dir: Path, prs: bool, now: datetime | None = None) -> Job | None:
     try:
         d = json.loads((job_dir / "state.json").read_text())
     except (OSError, json.JSONDecodeError):
         return None
+    now = now or datetime.now(timezone.utc)  # noqa: UP017
     out = d.get("output")
     result = (
         (out.get("result") if isinstance(out, dict) else out) or d.get("detail") or ""
@@ -173,6 +276,14 @@ def load(job_dir: Path, prs: bool) -> Job | None:
         result=result,
         follow_up=sorted({m.group(0).lower() for m in FOLLOW_UP.finditer(result)}),
     )
+    last = last_timeline(job_dir)
+    moved = parse_ts(last.get("at")) or parse_ts(d.get("updatedAt"))
+    if moved:
+        job.age_seconds = int((now - moved).total_seconds())
+    # state.json is authoritative for "done": a failed job's last timeline entry
+    # can still read "done". The final message text lives in that entry.
+    if job.state == "done":
+        job.marker, job.keep_open = find_marker(last.get("text") or "", result)
     if d.get("worktreePath"):
         job.worktree = inspect_worktree(d["worktreePath"], d.get("worktreeBranch"), prs)
     return job
@@ -191,43 +302,81 @@ def verdict(j: Job) -> tuple[str, str]:
     # landed (no base branch found, inspection failed) is never "complete".
     if wt and wt.exists and wt.landed is not True:
         return "check", "33"
+    # The session's own closing marker beats the follow-up words guessed from
+    # its result line, but only here, after every worktree check has passed.
+    if j.marker == "keep":
+        return "check", "33"
+    if j.marker == "safe":
+        return "complete", "32"
     if j.follow_up:
         return "check", "33"
     return "complete", "32"
 
 
+def section(j: Job) -> str:
+    """Exactly one digest section per job, first match wins."""
+    v = verdict(j)[0]
+    if j.state != "done":
+        return "progress" if j.state in RUNNING_STATES else "needs"
+    if v != "complete":
+        return "needs"
+    if j.age_seconds is not None and j.age_seconds <= DAY:
+        return "new"
+    return "earlier"
+
+
+def render_row(j: Job, sec: str) -> None:
+    v, colour = verdict(j)
+    age = fmt_age(j.age_seconds)
+    stalled = sec == "progress" and (j.age_seconds or 0) > DAY
+    age_cell = paint(f"{age:>4}", "33;1" if stalled else "2")
+    tag = paint(" stalled?", "33") if stalled else ""
+    print(
+        f"{age_cell}  {paint(f'{v.upper():<9}', colour + ';1')} {paint(j.id, '1')}  "
+        f"{j.name}  {paint(f'[{j.state}, {j.updated}]', '2')}{tag}"
+    )
+    if j.result:
+        print(f"      {j.result[:300]}")
+    if j.marker == "safe":
+        print(paint("      marker: safe to close", "32"))
+    elif j.marker == "keep":
+        print(paint(f"      marker: keep open: {j.keep_open or '(not stated)'}", "33"))
+    if j.follow_up:
+        print(paint(f"      follow-up words: {', '.join(j.follow_up)}", "33"))
+    wt = j.worktree
+    if wt:
+        if not wt.exists:
+            print(paint(f"      worktree gone: {wt.path}", "2"))
+        else:
+            bits = [
+                f"branch {wt.branch}",
+                f"{wt.dirty} uncommitted" if wt.dirty else "clean",
+                f"{wt.ahead} ahead of {wt.base}" if wt.base else "no base branch",
+                "landed in base"
+                if wt.landed
+                else "NOT in base"
+                if wt.landed is False
+                else "landed ?",
+                ("pushed" if wt.pushed else "NOT pushed") if wt.remote else "NO REMOTE",
+            ]
+            if wt.pr:
+                bits.append(f"PR {wt.pr}")
+            print(f"      worktree {wt.path}\n        " + " · ".join(bits))
+
+
 def render(jobs: list[Job]) -> None:
+    by_section: dict[str, list[Job]] = {key: [] for key, _ in SECTIONS}
     for j in jobs:
-        v, colour = verdict(j)
-        print(
-            f"{paint(v.upper(), colour + ';1'):<10} {paint(j.id, '1')}  {j.name}  "
-            f"{paint(f'[{j.state}, {j.updated}]', '2')}"
-        )
-        if j.result:
-            print(f"    {j.result[:300]}")
-        if j.follow_up:
-            print(paint(f"    follow-up words: {', '.join(j.follow_up)}", "33"))
-        wt = j.worktree
-        if wt:
-            if not wt.exists:
-                print(paint(f"    worktree gone: {wt.path}", "2"))
-            else:
-                bits = [
-                    f"branch {wt.branch}",
-                    f"{wt.dirty} uncommitted" if wt.dirty else "clean",
-                    f"{wt.ahead} ahead of {wt.base}" if wt.base else "no base branch",
-                    "landed in base"
-                    if wt.landed
-                    else "NOT in base"
-                    if wt.landed is False
-                    else "landed ?",
-                    ("pushed" if wt.pushed else "NOT pushed")
-                    if wt.remote
-                    else "NO REMOTE",
-                ]
-                if wt.pr:
-                    bits.append(f"PR {wt.pr}")
-                print(f"    worktree {wt.path}\n      " + " · ".join(bits))
+        by_section[section(j)].append(j)
+    for i, (key, title) in enumerate(SECTIONS):
+        rows = by_section[key]
+        if i:
+            print()
+        print(paint(f"{title} ({len(rows)})", "1;4"))
+        if not rows:
+            print(paint("  none", "2"))
+        for j in rows:
+            render_row(j, key)
 
 
 def main() -> int:
@@ -254,13 +403,27 @@ def main() -> int:
     ]
     if args.state:
         jobs = [j for j in jobs if j.state == args.state]
+    # Section order, then worst verdict first, then the longest-quiet first so a
+    # stalled session tops its section.
+    order = {key: i for i, (key, _) in enumerate(SECTIONS)}
     rank = {"open": 0, "stranded": 1, "unmerged": 2, "check": 3, "complete": 4}
-    jobs.sort(key=lambda j: (rank[verdict(j)[0]], j.updated))
+    jobs.sort(
+        key=lambda j: (
+            order[section(j)],
+            rank[verdict(j)[0]],
+            -(j.age_seconds if j.age_seconds is not None else 0),
+        )
+    )
 
     if args.json:
         print(
             json.dumps(
-                [{**asdict(j), "verdict": verdict(j)[0]} for j in jobs], indent=1
+                [
+                    {**asdict(j), "verdict": verdict(j)[0], "section": section(j)}
+                    for j in jobs
+                ],
+                indent=1,
+                ensure_ascii=False,
             )
         )
     else:
