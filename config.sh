@@ -91,6 +91,7 @@ DEPLOY_REGISTRY=(
     "file-apps|Default editor for coding file types|macos|true|macOS"
     "keyboard|Keyboard repeat rate enforcement at login|macos|true|macOS"
     "kill-sky-cua|Kill OpenAI Sky Computer Use helpers (AX-polling lag watchdog)|macos|true|macOS"
+    "things-orphans|Weekly Sunday check for Things to-dos with no project or area (adds a Today to-do linking them)|macos|true|macOS"
     "coreaudio-watch|Notify when CoreAudio wedges and audio apps hang (and when it recovers)|macos|true|macOS"
     "bedtime|Bedtime timezone enforcement|macos|false|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"

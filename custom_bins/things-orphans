@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""List Things 3 to-dos that belong to no project or area ("orphans").
+
+An orphan is an open, untrashed to-do in Anytime or Someday with no project,
+area or heading. Inbox items are not orphans: the Inbox is the place for
+unfiled items until the weekly review (Bear note "Where things live").
+
+Reads the local Things SQLite database read-only; never writes to it.
+
+Usage:
+  things-orphans            list orphans (exit 0 even when some exist)
+  things-orphans --json     machine-readable list
+  things-orphans --notify   if orphans exist, add one Things to-do for today
+                            that links each of them (used by the weekly
+                            launchd job); skipped if that to-do is still open
+  things-orphans --check    exit 1 when orphans exist (for scripts and hooks)
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+import urllib.parse
+
+DB_GLOB = os.path.expanduser(
+    "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/"
+    "ThingsData-*/Things Database.thingsdatabase/main.sqlite"
+)
+NOTIFY_TITLE = "File orphaned Things to-dos"
+MAX_LINKS = 60  # keep the things:///add URL a sane length
+START = {0: "Inbox", 1: "Anytime", 2: "Someday"}
+
+
+def paint(text: str, code: str) -> str:
+    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+        return f"\033[{code}m{text}\033[0m"
+    return text
+
+
+def find_db() -> str:
+    paths = sorted(glob.glob(DB_GLOB), key=os.path.getmtime, reverse=True)
+    if not paths:
+        sys.exit("things-orphans: Things database not found (is Things 3 installed?)")
+    return paths[0]
+
+
+def connect(db: str) -> sqlite3.Connection:
+    return sqlite3.connect(f"file:{urllib.parse.quote(db)}?mode=ro", uri=True)
+
+
+def orphans(con: sqlite3.Connection) -> list[dict]:
+    rows = con.execute(
+        """
+        select uuid, title, start, rt1_recurrenceRule is not null as repeating,
+               date(creationDate, 'unixepoch') as created
+        from TMTask
+        where type = 0 and status = 0 and trashed = 0
+          and project is null and area is null and heading is null
+          and start in (1, 2)
+          and title != ?
+        order by creationDate
+        """,
+        (NOTIFY_TITLE,),
+    ).fetchall()
+    return [
+        {
+            "uuid": u,
+            "title": " ".join((t or "").split()) or "(untitled)",
+            "list": START.get(s, str(s)),
+            "repeating": bool(r),
+            "created": c,
+            "link": f"things:///show?id={u}",
+        }
+        for u, t, s, r, c in rows
+    ]
+
+
+def notify_open(con: sqlite3.Connection) -> bool:
+    row = con.execute(
+        "select 1 from TMTask where type = 0 and status = 0 and trashed = 0 and title = ? limit 1",
+        (NOTIFY_TITLE,),
+    ).fetchone()
+    return row is not None
+
+
+def notify(items: list[dict], con: sqlite3.Connection) -> str:
+    if not items:
+        return "no orphans; nothing added"
+    if notify_open(con):
+        return f'"{NOTIFY_TITLE}" is still open in Things; not adding another'
+    lines = [f"- [{i['title']}]({i['link']})" for i in items[:MAX_LINKS]]
+    if len(items) > MAX_LINKS:
+        lines.append(f"- …and {len(items) - MAX_LINKS} more: run `things-orphans`")
+    notes = (
+        f"{len(items)} to-do(s) belong to no project or area. File each into a "
+        "project or area, move it to Bear, or cancel it.\n\n" + "\n".join(lines)
+    )
+    query = urllib.parse.urlencode(
+        {"title": NOTIFY_TITLE, "notes": notes, "when": "today"},
+        quote_via=urllib.parse.quote,
+    )
+    subprocess.run(["open", "-g", f"things:///add?{query}"], check=True)
+    return f"added '{NOTIFY_TITLE}' to Today with {len(items)} link(s)"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="things-orphans",
+        description="List Things to-dos in Anytime/Someday that belong to no project or area.",
+    )
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--json", action="store_true", help="print JSON")
+    mode.add_argument(
+        "--notify", action="store_true", help="add a Today to-do linking the orphans"
+    )
+    mode.add_argument(
+        "--check", action="store_true", help="exit 1 if any orphans exist"
+    )
+    args = ap.parse_args()
+
+    con = connect(find_db())
+    items = orphans(con)
+
+    if args.json:
+        print(json.dumps(items, indent=1, ensure_ascii=False))
+        return 0
+    if args.notify:
+        print(notify(items, con))
+        return 0
+    if not items:
+        print(paint("no orphaned to-dos", "32"))
+        return 0
+    print(paint(f"{len(items)} orphaned to-do(s)", "33") + " (no project or area):")
+    for i in items:
+        rep = paint(" repeating", "2") if i["repeating"] else ""
+        print(
+            f"  {paint(i['title'], '1')}  {paint(i['list'] + ' · ' + i['created'], '2')}{rep}"
+        )
+        print(f"    {paint(i['link'], '2')}")
+    return 1 if args.check else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
