@@ -2960,6 +2960,29 @@ def test_sync_names_what_a_committed_blocks_lock_keeps_out(
     assert gated == []  # nothing for an agent to wait for: it could not land
 
 
+def test_sync_writes_an_import_file_instead_of_many_cli_adds(
+    cfg, monkeypatch, tmp_path, capsys
+):
+    # Over IMPORT_OVER new sites for one list go to a .txt for Cold Turkey's block-editor
+    # import, since each CLI add brings Cold Turkey to the front (2026-11-18).
+    monkeypatch.setattr(ct, "IMPORT_OVER", 0)
+    monkeypatch.setattr(ct.Path, "home", lambda: tmp_path)
+    research = mode_block(cfg, "research", "false")
+    research["exceptions"].remove("arxiv.org")
+    blocks = {
+        "mode: research": research,
+        "mode: writing": mode_block(cfg, "writing", "false"),
+    }
+    calls = fake_cold_turkey(monkeypatch, blocks)
+    ct.cmd_sync(cfg)
+    assert not [c for c in calls if c[0] == "-add"]
+    f = tmp_path / "Downloads" / "focus-mode-research-exceptions.txt"
+    assert f.read_text() == "arxiv.org\n"
+    out = capsys.readouterr().out
+    assert "Website Exceptions tab > Import > Websites from file..." in out
+    assert str(f) in out
+
+
 def test_an_allow_of_a_site_the_note_already_has_adds_no_copy(commit_env, monkeypatch):
     cfg, blocks, clock, _ = committed(commit_env)
     blocks["mode: research"]["exceptions"].remove("arxiv.org")
