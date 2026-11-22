@@ -593,13 +593,12 @@ def is_blocklist(cfg: dict, mode: str) -> bool:
 
 def ct_exceptions(cfg: dict, mode: str) -> list[str]:
     """The exceptions of a mode's Cold Turkey block. An exception overrides its own
-    block, so a blocklist mode leaves out every site it bans: a site in both its allow
-    and block groups stays banned in Cold Turkey and still feeds '✅ focus: shared'."""
-    sites = desired_exceptions(cfg, mode)
+    block, and a pattern ban ('*.wikipedia.org') cannot be checked against an allowed
+    entry ('en.wikipedia.org') by string, so a blocklist mode takes only `always_allow`
+    as exceptions: its own `allow` groups feed '✅ focus: shared' and nothing else."""
     if is_blocklist(cfg, mode):
-        banned = set(desired_web(cfg, mode))
-        sites = [x for x in sites if x not in banned]
-    return sites
+        return group_items(cfg, cfg.get("always_allow") or [], "sites")
+    return desired_exceptions(cfg, mode)
 
 
 def desired_web(cfg: dict, mode: str) -> list[str]:
@@ -2859,7 +2858,11 @@ def pull_plan(cfg: dict, blocks: dict) -> list[dict]:
     for mode in cfg["modes"]:
         d = drift(cfg, blocks, mode)
         if d["exists"]:
-            entry(PREFIX + mode, d["extra_exc"], [], ("modes", mode, "allow"))
+            # A blocklist mode's Cold Turkey exceptions leave out its own allow groups,
+            # so a leftover exception the note already allows is not new.
+            known = set(desired_exceptions(cfg, mode))
+            exc = [e for e in d["extra_exc"] if e not in known]
+            entry(PREFIX + mode, exc, [], ("modes", mode, "allow"))
             # A blocklist mode's own banned sites go with its apps; entry() drops '*.*'.
             web = d["extra_web"] if is_blocklist(cfg, mode) else []
             entry(

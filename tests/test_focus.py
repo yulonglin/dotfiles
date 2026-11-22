@@ -3932,9 +3932,11 @@ def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
         )
     )
     cfg = ct.load_config(p)
-    assert "nytimes.com" not in ct.ct_exceptions(cfg, "admin")
-    assert "opentable.com" in ct.ct_exceptions(cfg, "admin")
+    # only always_allow becomes an exception, so no allow pattern can undo a pattern ban
+    # ('*.wikipedia.org' against 'en.wikipedia.org'); found by the second review round
+    assert ct.ct_exceptions(cfg, "admin") == ["file://*.*", "localhost"]
     assert "nytimes.com" in ct.sz_allow_sites(cfg, [])
+    assert "opentable.com" in ct.sz_allow_sites(cfg, [])
     # a leftover exception for a banned site is flagged for hand removal
     blocks = {
         "mode: admin": {
@@ -3945,6 +3947,7 @@ def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
         }
     }
     assert ct.drift(cfg, blocks, "admin")["extra_exc"] == [
+        "opentable.com",
         "nytimes.com",
         "wikipedia.org",
     ]
