@@ -883,6 +883,14 @@ def write_state(path: Path, state: dict) -> None:
     path.write_text(json.dumps(state))
 
 
+def restore_state(path: Path, state: dict | None) -> None:
+    """Put a state file back as read_state found it: rewritten, or removed if missing."""
+    if state is None:
+        path.unlink(missing_ok=True)
+    else:
+        write_state(path, state)
+
+
 def log_reason(command: str, reason: str, **extra) -> None:
     """Append one line to COMMIT_LOG: when, what was run, and why."""
     COMMIT_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -4466,7 +4474,7 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     """Start the note's scheduled_mode once a day, on the first tick between its start
     and 'until', as a capped stretch that ends at 'until' in no mode; return the mode
     started, else None. Like default_start, only the launchd tick calls it, and the
-    first tick in the span marks the day whatever happens."""
+    first tick in the span marks the day unless Cold Turkey misses the command."""
     d = cfg.get("scheduled_mode")
     if not d:
         return None
@@ -4478,7 +4486,8 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if in_window(cfg, now):  # an open window wins, as for default_start
         return None
     today = now.strftime("%Y-%m-%d")
-    if (read_state(SCHEDULED_FILE) or {}).get("date") == today:
+    before = read_state(SCHEDULED_FILE)
+    if (before or {}).get("date") == today:
         return None
     write_state(SCHEDULED_FILE, {"date": today})
     if read_commit() or read_only():
@@ -4486,7 +4495,13 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     mode = d["mode"]
     hh, mm = (int(x) for x in str(d["until"]).split(":"))
     until = now.replace(hour=hh, minute=mm, second=0, microsecond=0).timestamp()
-    cmd_start(cfg, mode, ask=False)  # clears a break and any other mode's stretch
+    try:
+        cmd_start(cfg, mode, ask=False)  # clears a break and any other mode's stretch
+    except SystemExit:
+        # Cold Turkey did not read the command, as with the display asleep at 21:30 on
+        # 21 Nov 2026: give the day back so the next tick in the span tries again.
+        restore_state(SCHEDULED_FILE, before)
+        raise
     with capped_lock():
         write_state(
             CAPPED_FILE,
@@ -4507,7 +4522,8 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if not span:
         return None
     key = f"{now:%Y-%m-%d} {span}"
-    if (read_state(WINDOW_FILE) or {}).get("key") == key:
+    before = read_state(WINDOW_FILE)
+    if (before or {}).get("key") == key:
         return None
     hh, mm = (int(x) for x in span.split("-")[1].split(":"))
     end = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
@@ -4533,8 +4549,15 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         until = max(b["until"], end.timestamp())
         BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
         BREAK_FILE.write_text(json.dumps({"modes": modes, "until": until}))
-        for m in running:
-            switch(PREFIX + m, on=False)
+        try:
+            for m in running:
+                switch(PREFIX + m, on=False)
+        except SystemExit:
+            # As in scheduled_start: a stop Cold Turkey did not read (the display asleep
+            # at 22:00 on 21 Nov 2026 left research on through the window) is retried
+            # by the next tick in the window, which reuses the break written above.
+            restore_state(WINDOW_FILE, before)
+            raise
         running = modes
     sz_follow(cfg, running_modes(cfg), switched=True)
     back = f"; {', '.join(running)} starts again then" if running else ""
