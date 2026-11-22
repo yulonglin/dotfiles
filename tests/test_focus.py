@@ -3462,9 +3462,7 @@ def test_a_scheduled_start_cold_turkey_missed_is_retried(
     assert on(blocks) == ["mode: writing"] and ct.read_capped()["off_after"]
 
 
-def test_a_window_stop_cold_turkey_missed_is_retried(
-    capped_env, tmp_path, monkeypatch
-):
+def test_a_window_stop_cold_turkey_missed_is_retried(capped_env, tmp_path, monkeypatch):
     _, blocks, clock, _, _ = capped_env
     cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
     asleep = asleep_display(monkeypatch)
@@ -3518,7 +3516,9 @@ def test_a_window_retry_brings_back_a_mode_the_failed_attempt_did_stop(
     monkeypatch.setattr(
         ct,
         "ct_send",
-        lambda *a: None if a[:2] == ("-stop", "mode: writing") and drop[0] else send(*a),
+        lambda *a: (
+            None if a[:2] == ("-stop", "mode: writing") and drop[0] else send(*a)
+        ),
     )
     at = dt.datetime(2026, 11, 17, 12, 30)
     clock.now = at.timestamp()
@@ -3772,3 +3772,126 @@ def test_a_tick_without_screenzen_installed_writes_nothing(cfg, monkeypatch):
         ct, "cmd_screenzen", lambda *a, **k: pytest.fail("wrote ScreenZen")
     )
     ct.cmd_tick(cfg)
+
+
+# --- blocklist modes (kind: blocklist): admin opens the web except named groups ---
+
+BLOCKLIST = """\
+  news: {sites: [nytimes.com, wikipedia.org]}
+  errands: {sites: [opentable.com]}
+"""
+
+
+@pytest.fixture
+def bl_cfg(tmp_path):
+    p = tmp_path / "bl.md"
+    note = NOTE.replace("always_allow:", BLOCKLIST + "always_allow:").replace(
+        "  writing: {allow: [papers]}\n",
+        "  writing: {allow: [papers]}\n"
+        "  admin: {kind: blocklist, allow: [errands], block: [news, chat]}\n",
+    )
+    p.write_text(note)
+    return ct.load_config(p)
+
+
+def test_a_mode_kind_must_be_allowlist_or_blocklist(tmp_path):
+    p = tmp_path / "bad.md"
+    p.write_text(NOTE.replace("writing: {allow: [papers]}", "writing: {kind: open}"))
+    with pytest.raises(SystemExit, match="'kind' must be allowlist or blocklist"):
+        ct.load_config(p)
+
+
+def test_a_blocklist_mode_blocks_its_groups_sites_not_everything(bl_cfg):
+    assert ct.desired_web(bl_cfg, "admin") == ["nytimes.com", "wikipedia.org"]
+    assert ct.desired_web(bl_cfg, "research") == ["*.*"]
+    # its apps are blocked as in any mode, and its allow list is unchanged
+    assert ct.group_items(bl_cfg, bl_cfg["modes"]["admin"]["block"], "apps") == [
+        "Telegram"
+    ]
+    assert "opentable.com" in ct.desired_exceptions(bl_cfg, "admin")
+
+
+def test_drift_never_adds_block_all_to_a_blocklist_mode(bl_cfg, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    blocks = {"mode: admin": mode_block(bl_cfg, "admin", "false")}
+    d = ct.drift(bl_cfg, blocks, "admin")
+    # '*.*' left over from the allowlist days is a hand removal, never an addition
+    assert d["extra_web"] == ["*.*"]
+    assert d["add_web"] == ["nytimes.com", "wikipedia.org"]
+    blocks["mode: admin"]["web"] = ["nytimes.com", "wikipedia.org"]
+    d = ct.drift(bl_cfg, blocks, "admin")
+    assert d["add_web"] == [] and d["extra_web"] == []
+    # an allowlist mode is unchanged: '*.*' is wanted
+    blocks = {"mode: research": {**mode_block(bl_cfg, "research", "false"), "web": []}}
+    assert ct.drift(bl_cfg, blocks, "research")["add_web"] == ["*.*"]
+
+
+def test_export_writes_a_blocklist_modes_own_sites(bl_cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    out = tmp_path / "x.ctbbl"
+    ct.cmd_export(bl_cfg, out)
+    data = json.loads(out.read_text())
+    assert data["mode: admin"]["web"] == ["nytimes.com", "wikipedia.org"]
+    assert data["mode: research"]["web"] == ["*.*"]
+
+
+def test_pull_puts_a_blocklist_modes_extra_sites_in_its_block_list(bl_cfg, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    blocks = {
+        "mode: admin": {
+            **mode_block(bl_cfg, "admin", "false"),
+            "web": ["*.*", "nytimes.com", "wikipedia.org", "cnn.com"],
+        }
+    }
+    plan = [e for e in ct.pull_plan(bl_cfg, blocks) if e["ref"][1] == "admin"]
+    assert [(e["sites"], e["ref"][2]) for e in plan] == [(["cnn.com"], "block")]
+
+
+def test_switching_into_a_blocklist_mode_loosens(bl_cfg, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    assert ct.switch_loosens(bl_cfg, ["writing"], "admin")
+    assert not ct.switch_loosens(bl_cfg, ["admin"], "admin")
+
+
+def test_screenzen_pauses_nothing_in_a_blocklist_mode_and_says_it_loosens(
+    bl_cfg, monkeypatch
+):
+    template = {
+        "groupName": "✅ focus: shared",
+        "id": "S",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs([template]))
+    monkeypatch.setattr(ct, "ct_held_bundles", lambda modes: set())
+    loosen = ct.cmd_screenzen(bl_cfg, dry_run=True, modes=["admin"], quiet=True)
+    assert "screenzen:every-site" in loosen
+    # an allowlist mode still turns its own group on: no every-site loosening
+    loosen = ct.cmd_screenzen(bl_cfg, dry_run=True, modes=["research"], quiet=True)
+    assert "screenzen:every-site" not in loosen
+    assert ct.sz_open_web(bl_cfg, ["admin"]) and not ct.sz_open_web(bl_cfg, [])
+
+
+def test_no_mode_screenzen_list_keeps_a_blocklist_modes_allow_groups(bl_cfg):
+    # '✅ focus: shared' is built from every mode's allow list, admin's included, so
+    # turning admin into a blocklist pauses nothing new when no mode runs.
+    assert "opentable.com" in ct.sz_allow_sites(bl_cfg, [])
+
+
+def test_starting_a_blocklist_mode_from_no_mode_waits_for_an_agent(bl_cfg, monkeypatch):
+    blocks = {
+        "mode: research": mode_block(bl_cfg, "research", "false"),
+        "mode: writing": mode_block(bl_cfg, "writing", "false"),
+        "mode: admin": mode_block(bl_cfg, "admin", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: True)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_start(bl_cfg, "admin")
+    assert e.value.code == 3 and blocks["mode: admin"]["enabled"] == "false"
+    # an allowlist mode from no mode still starts at once
+    ct.cmd_start(bl_cfg, "writing")
+    assert blocks["mode: writing"]["enabled"] == "true"
