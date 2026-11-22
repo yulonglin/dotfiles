@@ -3394,6 +3394,49 @@ def test_a_window_retry_brings_back_a_mode_the_failed_attempt_did_stop(
     assert on(blocks) == ["mode: research", "mode: writing"]
 
 
+def test_a_window_that_never_opened_resumes_nothing_beside_a_capped_mode(
+    capped_env, tmp_path, monkeypatch
+):
+    # Found by review: the break listed the stretch's fallback before any stop landed.
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    clock.now = dt.datetime(2026, 11, 17, 12, 45).timestamp()
+    ct.cmd_capped(cfg, "writing", [])  # until 13:15
+    asleep_display(monkeypatch)
+    for minute in (46, 50, 59):
+        at = dt.datetime(2026, 11, 17, 12, minute)
+        clock.now = at.timestamp()
+        with pytest.raises(SystemExit):
+            ct.window_start(cfg, at)
+    assert ct.read_break() is None
+    clock.now = dt.datetime(2026, 11, 17, 13, 1).timestamp()
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: writing"]  # research not started beside it
+
+
+def test_a_window_keeps_a_stretch_started_while_it_was_stopping(
+    capped_env, tmp_path, monkeypatch
+):
+    # Found by review: the window cleared whatever stretch was current at its end.
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    clock.now = dt.datetime(2026, 11, 17, 12, 15).timestamp()
+    ct.cmd_capped(cfg, "writing", [])
+    newer = {"mode": "writing", "until": 1.0, "back": ["research"], "day": 0}
+    send = ct.ct_send
+
+    def renew_during_stop(*a):
+        if a[:2] == ("-stop", "mode: writing"):
+            ct.write_state(ct.CAPPED_FILE, newer)
+        send(*a)
+
+    monkeypatch.setattr(ct, "ct_send", renew_during_stop)
+    at = dt.datetime(2026, 11, 17, 12, 31)
+    clock.now = at.timestamp()
+    assert ct.window_start(cfg, at) == "12:30-13:00"
+    assert ct.read_state(ct.CAPPED_FILE) == newer
+
+
 def test_a_scheduled_start_whose_old_stop_is_missed_still_ends_on_time(
     capped_env, tmp_path, monkeypatch
 ):
