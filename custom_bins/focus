@@ -591,6 +591,17 @@ def is_blocklist(cfg: dict, mode: str) -> bool:
     return (cfg["modes"].get(mode) or {}).get("kind") == "blocklist"
 
 
+def ct_exceptions(cfg: dict, mode: str) -> list[str]:
+    """The exceptions of a mode's Cold Turkey block. An exception overrides its own
+    block, so a blocklist mode leaves out every site it bans: a site in both its allow
+    and block groups stays banned in Cold Turkey and still feeds '✅ focus: shared'."""
+    sites = desired_exceptions(cfg, mode)
+    if is_blocklist(cfg, mode):
+        banned = set(desired_web(cfg, mode))
+        sites = [x for x in sites if x not in banned]
+    return sites
+
+
 def desired_web(cfg: dict, mode: str) -> list[str]:
     """The website list of a mode's Cold Turkey block."""
     if is_blocklist(cfg, mode):
@@ -637,7 +648,7 @@ def overlaps(cfg: dict) -> list[tuple[str, str, str]]:
     for bl_name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
         banned = set(group_items(cfg, bl.get("block") or [], "sites"))
         for mode in cfg["modes"]:
-            for site in desired_exceptions(cfg, mode):
+            for site in ct_exceptions(cfg, mode):
                 if site in banned:
                     out.append((site, mode, bl_name))
     return out
@@ -1859,7 +1870,7 @@ def describe(kind: str, items: list[str], indent: str = "  ") -> str:
 
 def drift(cfg: dict, blocks: dict, mode: str) -> dict:
     block = blocks.get(PREFIX + mode)
-    want_exc = desired_exceptions(cfg, mode)
+    want_exc = ct_exceptions(cfg, mode)
     want_apps, missing_apps = desired_apps(cfg, mode)
     if block is None:
         return {"exists": False, "missing_apps": missing_apps}
@@ -2329,7 +2340,7 @@ def cmd_export(cfg: dict, out: Path) -> None:
     for m in cfg["modes"]:
         apps, missing[PREFIX + m] = desired_apps(cfg, m)
         data[PREFIX + m] = build_block(
-            desired_web(cfg, m), desired_exceptions(cfg, m), apps, now
+            desired_web(cfg, m), ct_exceptions(cfg, m), apps, now
         )
     for t in cfg.get("timers") or {}:
         web, apps, missing[TIMER_PREFIX + t] = timer_lists(cfg, t)
@@ -2702,18 +2713,19 @@ def cmd_screenzen(
             )
 
     # Every ✅ group switched off pauses no site at all: the widest state, though
-    # sz_effective_allow sees an empty set.
-    if any(
-        g["groupName"].startswith("✅") and not g["isDisabled"] for g in before
-    ) and not any(
-        g["groupName"].startswith("✅") and not g["isDisabled"] for g in groups
-    ):
+    # sz_effective_allow sees an empty set. So leaving it for an allow group gains
+    # nothing, and entering it loosens everything.
+    def any_on(gs: list[dict]) -> bool:
+        return any(g["groupName"].startswith("✅") and not g["isDisabled"] for g in gs)
+
+    if any_on(before) and not any_on(groups):
         loosen.append("screenzen:every-site")
-    # What now passes without a pause screen that did not before.
-    loosen.extend(
-        f"screenzen:+{s}"
-        for s in sorted(sz_effective_allow(groups) - sz_effective_allow(before))
-    )
+    if any_on(before):
+        # What now passes without a pause screen that did not before.
+        loosen.extend(
+            f"screenzen:+{s}"
+            for s in sorted(sz_effective_allow(groups) - sz_effective_allow(before))
+        )
     changed = groups != before
     if not quiet:
         on = ", ".join(sorted(want_on)) or "nothing (open window)"

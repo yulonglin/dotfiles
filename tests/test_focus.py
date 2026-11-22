@@ -3895,3 +3895,59 @@ def test_starting_a_blocklist_mode_from_no_mode_waits_for_an_agent(bl_cfg, monke
     # an allowlist mode from no mode still starts at once
     ct.cmd_start(bl_cfg, "writing")
     assert blocks["mode: writing"]["enabled"] == "true"
+
+
+def test_leaving_a_blocklist_mode_for_an_allow_group_loosens_nothing(
+    bl_cfg, monkeypatch
+):
+    # Found by review: with every ✅ group off the web is open, so turning the shared
+    # group back on only tightens; it used to count every listed site as a gain and
+    # make an agent's approved 'focus off' wait a second time.
+    shared = {
+        "groupName": "✅ focus: shared",
+        "id": "S",
+        "isDisabled": True,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs([shared]))
+    monkeypatch.setattr(ct, "ct_held_bundles", lambda modes: set())
+    assert ct.cmd_screenzen(bl_cfg, dry_run=True, modes=[], quiet=True) == []
+    assert ct.cmd_screenzen(bl_cfg, dry_run=True, modes=["writing"], quiet=True) == []
+
+
+def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
+    tmp_path, monkeypatch
+):
+    # Found by review: a Cold Turkey exception overrides its own block, so a banned
+    # site must not also be an exception; ScreenZen's no-mode list still has it.
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    p = tmp_path / "overlap.md"
+    p.write_text(
+        NOTE.replace("always_allow:", BLOCKLIST + "always_allow:").replace(
+            "  writing: {allow: [papers]}\n",
+            "  writing: {allow: [papers]}\n"
+            "  admin: {kind: blocklist, allow: [errands, news], block: [news]}\n",
+        )
+    )
+    cfg = ct.load_config(p)
+    assert "nytimes.com" not in ct.ct_exceptions(cfg, "admin")
+    assert "opentable.com" in ct.ct_exceptions(cfg, "admin")
+    assert "nytimes.com" in ct.sz_allow_sites(cfg, [])
+    # a leftover exception for a banned site is flagged for hand removal
+    blocks = {
+        "mode: admin": {
+            "enabled": "false",
+            "web": ["nytimes.com", "wikipedia.org"],
+            "exceptions": ct.desired_exceptions(cfg, "admin"),
+            "apps": [],
+        }
+    }
+    assert ct.drift(cfg, blocks, "admin")["extra_exc"] == [
+        "nytimes.com",
+        "wikipedia.org",
+    ]
+    out = tmp_path / "x.ctbbl"
+    ct.cmd_export(cfg, out)
+    assert "nytimes.com" not in json.loads(out.read_text())["mode: admin"]["exceptions"]
