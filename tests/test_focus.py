@@ -3366,6 +3366,34 @@ def test_a_missed_window_stop_keeps_a_capped_stretch_capped_on_retry(
     assert on(blocks) == ["mode: research"]
 
 
+def test_a_window_retry_brings_back_a_mode_the_failed_attempt_did_stop(
+    capped_env, tmp_path, monkeypatch
+):
+    # Found by review: two modes on, the first stop lands, the second is missed.
+    _, blocks, clock, _, _ = capped_env
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
+    blocks["mode: writing"]["enabled"] = "true"
+    send, drop = ct.ct_send, [True]
+    monkeypatch.setattr(
+        ct,
+        "ct_send",
+        lambda *a: None if a[:2] == ("-stop", "mode: writing") and drop[0] else send(*a),
+    )
+    at = dt.datetime(2026, 11, 17, 12, 30)
+    clock.now = at.timestamp()
+    with pytest.raises(SystemExit, match="did not stop 'mode: writing'"):
+        ct.window_start(cfg, at)
+    assert on(blocks) == ["mode: writing"]
+    drop[0] = False
+    at += dt.timedelta(minutes=1)
+    clock.now = at.timestamp()
+    assert ct.window_start(cfg, at) == "12:30-13:00"
+    assert on(blocks) == []
+    clock.now = dt.datetime(2026, 11, 17, 13, 0).timestamp()
+    ct.catch_up(cfg)
+    assert on(blocks) == ["mode: research", "mode: writing"]
+
+
 def test_a_scheduled_start_whose_old_stop_is_missed_still_ends_on_time(
     capped_env, tmp_path, monkeypatch
 ):

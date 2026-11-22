@@ -4524,12 +4524,9 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if not span:
         return None
     key = f"{now:%Y-%m-%d} {span}"
-    if (read_state(WINDOW_FILE) or {}).get("key") == key:
+    before = read_state(WINDOW_FILE)
+    if (before or {}).get("key") == key:
         return None
-    # Everything below may change, kept so a stop Cold Turkey does not read can be undone
-    # whole and retried: the capped stretch it clears and the break it writes too, or the
-    # retry would bring a capped mode back after the window without its cap.
-    saved = {f: read_state(f) for f in (WINDOW_FILE, CAPPED_FILE, CAPPED_DAY_FILE, BREAK_FILE)}
     hh, mm = (int(x) for x in span.split("-")[1].split(":"))
     end = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
     if end <= now:  # a span past midnight ends tomorrow
@@ -4538,11 +4535,11 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if read_commit() or read_only():
         return None
     # A capped stretch ends here: the window comes back to where the stretch would have
-    # gone, so the capped mode never returns without its cap.
+    # gone, so the capped mode never returns without its cap. It is cleared only once
+    # every stop has landed, so a retry still knows to swap it.
     swap: dict[str, str | None] = {}
     if c := read_capped():
         swap[c["mode"]] = capped_target(cfg, c)
-        clear_capped()
     blocks = read_blocks()
     running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
     b = read_break()
@@ -4560,11 +4557,14 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
         except SystemExit:
             # As in scheduled_start: a stop Cold Turkey did not read (the display asleep
             # at 22:00 on 21 Nov 2026 left research on through the window) is retried
-            # by the next tick in the window, from the state this one started with.
-            for f, s in saved.items():
-                restore_state(f, s)
+            # by the next tick in the window. Only the window marker is given back: the
+            # break stays, so the retry merges into it and a mode this attempt did stop
+            # still comes back, and the capped stretch was never touched.
+            restore_state(WINDOW_FILE, before)
             raise
         running = modes
+    if c:
+        clear_capped()
     sz_follow(cfg, running_modes(cfg), switched=True)
     back = f"; {', '.join(running)} starts again then" if running else ""
     notify(f"focus: open until {end:%H:%M}{back}")
