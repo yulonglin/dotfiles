@@ -1101,12 +1101,12 @@ def test_an_emergency_break_skips_the_wait_after_a_typed_back_text(
     typed = iter(["wrong"])
     monkeypatch.setattr("builtins.input", lambda *a: next(typed))
     with pytest.raises(SystemExit, match="did not match"):
-        ct.cmd_break(cfg, ["10", "--emergency"])
+        ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "true"
     with pytest.raises(SystemExit, match="1 to 30"):  # the cap still holds
-        ct.cmd_break(cfg, ["45", "--emergency"])
+        ct.cmd_break(cfg, ["45"], emergency=True)
     typed = iter(["abc", "landlord at the door"])
-    ct.cmd_break(cfg, ["10", "--emergency"])
+    ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "false"
     entry = json.loads(ct.COMMIT_LOG.read_text().splitlines()[-1])
     assert entry["emergency"] and entry["reason"] == "landlord at the door"
@@ -1119,8 +1119,18 @@ def test_an_agent_cannot_take_an_emergency_break(cfg, monkeypatch):
     monkeypatch.setenv("CLAUDECODE", "1")
     ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
     with pytest.raises(SystemExit, match="not an agent"):
-        ct.cmd_break(cfg, ["10", "--emergency"])
+        ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "true"
+
+
+@pytest.mark.parametrize(
+    "argv", [["break", "10", "--emergency"], ["break", "--emergency", "10"]]
+)
+def test_the_command_line_accepts_emergency_on_either_side_of_the_minutes(argv):
+    # The first version read --emergency inside cmd_break, but argparse refused the
+    # flag before cmd_break ran (Yulong, 2026-11-22).
+    a = ct.build_parser().parse_intermixed_args(argv)
+    assert a.command == "break" and a.args == ["10"] and a.emergency
 
 
 def test_breaks_are_spaced_an_hour_by_default_and_zero_turns_it_off(cfg):
