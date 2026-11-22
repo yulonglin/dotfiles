@@ -1093,7 +1093,8 @@ def test_an_emergency_break_skips_the_wait_after_a_typed_back_text(
     monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
     monkeypatch.setattr(ct.subprocess, "Popen", lambda cmd, **k: None)
     monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(ct, "random_text", lambda n: "abc")
+    lengths = []
+    monkeypatch.setattr(ct, "random_text", lambda n: lengths.append(n) or "abc")
     ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
     with pytest.raises(SystemExit, match="--emergency"):
         ct.cmd_break(cfg, ["10"])
@@ -1109,6 +1110,7 @@ def test_an_emergency_break_skips_the_wait_after_a_typed_back_text(
     assert blocks["mode: research"]["enabled"] == "false"
     entry = json.loads(ct.COMMIT_LOG.read_text().splitlines()[-1])
     assert entry["emergency"] and entry["reason"] == "landlord at the door"
+    assert set(lengths) == {ct.DEFAULT_EMERGENCY_TEXT}  # shorter than a commitment's
 
 
 def test_an_agent_cannot_take_an_emergency_break(cfg, monkeypatch):

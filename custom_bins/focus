@@ -429,6 +429,7 @@ def load_config(path: Path) -> dict:
         "capped_modes",
         "commit_wait_minutes",
         "commit_text_chars",
+        "emergency_text_chars",
         "default_mode",
         "scheduled_mode",
         "windows",
@@ -446,7 +447,11 @@ def load_config(path: Path) -> dict:
     ):
         problems.append("'overlaps' must map each site to a one-line reason")
     # A one-minute lock would run out between two once-a-minute ticks.
-    for key, low in (("commit_wait_minutes", 2), ("commit_text_chars", 1)):
+    for key, low in (
+        ("commit_wait_minutes", 2),
+        ("commit_text_chars", 1),
+        ("emergency_text_chars", 1),
+    ):
         if key in cfg and not (isinstance(cfg[key], int) and cfg[key] >= low):
             problems.append(f"'{key}' must be a whole number >= {low}")
     for name in [*(cfg.get("modes") or {}), *(cfg.get("timers") or {})]:
@@ -837,6 +842,7 @@ SCHEDULED_FILE = PENDING.parent / "scheduled.json"  # the day the scheduled mode
 WINDOW_FILE = PENDING.parent / "window.json"  # the open window: its key and end time
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
 DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
+DEFAULT_EMERGENCY_TEXT = 100  # characters to type back for an emergency break
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
 
 
@@ -1133,7 +1139,8 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     what = f"a {minutes}-minute break"
     if emergency:
         what = f"an emergency {minutes}-minute break"
-        type_back(cfg, what)
+        chars = int(cfg.get("emergency_text_chars", DEFAULT_EMERGENCY_TEXT))
+        type_back(cfg, what, chars)
     else:
         gate(cfg, f"break:{','.join(sorted(running))}:{minutes}", what)
     command = f"focus break {minutes}" + (" --emergency" if emergency else "")
@@ -3484,14 +3491,14 @@ def random_text(n: int) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
 
-def type_back(cfg: dict, what: str) -> None:
+def type_back(cfg: dict, what: str, chars: int) -> None:
     """The hassle in front of an escape hatch: a person at a terminal types back a
-    random text of `commit_text_chars` characters exactly, or nothing changes. An agent
-    never passes: it has no terminal, and copying text proves no person wanted it."""
+    random text of `chars` characters exactly, or nothing changes. An agent never
+    passes: it has no terminal, and copying text proves no person wanted it."""
     if by_agent():
         sys.exit(f"focus: {what} needs a person at a terminal, not an agent")
     need_terminal(what)
-    text = random_text(int(cfg.get("commit_text_chars", DEFAULT_COMMIT_TEXT)))
+    text = random_text(chars)
     print(f"To go on with {what}, type this text exactly:\n\n{text}\n")
     try:
         typed = input("> ")
@@ -3609,7 +3616,7 @@ def commit_request(cfg: dict, kind: str, sites: list[str]) -> None:
         else f"ending the committed {mode} block"
     )
     gate(cfg, f"commit-{kind}:{mode}:{','.join(sites)}", what)
-    type_back(cfg, what)
+    type_back(cfg, what, int(cfg.get("commit_text_chars", DEFAULT_COMMIT_TEXT)))
     reason = ask_reason(what)
     command = "focus " + (f"allow {' '.join(sites)}" if kind == "allow" else "end")
     log_reason(command, reason, mode=mode)
