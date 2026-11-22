@@ -4495,18 +4495,20 @@ def scheduled_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     mode = d["mode"]
     hh, mm = (int(x) for x in str(d["until"]).split(":"))
     until = now.replace(hour=hh, minute=mm, second=0, microsecond=0).timestamp()
+    stretch = {"mode": mode, "until": until, "back": [], "day": 0, "off_after": True}
     try:
         cmd_start(cfg, mode, ask=False)  # clears a break and any other mode's stretch
     except SystemExit:
         # Cold Turkey did not read the command, as with the display asleep at 21:30 on
-        # 21 Nov 2026: give the day back so the next tick in the span tries again.
+        # 21 Nov 2026: give the day back so the next tick in the span tries again. A
+        # target that did start (only an old mode's stop was missed) still gets its end.
         restore_state(SCHEDULED_FILE, before)
+        if read_blocks().get(PREFIX + mode, {}).get("enabled") == "true":
+            with capped_lock():
+                write_state(CAPPED_FILE, stretch)
         raise
     with capped_lock():
-        write_state(
-            CAPPED_FILE,
-            {"mode": mode, "until": until, "back": [], "day": 0, "off_after": True},
-        )
+        write_state(CAPPED_FILE, stretch)
     notify(f"focus: {mode} until {d['until']}, then no mode")
     return mode
 
@@ -4533,32 +4535,46 @@ def window_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if read_commit() or read_only():
         return None
     # A capped stretch ends here: the window comes back to where the stretch would have
-    # gone, so the capped mode never returns without its cap.
+    # gone, so the capped mode never returns without its cap. It is cleared only once
+    # every stop has landed, so a retry still knows to swap it.
     swap: dict[str, str | None] = {}
     if c := read_capped():
         swap[c["mode"]] = capped_target(cfg, c)
-        clear_capped()
     blocks = read_blocks()
     running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
     b = read_break()
     if running or (b and time.time() < b["until"]):
         b = b or {"modes": [], "until": 0}
-        back = [swap.get(m, m) for m in b["modes"] + running]
-        modes = list(dict.fromkeys(m for m in back if m))
         # An earlier break that ends inside the window is stretched to its end.
         until = max(b["until"], end.timestamp())
-        BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
-        BREAK_FILE.write_text(json.dumps({"modes": modes, "until": until}))
+        modes: list[str] = []
+
+        def keep(m: str | None) -> None:
+            if m and m not in modes:
+                modes.append(m)
+            BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
+            BREAK_FILE.write_text(json.dumps({"modes": modes, "until": until}))
+
+        if b["until"]:  # an earlier break: stretched now, its modes already stopped
+            for m in b["modes"] or [None]:
+                keep(swap.get(m, m) if m else None)
         try:
             for m in running:
                 switch(PREFIX + m, on=False)
+                keep(swap.get(m, m))  # only a confirmed stop is resumed at the end
         except SystemExit:
             # As in scheduled_start: a stop Cold Turkey did not read (the display asleep
             # at 22:00 on 21 Nov 2026 left research on through the window) is retried
-            # by the next tick in the window, which reuses the break written above.
+            # by the next tick in the window. Only the window marker is given back: the
+            # break holds just the stops that landed, for the retry to add to, and the
+            # capped stretch was never touched.
             restore_state(WINDOW_FILE, before)
             raise
         running = modes
+    if c:
+        with capped_lock():  # only the stretch this window ended, not a newer one
+            if read_capped() == c:
+                clear_capped()
     sz_follow(cfg, running_modes(cfg), switched=True)
     back = f"; {', '.join(running)} starts again then" if running else ""
     notify(f"focus: open until {end:%H:%M}{back}")
