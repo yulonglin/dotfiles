@@ -5,7 +5,7 @@
 # BlackOut, both paid. Logic lives in tools/builtin-display/main.swift; this
 # wrapper compiles it on first run (or when the source is newer) and execs it.
 # It also owns `auto on|off|status`: the login agents that run `watch` and `heal`.
-# The screen stays off only while a `hold` process runs; ending it brings it back.
+# The screen stays off only while a `hold` process runs; `on` ends it.
 #
 #   builtin-display status | off | on | toggle | try [SECONDS] | hold | heal | auto on|off|status | --help
 set -euo pipefail
@@ -93,7 +93,7 @@ auto_on() {
 auto_off() {
     remove_agent "$LABEL" "$PLIST"
     remove_agent "$HEAL_LABEL" "$HEAL_PLIST"
-    say yellow "auto: off — agents removed; a running holder keeps the screen off until builtin-display on"
+    say yellow "auto: off — agents removed; if the screen is still off, run builtin-display on"
 }
 
 auto_status() {
