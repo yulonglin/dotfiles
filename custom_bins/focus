@@ -968,8 +968,12 @@ def ask_reason(what: str) -> str:
         r = subprocess.run(
             ["osascript", "-e", REASON_DIALOG, *args], capture_output=True, text=True
         )
-        if r.returncode != 0:  # Cancel, or no answer within 300 s
-            raise Cancelled(gave_up)
+        if r.returncode != 0:
+            if "(-128)" in r.stderr:  # Cancel, or no answer within 300 s
+                raise Cancelled(gave_up)
+            # Anything else is a fault, not a choice: say so, so it is not mistaken
+            # for Cancel as the broken script was (22 Nov 2026).
+            sys.exit(f"focus: the reason dialog failed: {r.stderr.strip()}")
         if reason := r.stdout.strip():
             return reason
         args = [what, f"{BLANK_REASON}, or Cancel."]

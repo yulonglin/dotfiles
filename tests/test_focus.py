@@ -2215,7 +2215,9 @@ def test_cancelling_the_reason_dialog_changes_nothing(capped_env, monkeypatch):
     monkeypatch.setattr(
         ct.subprocess,
         "run",
-        lambda cmd, **k: ct.subprocess.CompletedProcess(cmd, 1, stdout=""),
+        lambda cmd, **k: ct.subprocess.CompletedProcess(
+            cmd, 1, stdout="", stderr="execution error: User canceled. (-128)"
+        ),
     )
     with pytest.raises(SystemExit, match="no reason given"):
         ct.cmd_capped(cfg, "writing", [])
@@ -2260,10 +2262,27 @@ def test_cancelling_the_dialog_is_not_a_failure(monkeypatch):
     monkeypatch.setattr(
         ct.subprocess,
         "run",
-        lambda cmd, **k: ct.subprocess.CompletedProcess(cmd, 1, stdout=""),
+        lambda cmd, **k: ct.subprocess.CompletedProcess(
+            cmd, 1, stdout="", stderr="execution error: User canceled. (-128)"
+        ),
     )
     with pytest.raises(ct.Cancelled):
         ct.ask_reason("a break")
+
+
+def test_a_broken_dialog_is_a_failure_not_a_cancel(monkeypatch):
+    # The 22 Nov bug read as Cancel; any non-cancel osascript error must say what broke.
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: True)
+    err = "execution error: The variable result is not defined. (-2753)"
+    monkeypatch.setattr(
+        ct.subprocess,
+        "run",
+        lambda cmd, **k: ct.subprocess.CompletedProcess(cmd, 1, stdout="", stderr=err),
+    )
+    with pytest.raises(SystemExit, match="dialog failed.*-2753") as e:
+        ct.ask_reason("a break")
+    assert not isinstance(e.value, ct.Cancelled)
 
 
 @pytest.fixture
