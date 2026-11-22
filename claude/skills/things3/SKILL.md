@@ -7,6 +7,18 @@ description: Access Things 3 task manager via MCP. Platform-aware — Python thi
 
 Things 3 is Yulong's task manager. Access it through platform-specific MCP backends.
 
+## New tasks go under a project heading, never loose in an area
+
+An area has no headings, so a task added straight to an area cannot be sorted later (Yulong, 2026-11-21). Add every new todo to a project and a heading, passing `list_title` and `heading` (look up IDs with `get_projects` and `get_headings` when a title call fails):
+
+| Kind of task | Project | Heading |
+|---|---|---|
+| Admin, paperwork, follow-ups, hand steps Claude hands back | 📋 paperwork | `unsorted` |
+| Something to buy | 💸 buy | the heading that fits (`groceries`, `online`, …) |
+| Research work | the project under 🔭 Project: Research that it belongs to | ask if none fits |
+
+`unsorted` is the paperwork inbox: Yulong sorts it into Time-sensitive, Do, Defer, Delegate or Delete himself, so never file a task under those headings for him. When no project fits, use the Things Inbox (omit `list_id`), not an area.
+
 ## Platform Detection
 
 | Platform | Backend | Transport | Tool prefix |
