@@ -107,6 +107,8 @@ focus alfred "$1"</string>
 # $1 is "research", "off", "deep 90" or "add GROUP SITE": split it into words on
 # purpose, but never glob it, so a pattern such as github.com/*/pull/* stays literal
 set -f
+# a failure pops up as a dialog, which a macOS Focus mode cannot hide as it can a notification
+export FOCUS_FROM_ALFRED=1
 focus $1 2&gt;&amp;1 | tail -n 1</string>
 				<key>scriptargtype</key>
 				<integer>1</integer>

@@ -2227,6 +2227,92 @@ def test_an_agent_never_gets_the_dialog(monkeypatch):
     assert not REAL_CAN_SHOW_DIALOG()
 
 
+def test_the_reason_dialog_keeps_its_answer_past_the_gave_up_check():
+    # AppleScript's `result` does not survive the `if` line, so reading the typed text
+    # from `result` after it failed and every reason typed in Alfred came back as
+    # Cancel (22 Nov 2026). The fakes above stub osascript and could not see this.
+    assert "of result" not in ct.REASON_DIALOG
+    assert "set dialogReply to display dialog" in ct.REASON_DIALOG
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="osascript is macOS-only")
+def test_the_reason_dialog_returns_the_typed_text():
+    # The real script, with the dialog swapped for the record it returns, so nothing
+    # opens. The old script exited 1 here: "The variable result is not defined".
+    import re
+
+    canned = '{button returned:"Go on", text returned:"weekend plans", gave up:false}'
+    script = re.sub(
+        r"display dialog .*?giving up after 300", canned, ct.REASON_DIALOG, flags=re.S
+    )
+    assert script != ct.REASON_DIALOG
+    r = ct.subprocess.run(
+        ["osascript", "-e", script, "a break"], capture_output=True, text=True
+    )
+    if "(-2741)" in r.stderr:  # a sandbox without Standard Additions cannot parse it
+        pytest.skip("Standard Additions terms unavailable here")
+    assert (r.returncode, r.stdout.strip()) == (0, "weekend plans"), r.stderr
+
+
+def test_cancelling_the_dialog_is_not_a_failure(monkeypatch):
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(ct, "can_show_dialog", lambda: True)
+    monkeypatch.setattr(
+        ct.subprocess,
+        "run",
+        lambda cmd, **k: ct.subprocess.CompletedProcess(cmd, 1, stdout=""),
+    )
+    with pytest.raises(ct.Cancelled):
+        ct.ask_reason("a break")
+
+
+@pytest.fixture
+def alerts(monkeypatch):
+    shown, notified = [], []
+    monkeypatch.setattr(ct, "alert", shown.append)
+    monkeypatch.setattr(ct, "notify", notified.append)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    return shown, notified
+
+
+def test_a_failure_from_alfred_pops_up_a_dialog(alerts, monkeypatch):
+    shown, _ = alerts
+    monkeypatch.setenv(ct.ALFRED_ENV, "1")
+
+    def fail():
+        sys.exit("focus: Cold Turkey did not start 'mode: messaging'")
+
+    monkeypatch.setattr(ct, "main", fail)
+    with pytest.raises(SystemExit):
+        ct.run_main()
+    assert shown == ["focus: Cold Turkey did not start 'mode: messaging'"]
+
+
+def test_no_dialog_after_cancel_or_outside_alfred(alerts, monkeypatch):
+    shown, _ = alerts
+
+    def cancel():
+        raise ct.Cancelled("focus: no reason given; nothing changed")
+
+    monkeypatch.setenv(ct.ALFRED_ENV, "1")
+    monkeypatch.setattr(ct, "main", cancel)
+    with pytest.raises(SystemExit):
+        ct.run_main()
+    monkeypatch.delenv(ct.ALFRED_ENV)
+    monkeypatch.setattr(ct, "main", lambda: sys.exit("focus: boom"))
+    with pytest.raises(SystemExit):
+        ct.run_main()
+    assert shown == []
+
+
+def test_report_failure_pops_up_only_for_alfred(alerts, monkeypatch):
+    shown, notified = alerts
+    ct.report_failure("from the tick")
+    monkeypatch.setenv(ct.ALFRED_ENV, "1")
+    ct.report_failure("from alfred")
+    assert notified == ["from the tick"] and shown == ["from alfred"]
+
+
 def test_renewing_straight_away_keeps_the_mode_from_before(capped_env, monkeypatch):
     cfg, blocks, clock, *_ = capped_env
     ct.cmd_capped(cfg, "writing", [])

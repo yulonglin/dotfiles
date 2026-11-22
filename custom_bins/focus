@@ -787,7 +787,8 @@ def switch(name: str, on: bool) -> None:
     if ct_apply(args, block_is(name, on)) or ct_apply(args, block_is(name, on)):
         return
     verb = "start" if on else "stop"
-    notify(f"Cold Turkey did not {verb} {name!r}. Run focus status.")
+    if not from_alfred():  # from Alfred, the exit below shows a dialog instead
+        notify(f"Cold Turkey did not {verb} {name!r}. Run focus status.")
     sys.exit(f"focus: Cold Turkey did not {verb} {name!r}: {CT_DROPPED}")
 
 
@@ -913,13 +914,21 @@ def need_terminal(what: str) -> None:
 REASON_DIALOG = """on run argv
     set promptText to "Why " & item 1 of argv & "? One line:"
     if (count of argv) > 1 then set promptText to item 2 of argv & return & return & promptText
-    display dialog promptText default answer "" \
+    set dialogReply to display dialog promptText default answer "" \
         with title "focus" buttons {"Cancel", "Go on"} default button "Go on" \
         cancel button "Cancel" giving up after 300
-    if gave up of result then error number -128
-    return text returned of result
+    if gave up of dialogReply then error number -128
+    return text returned of dialogReply
 end run"""
+# The dialog's record is kept in a variable: AppleScript's `result` does not survive
+# the `if` line, so reading `text returned of result` after it failed, osascript exited
+# 1, and every typed reason came back as Cancel (Alfred, 22 Nov 2026).
 BLANK_REASON = "A reason cannot be empty or only spaces. Type one line"
+
+
+class Cancelled(SystemExit):
+    """The person chose not to go on (Cancel, Ctrl-C): an exit, but not a failure, so
+    no failure dialog follows it."""
 
 
 def can_show_dialog() -> bool:
@@ -949,7 +958,7 @@ def ask_reason(what: str) -> str:
                 reason = input(f"Why {what}? One line: ").strip()
             except (EOFError, KeyboardInterrupt):
                 print(file=sys.stderr)
-                sys.exit(gave_up)
+                raise Cancelled(gave_up)
             if reason:
                 return reason
             print(f"focus: {BLANK_REASON}, or Ctrl-C to cancel.", file=sys.stderr)
@@ -960,7 +969,7 @@ def ask_reason(what: str) -> str:
             ["osascript", "-e", REASON_DIALOG, *args], capture_output=True, text=True
         )
         if r.returncode != 0:  # Cancel, or no answer within 300 s
-            sys.exit(gave_up)
+            raise Cancelled(gave_up)
         if reason := r.stdout.strip():
             return reason
         args = [what, f"{BLANK_REASON}, or Cancel."]
@@ -1663,7 +1672,9 @@ def cmd_sz_apply(cfg: dict) -> None:
         try:
             cmd_screenzen(cfg, dry_run=False, quiet=True)
         except (subprocess.CalledProcessError, OSError, ValueError, SystemExit) as e:
-            notify(f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry.")
+            report_failure(
+                f"ScreenZen not updated: {e}. Run 'focus screenzen' to retry."
+            )
 
 
 def cmd_tick(cfg: dict) -> None:
@@ -3158,6 +3169,43 @@ def notify(text: str) -> None:
     )
 
 
+# Set by the Alfred workflow. Detached copies (spawn_self) inherit it, so a failure in
+# work a person started from Alfred reaches them as a dialog even minutes later.
+ALFRED_ENV = "FOCUS_FROM_ALFRED"
+
+
+def from_alfred() -> bool:
+    return os.environ.get(ALFRED_ENV) == "1" and not by_agent()
+
+
+def alert(text: str) -> None:
+    """A dialog that stays until dismissed: a notification can be hidden by a macOS
+    Focus mode, and a failed switch must not pass unseen (Yulong, 22 Nov 2026). It is
+    detached so it never holds a lock or the Alfred run while it waits."""
+    subprocess.Popen(
+        [
+            "osascript",
+            "-e",
+            "on run argv",
+            "-e",
+            'display alert "focus" message (item 1 of argv) as critical',
+            "-e",
+            "end run",
+            text,
+        ],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def report_failure(text: str) -> None:
+    """A dialog for work a person started from Alfred; a notification otherwise (the
+    launchd tick, whose minute-by-minute messages must not pop up unasked)."""
+    (alert if from_alfred() else notify)(text)
+
+
 def end_only(cfg: dict, force: bool = False, announce: bool = True) -> bool:
     """End a session that is over (or any, with force): start the modes it replaced, then
     point ScreenZen at them. The record goes last and only then, so a failed start or
@@ -4596,5 +4644,25 @@ def window_end(cfg: dict) -> bool:
     return True
 
 
+def run_main() -> None:
+    """main(), and from Alfred a dialog for any failure: Alfred shows only a
+    notification, which a macOS Focus mode can hide (22 Nov 2026). Exit 3 (queued)
+    happens only for an agent; Cancelled is the person's own choice."""
+    try:
+        main()
+    except Cancelled:
+        raise
+    except SystemExit as e:
+        if from_alfred() and e.code not in (None, 0, 3):
+            alert(
+                e.code if isinstance(e.code, str) else f"focus failed (exit {e.code})"
+            )
+        raise
+    except Exception as e:
+        if from_alfred():
+            alert(f"focus failed: {type(e).__name__}: {e}")
+        raise
+
+
 if __name__ == "__main__":
-    main()
+    run_main()
