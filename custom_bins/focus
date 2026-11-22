@@ -3498,14 +3498,93 @@ def type_back(cfg: dict, what: str, chars: int) -> None:
         sys.exit(f"focus: {what} needs a person at a terminal, not an agent")
     need_terminal(what)
     text = random_text(chars)
-    print(f"To go on with {what}, type this text exactly:\n\n{text}\n")
+    print(
+        f"To go on with {what}, type this text exactly (pasting is refused):\n\n{text}\n"
+    )
     try:
-        typed = input("> ")
+        typed = read_typed("> ")
     except (EOFError, KeyboardInterrupt):
         print(file=sys.stderr)
         raise Cancelled("focus: cancelled; nothing changed")
+    except Pasted:
+        print(file=sys.stderr)
+        sys.exit("focus: that was pasted, not typed; nothing changed")
     if typed != text:
         sys.exit("focus: the text did not match; nothing changed")
+
+
+class Pasted(Exception):
+    """Text reached the type-back prompt as a paste, not as keystrokes."""
+
+
+PASTE_START = b"\x1b[200~"  # bracketed paste: the terminal marks pasted text
+MAX_KEYS_PER_READ = 2  # two keys pressed together can share a read; a paste is more
+
+
+def keys_to_line(chunks, echo=lambda s: None) -> str:
+    """The line typed, built from raw terminal reads (one keystroke each, normally);
+    raises Pasted if text arrives as a paste (Yulong, 2026-11-22). A paste shows
+    either as bracketed-paste markers or as more printable characters in one read
+    than a person types at once. Backspace edits; Enter ends; Ctrl-D gives up."""
+    line: list[str] = []
+    for chunk in chunks:
+        if PASTE_START in chunk:
+            raise Pasted
+        s = chunk.decode(errors="replace")
+        if s.startswith("\x1b"):  # an arrow or other function key: ignore
+            continue
+        if sum(c.isprintable() for c in s) > MAX_KEYS_PER_READ:
+            raise Pasted
+        for c in s:
+            if c in "\r\n":
+                echo("\n")
+                return "".join(line)
+            if c == "\x04":
+                raise EOFError
+            if c in "\x7f\b":
+                if line:
+                    line.pop()
+                    echo("\b \b")
+            elif c.isprintable():
+                line.append(c)
+                echo(c)
+    raise EOFError
+
+
+def terminal_chunks():
+    """Raw reads from the terminal, one keystroke at a time, with bracketed paste on.
+    Ctrl-C still interrupts (cbreak keeps signals); the terminal is restored after."""
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    sys.stdout.write("\033[?2004h")
+    sys.stdout.flush()
+    try:
+        tty.setcbreak(fd)
+        while chunk := os.read(fd, 1024):
+            yield chunk
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        sys.stdout.write("\033[?2004l")
+        sys.stdout.flush()
+
+
+def read_typed(prompt: str) -> str:
+    """A line typed key by key at the terminal; raises Pasted on a paste."""
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+
+    def echo(s: str) -> None:
+        sys.stdout.write(s)
+        sys.stdout.flush()
+
+    chunks = terminal_chunks()
+    try:
+        return keys_to_line(chunks, echo)
+    finally:
+        chunks.close()
 
 
 def allow_in_note(path: Path, mode: str, sites: list[str]) -> None:

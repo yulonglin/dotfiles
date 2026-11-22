@@ -1100,6 +1100,7 @@ def test_an_emergency_break_skips_the_wait_after_a_typed_back_text(
         ct.cmd_break(cfg, ["10"])
     typed = iter(["wrong"])
     monkeypatch.setattr("builtins.input", lambda *a: next(typed))
+    monkeypatch.setattr(ct, "read_typed", lambda *a: next(typed))
     with pytest.raises(SystemExit, match="did not match"):
         ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "true"
@@ -1119,6 +1120,33 @@ def test_an_agent_cannot_take_an_emergency_break(cfg, monkeypatch):
     monkeypatch.setenv("CLAUDECODE", "1")
     ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
     with pytest.raises(SystemExit, match="not an agent"):
+        ct.cmd_break(cfg, ["10"], emergency=True)
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_typed_keys_make_the_line_and_a_paste_is_refused():
+    keys = [b"a", b"b", b"x", b"\x7f", b"c", b"\x1b[D", b"\r"]
+    assert ct.keys_to_line(keys) == "abc"  # backspace edits, an arrow is ignored
+    assert ct.keys_to_line([b"ab", b"c\r"]) == "abc"  # two keys can share a read
+    with pytest.raises(ct.Pasted):
+        ct.keys_to_line([b"abcdef\r"])  # a burst in one read is a paste
+    with pytest.raises(ct.Pasted):
+        ct.keys_to_line([b"\x1b[200~ab\x1b[201~", b"\r"])  # bracketed paste
+    with pytest.raises(EOFError):
+        ct.keys_to_line([b"a", b"\x04"])  # Ctrl-D gives up
+
+
+def test_a_pasted_type_back_changes_nothing(cfg, monkeypatch):
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
+    ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
+
+    def pasted(prompt):
+        raise ct.Pasted
+
+    monkeypatch.setattr(ct, "read_typed", pasted)
+    with pytest.raises(SystemExit, match="pasted, not typed"):
         ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "true"
 
@@ -2081,6 +2109,7 @@ def at_terminal(monkeypatch, answers: list[str]) -> list[str]:
         return answers.pop(0)
 
     monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(ct, "read_typed", fake_input)  # the key-by-key type-back
     return prompts
 
 
