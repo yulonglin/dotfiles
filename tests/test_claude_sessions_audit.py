@@ -170,16 +170,28 @@ def test_keep_open_marker_is_check_even_without_follow_up_words(tmp_path):
 
 
 def test_keep_open_wins_when_both_markers_appear():
-    text = f"{SAFE}\n⚠ Keep open: one thing\nresult: x"
-    assert audit.find_marker(text) == ("keep", "one thing")
+    text = f"⚠ Keep open: one thing\n{SAFE}\nresult: x"
+    assert audit.find_marker(text, "x") == ("keep", "one thing")
 
 
-def test_marker_must_be_a_whole_line_near_the_end():
+def test_safe_marker_counts_only_as_the_footer_of_the_current_result():
+    assert audit.find_marker(f"body\n{SAFE}\nresult: x", "x") == ("safe", "")
+    assert audit.find_marker("✅ Safe to close this session\nresult: x", "x")[0] == (
+        "safe"
+    )
+    # Discussed inline, not a whole line.
     discussed = f"The rule says to end with `{SAFE}` when done.\nresult: x"
-    assert audit.find_marker(discussed) == (None, "")
-    early = "\n".join([SAFE, *[f"line {i}" for i in range(10)], "result: x"])
-    assert audit.find_marker(early) == (None, "")
-    assert audit.find_marker("✅ Safe to close this session\nresult: x")[0] == "safe"
+    assert audit.find_marker(discussed, "x") == (None, "")
+    # A whole line, but not directly above the result line.
+    gap = f"{SAFE}\nOne more paragraph.\nresult: x"
+    assert audit.find_marker(gap, "x") == (None, "")
+    # An earlier turn's footer, followed by a later result that differs.
+    stale = f"{SAFE}\nresult: old\nlater work\nresult: review pending"
+    assert audit.find_marker(stale, "review pending") == (None, "")
+    # The footer's result does not match the job's current result.
+    assert audit.find_marker(f"{SAFE}\nresult: old", "review pending") == (None, "")
+    # No terminal result line at all.
+    assert audit.find_marker(f"body\n{SAFE}", "x") == (None, "")
 
 
 def test_marker_ignored_unless_state_json_says_done(tmp_path):

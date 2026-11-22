@@ -38,9 +38,9 @@ JOBS_DIR = Path.home() / ".claude" / "jobs"
 DAY = 86400
 
 # Closing markers a background job writes on its own line just above `result:`.
-# Matched as whole lines near the end of the final message, so a session that
-# merely discusses the marker does not match; the bold and the emoji's variation
-# selector are optional.
+# Matched as whole lines, so a session that merely discusses the marker does not
+# match; the bold and the emoji's variation selector are optional. Safe to close
+# counts only in that exact footer position (see find_marker).
 SAFE_MARKER = re.compile(
     r"^\s*✅️?\s*\**\s*safe to close this session\s*\.?\s*\**\s*$", re.IGNORECASE
 )
@@ -145,20 +145,27 @@ def last_timeline(job_dir: Path) -> dict:
     return {}
 
 
-def find_marker(text: str) -> tuple[str | None, str]:
-    """The closing marker in the last few lines of a final message.
+def find_marker(text: str, result: str) -> tuple[str | None, str]:
+    """The closing marker of a final message whose footer matches `result`.
 
-    Returns ("keep", what) or ("safe", "") or (None, ""). Keep open wins when
-    both appear, since it is the one that protects open work.
+    Returns ("keep", what), ("safe", "") or (None, ""). Safe to close is taken
+    only from the line directly above a terminal `result:` line whose text is
+    the job's current result, so a quoted example or an earlier turn's footer
+    cannot certify a later result. Keep open wins whenever it appears in the
+    last few lines, since a stray one can only make the audit more careful.
     """
-    tail = [ln for ln in text.splitlines() if ln.strip()][-MARKER_TAIL_LINES:]
-    safe = False
-    for ln in tail:
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for ln in lines[-MARKER_TAIL_LINES:]:
         if m := KEEP_MARKER.match(ln):
             return "keep", m.group("what")
-        if SAFE_MARKER.match(ln):
-            safe = True
-    return ("safe", "") if safe else (None, "")
+    if len(lines) < 2 or not result.strip():
+        return None, ""
+    footer = lines[-1]
+    if not footer.startswith("result:"):
+        return None, ""
+    if footer.removeprefix("result:").strip() != result.strip():
+        return None, ""
+    return ("safe", "") if SAFE_MARKER.match(lines[-2]) else (None, "")
 
 
 def fmt_age(seconds: int | None) -> str:
@@ -276,7 +283,7 @@ def load(job_dir: Path, prs: bool, now: datetime | None = None) -> Job | None:
     # state.json is authoritative for "done": a failed job's last timeline entry
     # can still read "done". The final message text lives in that entry.
     if job.state == "done":
-        job.marker, job.keep_open = find_marker(f"{last.get('text') or ''}\n{result}")
+        job.marker, job.keep_open = find_marker(last.get("text") or "", result)
     if d.get("worktreePath"):
         job.worktree = inspect_worktree(d["worktreePath"], d.get("worktreeBranch"), prs)
     return job
