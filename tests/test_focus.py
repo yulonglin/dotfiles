@@ -1085,6 +1085,42 @@ def test_a_second_break_waits_for_break_every_minutes(cfg, tmp_path, monkeypatch
     assert blocks["mode: research"]["enabled"] == "false"
 
 
+def test_an_emergency_break_skips_the_wait_after_a_typed_back_text(
+    cfg, tmp_path, monkeypatch
+):
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
+    monkeypatch.setattr(ct.subprocess, "Popen", lambda cmd, **k: None)
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(ct, "random_text", lambda n: "abc")
+    ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
+    with pytest.raises(SystemExit, match="--emergency"):
+        ct.cmd_break(cfg, ["10"])
+    typed = iter(["wrong"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(typed))
+    with pytest.raises(SystemExit, match="did not match"):
+        ct.cmd_break(cfg, ["10", "--emergency"])
+    assert blocks["mode: research"]["enabled"] == "true"
+    with pytest.raises(SystemExit, match="1 to 30"):  # the cap still holds
+        ct.cmd_break(cfg, ["45", "--emergency"])
+    typed = iter(["abc", "landlord at the door"])
+    ct.cmd_break(cfg, ["10", "--emergency"])
+    assert blocks["mode: research"]["enabled"] == "false"
+    entry = json.loads(ct.COMMIT_LOG.read_text().splitlines()[-1])
+    assert entry["emergency"] and entry["reason"] == "landlord at the door"
+
+
+def test_an_agent_cannot_take_an_emergency_break(cfg, monkeypatch):
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
+    with pytest.raises(SystemExit, match="not an agent"):
+        ct.cmd_break(cfg, ["10", "--emergency"])
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
 def test_breaks_are_spaced_an_hour_by_default_and_zero_turns_it_off(cfg):
     ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
     assert ct.next_break_at(cfg) is not None

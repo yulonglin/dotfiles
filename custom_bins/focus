@@ -9,6 +9,7 @@
     focus list                # the modes, timers and sessions, and what runs now
     focus research            # stop the other 'mode: …' blocks, start this one
     focus off                 # stop every unlocked 'mode: …' block
+    focus break [MIN] [--emergency]  # pause the modes; --emergency skips the hour's wait
     focus status              # what runs now (mode, break, only, timer), every block by kind, drift
     focus sync                # add missing sites to existing mode blocks through the CLI
     focus export [PATH]       # write a .ctbbl file for Blocks → Import blocks…
@@ -1099,6 +1100,10 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
     """Stop the running modes for N minutes; they start again when the break ends."""
     refuse_if_committed("a break")
     cap = int(cfg.get("break_max_minutes", DEFAULT_BREAK_MAX))
+    # --emergency skips only the spacing between breaks, after a typed-back text: the
+    # cap, a commitment and an only session still hold (Yulong, 2026-11-22).
+    emergency = "--emergency" in args
+    args = [x for x in args if x != "--emergency"]
     minutes = args[0] if args else "15"
     if not minutes.isdigit() or not 1 <= int(minutes) <= cap:
         sys.exit(f"focus: a break is 1 to {cap} minutes, got {minutes!r}")
@@ -1112,22 +1117,30 @@ def cmd_break(cfg: dict, args: list[str]) -> None:
         sys.exit(
             f"focus: already on a break until {end:%H:%M:%S} (back to {', '.join(b['modes'])})"
         )
-    if at := next_break_at(cfg):
+    at = next_break_at(cfg)
+    if at and not emergency:
         every = break_every(cfg)
         sys.exit(
             f"focus: one break per {every} min; the next can start at "
-            f"{dt.datetime.fromtimestamp(at):%H:%M}"
+            f"{dt.datetime.fromtimestamp(at):%H:%M}. In an emergency: "
+            f"'focus break {minutes} --emergency' (type back a long text)"
         )
+    emergency = bool(at)  # the flag costs nothing when no wait is skipped
     blocks = read_blocks()
     running = [m for m in running_modes(cfg) if not is_locked(blocks[PREFIX + m])]
     if not running:
         sys.exit("focus: no mode is running, so there is nothing to take a break from")
-    gate(
-        cfg, f"break:{','.join(sorted(running))}:{minutes}", f"a {minutes}-minute break"
-    )
-    loosening_reason(
-        f"a {minutes}-minute break", f"focus break {minutes}", minutes=int(minutes)
-    )
+    what = f"a {minutes}-minute break"
+    if emergency:
+        what = f"an emergency {minutes}-minute break"
+        type_back(cfg, what)
+    else:
+        gate(cfg, f"break:{','.join(sorted(running))}:{minutes}", what)
+    command = f"focus break {minutes}" + (" --emergency" if emergency else "")
+    if emergency:
+        log_reason(command, ask_reason(what), minutes=int(minutes), emergency=True)
+    else:
+        loosening_reason(what, command, minutes=int(minutes))
     until = time.time() + int(minutes) * 60
     BREAK_FILE.parent.mkdir(parents=True, exist_ok=True)
     BREAK_FILE.write_text(json.dumps({"modes": running, "until": until}))
@@ -3470,6 +3483,24 @@ def random_text(n: int) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
 
+def type_back(cfg: dict, what: str) -> None:
+    """The hassle in front of an escape hatch: a person at a terminal types back a
+    random text of `commit_text_chars` characters exactly, or nothing changes. An agent
+    never passes: it has no terminal, and copying text proves no person wanted it."""
+    if by_agent():
+        sys.exit(f"focus: {what} needs a person at a terminal, not an agent")
+    need_terminal(what)
+    text = random_text(int(cfg.get("commit_text_chars", DEFAULT_COMMIT_TEXT)))
+    print(f"To go on with {what}, type this text exactly:\n\n{text}\n")
+    try:
+        typed = input("> ")
+    except (EOFError, KeyboardInterrupt):
+        print(file=sys.stderr)
+        raise Cancelled("focus: cancelled; nothing changed")
+    if typed != text:
+        sys.exit("focus: the text did not match; nothing changed")
+
+
 def allow_in_note(path: Path, mode: str, sites: list[str]) -> None:
     """Add sites to the group 'added-<mode>', creating it and naming it in the mode's
     allow list as needed, keeping the note's comments and layout."""
@@ -3577,11 +3608,7 @@ def commit_request(cfg: dict, kind: str, sites: list[str]) -> None:
         else f"ending the committed {mode} block"
     )
     gate(cfg, f"commit-{kind}:{mode}:{','.join(sites)}", what)
-    need_terminal(what)
-    text = random_text(int(cfg.get("commit_text_chars", DEFAULT_COMMIT_TEXT)))
-    print(f"To go on with {what}, type this text exactly:\n\n{text}\n")
-    if input("> ") != text:
-        sys.exit("focus: the text did not match; nothing changed")
+    type_back(cfg, what)
     reason = ask_reason(what)
     command = "focus " + (f"allow {' '.join(sites)}" if kind == "allow" else "end")
     log_reason(command, reason, mode=mode)
