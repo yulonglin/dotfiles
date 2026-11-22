@@ -345,6 +345,9 @@ claude() {
         "${_tl_launch[@]}" claude "${args[@]}"
     fi
 }
+# Shadows /usr/bin/cc only when typed interactively; make and build scripts
+# still find the C compiler on PATH. Use `command cc` for the compiler by hand.
+alias cc='claude'
 # Canonical skip-permissions launcher. ccy/ccd are kept as back-compat shims.
 alias yolo='claude --dangerously-skip-permissions'
 alias resume='claude --resume'
