@@ -16,6 +16,14 @@ Hooks for automating task and agent management workflows.
 
 **Test:** `tests/test_time_stamps.zsh`.
 
+### nudge_computer_use_esc.py (computer use swallowing Esc)
+
+**Purpose:** Claude Code's computer use installs a blocking key-down event tap, its Esc-to-stop hotkey, for as long as the computer-use MCP is connected. A session that stops to wait for the user keeps the tap, and Esc then does nothing in any app on the Mac; a background job held it for five hours on 2026-11-21. At Stop, this hook asks `keytaps --computer-use` whether the tap is live and whether `~/.claude/computer-use.lock` names this session, and if so emits a `systemMessage` telling the user to disconnect computer-use via `/mcp` or end the session. The lock file alone is not used as evidence, because it outlived the tap after a `/mcp` disconnect.
+
+**Diagnose by hand:** `keytaps` lists every process holding a keyboard event tap, marks the ones that can drop keys as BLOCKING, and flags the computer-use lock holder.
+
+**Off switch:** `nudges.computer-use-esc = off` in `features.conf`. **Test:** `tests/test_nudge_computer_use_esc.zsh`.
+
 ### agent_spawned.sh
 
 **Purpose:** Reminds user to save agent IDs when agents are spawned

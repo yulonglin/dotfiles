@@ -746,6 +746,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.advisor-skipped -- python3 $HOME/.claude/hooks/nudge_advisor_skipped.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.computer-use-esc -- python3 $HOME/.claude/hooks/nudge_computer_use_esc.py",
+            "timeout": 10
           }
         ]
       }
