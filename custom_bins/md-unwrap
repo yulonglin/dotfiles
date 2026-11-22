@@ -169,7 +169,9 @@ def _html_block_extents(tokens, lines: list[str], offset: int) -> tuple[set[int]
     Measured on 2026-09-11 against reference cmark-gfm (cmarkgfm 2025.10.22):
     markdown-it ends an HTML block at a blank line even for the five types
     CommonMark runs to a closing delimiter — measured on markdown-it-py 3.0.0
-    and 4.2.0. The divergence needs a genuinely blank line inside a LIST item —
+    and 4.2.0. From 4.3.0 it follows CommonMark and runs such a block to end
+    of file, which is why a block reaching end of file is refused below. The
+    divergence needs a genuinely blank line inside a LIST item —
     a fence, a blockquote alone, or a blank-terminated block type is unaffected
     — and it splits one block into a block plus a paragraph, which would then be
     joined.
