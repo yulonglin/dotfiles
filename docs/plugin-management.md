@@ -18,11 +18,11 @@ Read the `enabled` field per record. `--setting-sources ''` suppresses ambient u
 
 ## The Manifest Is `enabledPlugins` In `claude/settings.json`
 
-The user-scope manifest holds 20 entries: 12 `true` and 8 `false`. An explicit value wins at every scope, so the file is the single source of truth for what loads.
+The user-scope manifest holds 30 entries: 10 `true` and 20 `false` (counted 2026-11-23). An explicit value wins at every scope, so the file is the single source of truth for what loads.
 
-Enabled (12): `bear-mcp` and `things-mcp` from `productivity-tools`; `llms-fetch-mcp` from `alignment-hive`; and `hookify`, `playground`, `playwright`, `pyright-lsp`, `remember`, `rust-analyzer-lsp`, `security-guidance`, `superpowers`, `typescript-lsp` from `claude-plugins-official`.
+Enabled (10): `bear-mcp` and `things-mcp` from `productivity-tools`; `llms-fetch-mcp` and `model-router` from `alignment-hive`; `playwright`, `remember`, `rust-analyzer-lsp`, `security-guidance` and `superpowers` from `claude-plugins-official`; and `cc-plugin-you-should-know@builtin`.
 
-Tombstoned (8): `code`, `core`, `research`, `viz`, `workflow` and `writing` from `ai-safety-plugins`, `dev-browser` from `dev-browser-marketplace`, and `codex` from `codex-plugin-cc` (2026-11-23: GPT models reach Claude Code natively through model-router, so `codex-companion` and its SessionStart hook were retired). Their agents and skills were migrated into `claude/{agents,skills}/` before the disable, so nothing dangles; both of those marketplaces are gone from `extraKnownMarketplaces`.
+Retired and tombstoned (8; the other 12 `false` entries are switched off but not retired): `code`, `core`, `research`, `viz`, `workflow` and `writing` from `ai-safety-plugins`, `dev-browser` from `dev-browser-marketplace`, and `codex` from `codex-plugin-cc` (2026-11-23: GPT models reach Claude Code natively through model-router, so `codex-companion` and its SessionStart hook were retired). Their agents and skills were migrated into `claude/{agents,skills}/` before the disable, so nothing dangles; both of those marketplaces are gone from `extraKnownMarketplaces`.
 
 **Architecture:**
 - Marketplaces: `extraKnownMarketplaces` in `claude/settings.json` — declarative, symlinked to `~/.claude/settings.json`, so a fresh machine registers them with no sync step. Three remain: `claude-plugins-official`, `alignment-hive` and `productivity-tools`

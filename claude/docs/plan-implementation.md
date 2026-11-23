@@ -1,6 +1,6 @@
 # Plan-Driven Implementation Guide
 
-Reference for delegating plan-driven implementation to a GPT agent through model-router: the Agent tool with `subagent_type: "astra"` (or `sol` for long autonomous chunks), `effort` set, and `isolation: "worktree"` when the chunk writes files. Read it when a plan is approved and the steps are going out to another model; `model-router:delegating-to-models` covers per-family prompt hygiene, and this file covers how to cut the plan into jobs.
+Reference for delegating plan-driven implementation to a GPT agent through model-router: the Agent tool with `subagent_type: "astra"` (or `sol` for long autonomous chunks), `effort` set. Run dependent chunks in the same checkout so each one sees the commits before it; give a chunk `isolation: "worktree"` only when it is independent, and then brief it with repo-relative paths. Read it when a plan is approved and the steps are going out to another model; `model-router:delegating-to-models` covers per-family prompt hygiene, and this file covers how to cut the plan into jobs.
 
 ## Plan-Aware Prompt Template
 
