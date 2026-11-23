@@ -23,6 +23,7 @@ def load():
 ct = load()
 REAL_CAN_SHOW_DIALOG = ct.can_show_dialog
 REAL_WAKE = ct.wake_agent  # the autouse fixture stubs ct.wake_agent
+REAL_WITHDRAW = ct.withdraw_command  # stubbed too: it would touch the real slot
 REAL_LOOSENING_REASON = ct.loosening_reason  # stubbed too; its own tests restore it
 
 
@@ -53,6 +54,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(ct, "CONFIG_PATH", tmp_path / "no-note.md")
     monkeypatch.setattr(ct, "notify", lambda text: None)
     monkeypatch.setattr(ct, "wake_agent", lambda args: None)
+    monkeypatch.setattr(ct, "withdraw_command", lambda args: None)
     monkeypatch.setattr(ct, "frontmost_bundle", lambda: None)
     # Most tests switch modes without a person to ask; the reason tests restore it.
     monkeypatch.setattr(ct, "loosening_reason", lambda *a, **k: None)
@@ -578,7 +580,7 @@ def test_the_wake_goes_to_the_agent_after_the_command_is_in_the_slot(monkeypatch
     assert "(84514)" in ran[3][-1]
 
 
-def test_a_failed_switch_says_the_command_may_still_run_and_keeps_the_old_mode(
+def test_a_failed_switch_says_the_command_was_taken_back_and_keeps_the_old_mode(
     cfg, monkeypatch
 ):
     blocks = {
@@ -586,7 +588,7 @@ def test_a_failed_switch_says_the_command_may_still_run_and_keeps_the_old_mode(
         "mode: writing": mode_block(cfg, "writing", "false"),
     }
     calls = fake_cold_turkey(monkeypatch, blocks, refuse={"mode: writing"})
-    with pytest.raises(SystemExit, match="did not start.*can run when Cold Turkey"):
+    with pytest.raises(SystemExit, match="did not start.*took it back"):
         ct.cmd_start(cfg, "writing")
     assert blocks["mode: research"]["enabled"] == "true"  # fail closed
     assert not [c for c in calls if c[0] == "-stop"]
@@ -1093,22 +1095,25 @@ def test_an_emergency_break_skips_the_wait_after_a_typed_back_text(
     monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: None)
     monkeypatch.setattr(ct.subprocess, "Popen", lambda cmd, **k: None)
     monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(ct, "random_text", lambda n: "abc")
+    lengths = []
+    monkeypatch.setattr(ct, "random_text", lambda n: lengths.append(n) or "abc")
     ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
     with pytest.raises(SystemExit, match="--emergency"):
         ct.cmd_break(cfg, ["10"])
     typed = iter(["wrong"])
     monkeypatch.setattr("builtins.input", lambda *a: next(typed))
+    monkeypatch.setattr(ct, "read_typed", lambda *a: next(typed))
     with pytest.raises(SystemExit, match="did not match"):
-        ct.cmd_break(cfg, ["10", "--emergency"])
+        ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "true"
     with pytest.raises(SystemExit, match="1 to 30"):  # the cap still holds
-        ct.cmd_break(cfg, ["45", "--emergency"])
+        ct.cmd_break(cfg, ["45"], emergency=True)
     typed = iter(["abc", "landlord at the door"])
-    ct.cmd_break(cfg, ["10", "--emergency"])
+    ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "false"
     entry = json.loads(ct.COMMIT_LOG.read_text().splitlines()[-1])
     assert entry["emergency"] and entry["reason"] == "landlord at the door"
+    assert set(lengths) == {ct.DEFAULT_EMERGENCY_TEXT}  # shorter than a commitment's
 
 
 def test_an_agent_cannot_take_an_emergency_break(cfg, monkeypatch):
@@ -1117,8 +1122,45 @@ def test_an_agent_cannot_take_an_emergency_break(cfg, monkeypatch):
     monkeypatch.setenv("CLAUDECODE", "1")
     ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
     with pytest.raises(SystemExit, match="not an agent"):
-        ct.cmd_break(cfg, ["10", "--emergency"])
+        ct.cmd_break(cfg, ["10"], emergency=True)
     assert blocks["mode: research"]["enabled"] == "true"
+
+
+def test_typed_keys_make_the_line_and_a_paste_is_refused():
+    keys = [b"a", b"b", b"x", b"\x7f", b"c", b"\x1b[D", b"\r"]
+    assert ct.keys_to_line(keys) == "abc"  # backspace edits, an arrow is ignored
+    assert ct.keys_to_line([b"ab", b"c\r"]) == "abc"  # two keys can share a read
+    with pytest.raises(ct.Pasted):
+        ct.keys_to_line([b"abcdef\r"])  # a burst in one read is a paste
+    with pytest.raises(ct.Pasted):
+        ct.keys_to_line([b"\x1b[200~ab\x1b[201~", b"\r"])  # bracketed paste
+    with pytest.raises(EOFError):
+        ct.keys_to_line([b"a", b"\x04"])  # Ctrl-D gives up
+
+
+def test_a_pasted_type_back_changes_nothing(cfg, monkeypatch):
+    blocks = {"mode: research": mode_block(cfg, "research", "true")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct.sys.stdin, "isatty", lambda: True)
+    ct.write_state(ct.LAST_BREAK_FILE, {"started": ct.time.time()})
+
+    def pasted(prompt):
+        raise ct.Pasted
+
+    monkeypatch.setattr(ct, "read_typed", pasted)
+    with pytest.raises(SystemExit, match="pasted, not typed"):
+        ct.cmd_break(cfg, ["10"], emergency=True)
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+@pytest.mark.parametrize(
+    "argv", [["break", "10", "--emergency"], ["break", "--emergency", "10"]]
+)
+def test_the_command_line_accepts_emergency_on_either_side_of_the_minutes(argv):
+    # The first version read --emergency inside cmd_break, but argparse refused the
+    # flag before cmd_break ran (Yulong, 2026-11-22).
+    a = ct.build_parser().parse_intermixed_args(argv)
+    assert a.command == "break" and a.args == ["10"] and a.emergency
 
 
 def test_breaks_are_spaced_an_hour_by_default_and_zero_turns_it_off(cfg):
@@ -2069,6 +2111,7 @@ def at_terminal(monkeypatch, answers: list[str]) -> list[str]:
         return answers.pop(0)
 
     monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(ct, "read_typed", fake_input)  # the key-by-key type-back
     return prompts
 
 
@@ -3954,3 +3997,88 @@ def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
     out = tmp_path / "x.ctbbl"
     ct.cmd_export(cfg, out)
     assert "nytimes.com" not in json.loads(out.read_text())["mode: admin"]["exceptions"]
+
+
+def test_an_unread_command_is_taken_back_so_it_cannot_run_hours_later(cfg, monkeypatch):
+    # 23 Nov 2026: a start missed in a 09:14 dark wake waited in the slot and ran when
+    # the lid opened at 12:48, inside the lunch window.
+    blocks = {"mode: research": mode_block(cfg, "research", "false")}
+    fake_cold_turkey(monkeypatch, blocks, refuse=set(blocks))
+    withdrawn = []
+    monkeypatch.setattr(ct, "withdraw_command", withdrawn.append)
+    with pytest.raises(SystemExit, match="took it back"):
+        ct.switch("mode: research", on=True)
+    assert withdrawn == [("-start", "mode: research")] * 2  # once per send
+
+
+def test_a_command_that_lands_is_not_taken_back(cfg, monkeypatch):
+    blocks = {"mode: research": mode_block(cfg, "research", "false")}
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "withdraw_command", lambda a: pytest.fail("withdrew"))
+    ct.switch("mode: research", on=True)
+    assert blocks["mode: research"]["enabled"] == "true"
+
+
+@pytest.mark.parametrize(
+    "slot, deleted",
+    [
+        ('("/app", "-start", "mode: research")', True),
+        ('("/app", "-stop", "mode: writing")', False),  # another command: left alone
+        ("", False),  # the agent read it meanwhile
+    ],
+)
+def test_withdrawing_deletes_the_slot_only_while_it_holds_this_command(
+    monkeypatch, slot, deleted
+):
+    ran = []
+
+    def fake_run(cmd, **k):
+        ran.append(cmd)
+        return type("R", (), {"stdout": slot if cmd[1] == "read" else ""})()
+
+    monkeypatch.setattr(ct.subprocess, "run", fake_run)
+    REAL_WITHDRAW(("-start", "mode: research"))
+    assert [c[1] for c in ran] == (["read", "delete"] if deleted else ["read"])
+    if deleted:
+        assert ran[1] == ["defaults", "delete", ct.CT_DEFAULTS, "commandArgs"]
+
+
+def test_a_default_start_cold_turkey_missed_is_retried(
+    capped_env, tmp_path, monkeypatch
+):
+    _, blocks, clock, _, _ = capped_env
+    note = CAPPED + "\ndefault_mode: {mode: research}"
+    cfg = ct.load_config(note_with(tmp_path, note))
+    blocks["mode: research"]["enabled"] = "false"
+    asleep = asleep_display(monkeypatch)
+    at = dt.datetime(2026, 11, 16, 9, 14)  # a Monday, the display off
+    clock.now = at.timestamp()
+    with pytest.raises(SystemExit, match="did not start"):
+        ct.default_start(cfg, at)
+    assert ct.read_state(ct.DEFAULT_FILE) is None  # the day is not used up
+    asleep[0] = False
+    at += dt.timedelta(minutes=1)
+    clock.now = at.timestamp()
+    assert ct.default_start(cfg, at) == "research"
+    assert on(blocks) == ["mode: research"]
+
+
+def test_the_tick_log_has_a_time_on_every_line(monkeypatch):
+    import io
+
+    class Frozen(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return dt.datetime(2026, 11, 23, 12, 48, 5)
+
+    monkeypatch.setattr(ct.dt, "datetime", Frozen)
+    out = io.StringIO()
+    s = ct.Stamped(out)
+    s.write("break over")
+    s.write(": research running again\nScreenZen: 102 sites\n")
+    print("third", file=s)
+    assert out.getvalue().splitlines() == [
+        "2026-11-23 12:48:05 break over: research running again",
+        "2026-11-23 12:48:05 ScreenZen: 102 sites",
+        "2026-11-23 12:48:05 third",
+    ]
