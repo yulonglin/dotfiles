@@ -81,8 +81,20 @@ while [[ $# -gt 0 ]]; do
             }
             exec "$CONFIG_HELPER" --migrate "$2"
             ;;
+        --config)
+            print -r -- "${CONFIG_FILE:A}"
+            exit 0
+            ;;
+        --edit)
+            exec ${=${VISUAL:-${EDITOR:-vi}}} "${CONFIG_FILE:A}"
+            ;;
         --help|-h)
+            echo "What each app gets is set in: ${CONFIG_FILE:A}"
+            echo "  (shared with hide-idle-apps; open it with clear-mac-apps --edit)"
+            echo ""
             echo "Usage: clear-mac-apps [--dry-run|-n] [--only NAME]... [--except NAME]... [--except-browsers] [--max-action close|quit]"
+            echo "  --config          Print the path of that config file"
+            echo "  --edit            Open that config file in \$VISUAL or \$EDITOR"
             echo "  --dry-run, -n     Show what would happen without making changes"
             echo "  --only NAME       Consider only this app (repeatable). Config still"
             echo "                    vetoes, so this can never act on a skipped app."

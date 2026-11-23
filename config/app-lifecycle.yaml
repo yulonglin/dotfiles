@@ -1,4 +1,7 @@
-# What each trigger may do to each app. `manual:` is the macOS Shortcut's action
+# Rules for clear-mac-apps (the macOS Shortcut) and hide-idle-apps (the idle job).
+# `clear-mac-apps --edit` opens this file; `--config` prints its path.
+#
+# What each trigger may do to each app.`manual:` is the macOS Shortcut's action
 # and the ceiling for the idle job's destructive rungs; `auto:` governs hiding
 # alone. Scale: skip < hide = minimise < close < quit.
 #

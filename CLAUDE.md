@@ -29,6 +29,7 @@ Dotfiles for ZSH, Tmux, Vim, SSH and dev tools across macOS, Linux and RunPod, d
 | Add, remove or switch off a foreign model (picker row, agent, route), or put an older Claude model in `/model` (`provider = "anthropic"`) | Edit `config/model-router.toml` → `model-router-wire apply` (renders router config, picker rows and `claude/agents/` files; `status` shows drift) → `tests/test_model_router_gateway.sh` |
 | Show or hide `/model` rows, or keep/replace Claude Code's built-in lineup | `model-router-wire picker` (checkbox menu; `--on ID`, `--off ID`, `--built-in on\|off` without a terminal). Writes `picker = false` lines in `config/model-router.toml` and applies |
 | Start or adopt a research project hub (`~/projects/<name>/{code,paper,data,runs,…}`) | `project-hub new <name>`, `project-hub adopt <name> code=<path>`, `project-hub tier <name>/code logs`, `project-hub doctor` — layout in the `server-storage-tiering` skill |
+| Change what `clear-mac-apps` (the Shortcut) or the idle job does to an app: skip, hide, minimise, close or quit | `config/app-lifecycle.yaml` (`clear-mac-apps --edit` opens it; `--config` prints the path) |
 | Run an experiment with resource caps | `jexp uv run python -m ...` (Linux: needs pueue + systemd user session) |
 | Check or repair hard-wrapped Markdown | `md-unwrap --check claude/` (gated in pre-commit and CI); `md-unwrap --fix <path>` |
 | Find unused Mac apps and formulae | `app-usage [--days N] [--json]` (read-only; run in a terminal, outside the sandbox) |

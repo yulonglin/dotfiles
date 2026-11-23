@@ -115,6 +115,9 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
+            echo "What each app gets is set in: ${CONFIG_FILE:A}"
+            echo "  (shared with clear-mac-apps; open it with clear-mac-apps --edit)"
+            echo ""
             echo "Usage: hide-idle-apps [--dry-run|-n]"
             echo "  --dry-run, -n  Show what would happen, plus each app's measured"
             echo "                 visibility - use it to calibrate the threshold below"
