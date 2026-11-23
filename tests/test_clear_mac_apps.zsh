@@ -766,6 +766,11 @@ check     "exits non-zero"                 "$(( RC != 0 ))" "1"
 check     "names the offending key"        "$ERR" "close_after"
 check_not "acts on nothing"                "$OUT" "Would QUIT"
 
+print -r -- "25. the config file is easy to find"
+check_eq "--config prints the config path" "$("$CMA" --config)" "$ROOT/config/app-lifecycle.yaml"
+check    "--help opens with the config path" "$("$CMA" --help | head -1)" "$ROOT/config/app-lifecycle.yaml"
+check_eq "--edit opens it in \$EDITOR" "$(VISUAL= EDITOR=echo "$CMA" --edit)" "$ROOT/config/app-lifecycle.yaml"
+
 print -r -- "22. every AppleScript the suite sent compiles"
 if command -v osacompile >/dev/null 2>&1; then
     check_eq "no compile errors" "$(cat "$STUB_COMPILE_ERR" 2>/dev/null)" ""

@@ -10,7 +10,7 @@ Escalation is not reimplemented in the idle job: it calls `clear-mac-apps --only
 
 ## Policy
 
-Each app in `config/app-lifecycle.yaml` carries `manual:` (what the Shortcut does to it right now) and `auto:` (what the idle job may do), on the ordered scale `skip` < `hide` = `minimise` < `close` < `quit`. `minimise` is a `manual:` value only: the Shortcut sends the app's windows to the Dock instead of hiding it, and as a ceiling it means the same as `hide`. Under `auto:` it is rejected by name, because the idle job has no minimise rung.
+`clear-mac-apps --edit` opens the policy file and `clear-mac-apps --config` prints its path. Each app in `config/app-lifecycle.yaml` carries `manual:` (what the Shortcut does to it right now) and `auto:` (what the idle job may do), on the ordered scale `skip` < `hide` = `minimise` < `close` < `quit`. `minimise` is a `manual:` value only: the Shortcut sends the app's windows to the Dock instead of hiding it, and as a ceiling it means the same as `hide`. Under `auto:` it is rejected by name, because the idle job has no minimise rung.
 
 The ladder stops at `min(manual:, auto:)`, but that ceiling binds **only the destructive rungs**. Hiding is governed by `auto:` alone, and `auto: skip` is the only exemption from being hidden — it is what the old `[hide-idle-exclude]` section became.
 
