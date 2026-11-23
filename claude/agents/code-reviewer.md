@@ -116,4 +116,4 @@ Your goal is to help ship high-quality, research-valid code while fostering a cu
 
 # COMPLEMENTARY REVIEW
 
-For significant changes (multi-file, auth, concurrency, data mutations), run `codex-companion review` (via the Monitor tool) in parallel for a second-model opinion. Codex reasoning models find concrete bugs (off-by-one, race conditions, logic errors) that complement the design/quality/CLAUDE.md focus of this reviewer. Use `codex-companion adversarial-review` to challenge design choices and assumptions. codex-companion is harness-tracked and orphan-safe, and runs from the main context — it cannot be wrapped by a subagent.
+For significant changes (multi-file, auth, concurrency, data mutations), recommend that the main context also send the diff to the `astra` agent (GPT-6.2 Astra through model-router) for a second-model opinion. GPT reasoning models find concrete bugs (off-by-one, race conditions, logic errors) that complement the design/quality/CLAUDE.md focus of this reviewer, and can be asked to challenge design choices and assumptions. Do not use `model-router:adversarial-code-reviewer`, which is pinned to GPT-6.2 Sol.

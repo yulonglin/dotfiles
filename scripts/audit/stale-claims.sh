@@ -161,7 +161,7 @@ check_fable_model() {
     if [[ "$n" -gt 0 ]]; then
         ok "$loc" "claude-fable-5 present ($n hits)"
     else
-        drift "$loc" "claude-fable-5 gone — drop the Fable channel from the rule (codex-companion may still stand); do not rename the model"
+        drift "$loc" "claude-fable-5 gone — drop the Fable channel from the rule (the astra agent may still stand); do not rename the model"
     fi
 }
 
@@ -227,7 +227,7 @@ check_fzf_version() {
 }
 
 # --- CLAUDE.md: the context profiles named as examples actually exist
-# --- plugin manifest: the seven retired plugins carry `false` tombstones, every other
+# --- plugin manifest: the eight retired plugins carry `false` tombstones, every other
 # --- entry is `true`. The tombstones are load-bearing — a marketplace declaration is
 # --- not the enable gate, so a retired plugin with a surviving install record keeps
 # --- loading unless enabledPlugins says false. See docs/plugin-management.md.
@@ -243,7 +243,7 @@ import json, sys
 RETIRED = {
     "code@ai-safety-plugins", "core@ai-safety-plugins", "research@ai-safety-plugins",
     "viz@ai-safety-plugins", "workflow@ai-safety-plugins", "writing@ai-safety-plugins",
-    "dev-browser@dev-browser-marketplace",
+    "dev-browser@dev-browser-marketplace", "codex@codex-plugin-cc",
 }
 d = json.load(open(sys.argv[1])).get("enabledPlugins", {})
 problems = []
@@ -259,7 +259,7 @@ if bad:
 print("; ".join(problems))
 ' "$json" 2>/dev/null) || { skip "$loc" "could not parse settings.json"; return; }
     if [[ -z "$result" ]]; then
-        ok "$loc" "seven retired plugins tombstoned false, every other entry true"
+        ok "$loc" "eight retired plugins tombstoned false, every other entry true"
     else
         drift "$loc" "$result"
     fi

@@ -23,7 +23,7 @@ Question 1 picks the block. The five text-only rungs reason over text they are h
 | **advisor** | `advisor()` | 1 | — | seconds | About work it can already see. No brief to write — always try this first |
 | **one family** | `openrouter-cli ask <alias> "…"` | 1 | $0.01–0.08 | seconds | Bounded, and you want one genuinely different prior on it |
 | **advisors** | `openrouter-cli council advise "…"` | 3 | ~$0.14 | seconds | Real but not contested: Gemini 4 Neon plus the two strongest models, every answer, no synthesis |
-| **agentic** | `codex-companion` (GPT), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
+| **agentic** | the `astra` agent (GPT, through model-router), `opencode run` (others) | many | varies | minutes | Only answerable by *running* things — reading the repo, running tests, iterating |
 | **agentic council** | Workflow tool with `council.workflow.js` in this skill's directory, or the Agent tool by hand — *Running an agentic council* | many per seat, ×2 with `rank` | varies | minutes | Only answerable by running things **and** contested — a diff, a hook, a test suite where competent reviewers would reach different verdicts |
 | **council** | `openrouter-cli council ask "…"` | 1 request, 9 models | ~$0.34 | ~1 min | Genuinely contested: you need the spread of opinion, not one view |
 | **council --rank** | `openrouter-cli council ask "…" --rank` | 17 requests | ~$0.60 | ~2 min | So contested that you need to know which answer *the other models* found strongest |
@@ -244,13 +244,13 @@ Seats are pinned rather than floating precisely so provenance survives. Floating
 
 ## Two rungs can run your code; the second seats several families
 
-`codex-companion` gives GPT a real agentic loop over the code; OpenCode is the equivalent for every other family. GPT agentic coding always goes through codex-companion; OpenCode covers the rest. For **several** families over one repo, use routed subagents instead — one process per family with the checkout already attached, rather than one external CLI per family (*Running an agentic council* above).
+The `astra` agent gives GPT a real agentic loop over the code inside Claude Code, routed through model-router with the repo tools attached; OpenCode is the equivalent for families without a routed agent. Set `effort` on the Agent call, and do not use the Sol-pinned `model-router:adversarial-code-reviewer` or `model-router:plan-reviewer` for this. For **several** families over one repo, use routed subagents instead — one process per family with the checkout already attached, rather than one external CLI per family (*Running an agentic council* above).
 
 | You want | Invocation |
 |---|---|
-| Code-level critique of a diff | Monitor tool, `codex-companion adversarial-review` |
-| Critique of a written plan | Monitor tool, `codex-companion plan-review` |
-| Open-ended investigation | Monitor tool, `codex-companion task` |
+| Code-level critique of a diff | Agent tool, `astra`, briefed with the scope (`git diff main...HEAD` or uncommitted changes) and the worktree path |
+| Critique of a written plan | Agent tool, `astra`, briefed with the plan's path and the decisions already fixed |
+| Open-ended investigation | Agent tool, `astra` (or `sol` for long autonomous work) |
 | Agentic coding, non-GPT | `opencode run -m openrouter/<slug> "<brief>"` |
 | Judgement or research taste, Anthropic | Agent tool, `model: "fable"` |
 | Several families reviewing one diff, hook or suite | The agentic council: Workflow tool with `council.workflow.js`, or one Agent call per family |

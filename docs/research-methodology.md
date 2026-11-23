@@ -169,7 +169,7 @@ Karpathy-style: fewer files, each with one clear job, no ceremony.
 
 **LOG.md in-flight entry format**: each in-flight entry carries an owning session identifier
 so a joining session can tell whether it's still live — `owner: claude-session/<id>` (same ID
-as the `Claude-Session:` commit trailer) or `owner: codex-job/<id>` (codex-companion job id),
+as the `Claude-Session:` commit trailer) or `owner: codex-job/<id>` (Codex CLI session id),
 plus `since: <ISO-8601 UTC>`. Unlike the retired `.agent-claims/` scheme (PID + `kill -0` liveness check, dead
 entries reaped by deletion), vault sessions aren't same-machine live processes and `LOG.md` is
 a permanent audit trail, not an ephemeral claim file — so staleness is judged by elapsed time,

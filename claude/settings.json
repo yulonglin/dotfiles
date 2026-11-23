@@ -7,7 +7,6 @@
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",
     "CLAUDE_CODE_NO_FLICKER": "1",
     "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP": "5",
-    "CODEX_COMPANION_DATA_DIR": "/tmp/claude/codex-data",
     "ENABLE_TOOL_SEARCH": "1",
     "TMPDIR": "/tmp/claude"
   },
@@ -348,17 +347,6 @@
         ]
       },
       {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-plan-review -- node $HOME/.claude/hooks/codex_plan_write_reminder.mjs",
-            "if": "Write(*/plans/*.md)",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           {
@@ -366,16 +354,6 @@
             "command": "bash $HOME/.claude/hooks/block_vault_structure.sh",
             "timeout": 5,
             "statusMessage": "Checking vault structure"
-          }
-        ]
-      },
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-code-review -- node $HOME/.claude/hooks/codex_code_review_reminder.mjs",
-            "timeout": 5
           }
         ]
       },
@@ -453,12 +431,6 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.undeadlined-poller -- $HOME/.claude/hooks/nudge_undeadlined_poller.sh",
             "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.codex-git-review -- node $HOME/.claude/hooks/codex_git_add_reminder.mjs",
-            "if": "Bash(git add *)",
-            "timeout": 5
           },
           {
             "type": "command",
@@ -803,7 +775,7 @@
   "enabledPlugins": {
     "bear-mcp@productivity-tools": true,
     "code@ai-safety-plugins": false,
-    "codex@codex-plugin-cc": true,
+    "codex@codex-plugin-cc": false,
     "core@ai-safety-plugins": false,
     "dev-browser@dev-browser-marketplace": false,
     "hookify@claude-plugins-official": false,
@@ -843,12 +815,6 @@
       "source": {
         "source": "github",
         "repo": "anthropics/claude-plugins-official"
-      }
-    },
-    "codex-plugin-cc": {
-      "source": {
-        "source": "github",
-        "repo": "crazytieguy/codex-plugin-cc"
       }
     },
     "productivity-tools": {
