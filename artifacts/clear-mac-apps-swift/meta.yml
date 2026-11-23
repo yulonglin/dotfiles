@@ -1,0 +1,21 @@
+title: clear-mac-apps moves to Swift behind the same command
+url: https://claude.ai/artifact/Rqh5mT1Mzs7coECK2yPivP
+org: lin.yulong@gmail.com's Organization   # session account, 2026-11-23
+first_published: 2026-11-23
+last_updated: 2026-11-23
+status: live
+
+summary: >-
+  draft spec for replacing the 1,155-line zsh clear-mac-apps with a Swift binary that calls the
+  macOS APIs directly, behind the same command, flags, config and exit codes. The main risk is
+  Accessibility permission across rebuilds, which a pilot settles first. Nothing is built or
+  measured yet
+
+source: spec.md
+built: spec.html
+builds_with: |
+  uv run --no-project --with markdown-it-py python3 custom_bins/md2artifact artifacts/clear-mac-apps-swift/spec.md -o artifacts/clear-mac-apps-swift/spec.html
+
+established: |
+  Nothing is measured. The behaviour list is read from custom_bins/clear-mac-apps and its test
+  suite; the native API mapping and the permission behaviour are unverified on this Mac.
