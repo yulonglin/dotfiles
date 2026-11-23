@@ -4,9 +4,19 @@
 
 Stack: `uv` (packages, Python versions, CLI tools), `ruff` (lint + format), `ty` (types, beta), `just` (tasks), `cyclopts` (CLIs), `pydantic-settings` (config/env), `pydantic` (validation), `pytest`, `httpx`, `anyio`.
 
-Invoke via `uv run` (`--no-sync` when deps are unchanged); read `.eval` logs with Inspect AI's `read_eval_log()`. **Never call `sys.path.insert` at import time — it crashes the session.** Pass data as pydantic `BaseModel`/`dataclass`, not `pd.DataFrame`; JSONL for intermediates, pandas only at the pipeline edge. Copy shared configs, don't mutate them. Rewrite shell in Python past ~50 lines.
+Invoke via `uv run` (`--no-sync` when deps are unchanged); read `.eval` logs with Inspect AI's `read_eval_log()`. **Never call `sys.path.insert` at import time — it crashes the session.** Pass data as pydantic `BaseModel`/`dataclass`, not `pd.DataFrame`; JSONL for intermediates, pandas only at the pipeline edge. Copy shared configs, don't mutate them.
 
 ## Any language
+
+**Pick the language by what the tool does**, not by habit (Yulong, 2026-11-23):
+
+| Language | Use it for | Example here |
+|---|---|---|
+| zsh | Glue and shell config: chaining commands, aliases, functions that change the current shell. Past ~50 lines or any real state, port it | `config/aliases/` |
+| Python | Logic-heavy CLIs: config parsing, classification, error handling. Stdlib or `uv run --script` | `focus`, `md2artifact` |
+| Swift | macOS system APIs: Accessibility, window lists, EventKit, TCC | `tools/window-exposure`, `tools/rem` |
+| Rust | Cross-platform tools where start-up time matters, shipped as prebuilt binaries | `tools/claude-tools` |
+| TypeScript (bun) | Web and browser code | artifact pages |
 
 **Parallelize embarrassingly parallel loops by default** — background N independent iterations and wait (`asyncio.gather`, `Promise.all`, `cmd & … wait`). Sequential only for real ordering dependencies, shared mutable state, or OS-level exclusivity.
 
