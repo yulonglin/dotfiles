@@ -3505,9 +3505,7 @@ def test_a_scheduled_start_cold_turkey_missed_is_retried(
     assert on(blocks) == ["mode: writing"] and ct.read_capped()["off_after"]
 
 
-def test_a_window_stop_cold_turkey_missed_is_retried(
-    capped_env, tmp_path, monkeypatch
-):
+def test_a_window_stop_cold_turkey_missed_is_retried(capped_env, tmp_path, monkeypatch):
     _, blocks, clock, _, _ = capped_env
     cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + WINDOWS))
     asleep = asleep_display(monkeypatch)
@@ -3561,7 +3559,9 @@ def test_a_window_retry_brings_back_a_mode_the_failed_attempt_did_stop(
     monkeypatch.setattr(
         ct,
         "ct_send",
-        lambda *a: None if a[:2] == ("-stop", "mode: writing") and drop[0] else send(*a),
+        lambda *a: (
+            None if a[:2] == ("-stop", "mode: writing") and drop[0] else send(*a)
+        ),
     )
     at = dt.datetime(2026, 11, 17, 12, 30)
     clock.now = at.timestamp()
@@ -3817,9 +3817,189 @@ def test_a_tick_without_screenzen_installed_writes_nothing(cfg, monkeypatch):
     ct.cmd_tick(cfg)
 
 
-def test_an_unread_command_is_taken_back_so_it_cannot_run_hours_later(
-    cfg, monkeypatch
+# --- blocklist modes (kind: blocklist): admin opens the web except named groups ---
+
+BLOCKLIST = """\
+  news: {sites: [nytimes.com, wikipedia.org]}
+  errands: {sites: [opentable.com]}
+"""
+
+
+@pytest.fixture
+def bl_cfg(tmp_path):
+    p = tmp_path / "bl.md"
+    note = NOTE.replace("always_allow:", BLOCKLIST + "always_allow:").replace(
+        "  writing: {allow: [papers]}\n",
+        "  writing: {allow: [papers]}\n"
+        "  admin: {kind: blocklist, allow: [errands], block: [news, chat]}\n",
+    )
+    p.write_text(note)
+    return ct.load_config(p)
+
+
+def test_a_mode_kind_must_be_allowlist_or_blocklist(tmp_path):
+    p = tmp_path / "bad.md"
+    p.write_text(NOTE.replace("writing: {allow: [papers]}", "writing: {kind: open}"))
+    with pytest.raises(SystemExit, match="'kind' must be allowlist or blocklist"):
+        ct.load_config(p)
+
+
+def test_a_blocklist_mode_blocks_its_groups_sites_not_everything(bl_cfg):
+    assert ct.desired_web(bl_cfg, "admin") == ["nytimes.com", "wikipedia.org"]
+    assert ct.desired_web(bl_cfg, "research") == ["*.*"]
+    # its apps are blocked as in any mode, and its allow list is unchanged
+    assert ct.group_items(bl_cfg, bl_cfg["modes"]["admin"]["block"], "apps") == [
+        "Telegram"
+    ]
+    assert "opentable.com" in ct.desired_exceptions(bl_cfg, "admin")
+
+
+def test_drift_never_adds_block_all_to_a_blocklist_mode(bl_cfg, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    blocks = {"mode: admin": mode_block(bl_cfg, "admin", "false")}
+    d = ct.drift(bl_cfg, blocks, "admin")
+    # '*.*' left over from the allowlist days is a hand removal, never an addition
+    assert d["extra_web"] == ["*.*"]
+    assert d["add_web"] == ["nytimes.com", "wikipedia.org"]
+    blocks["mode: admin"]["web"] = ["nytimes.com", "wikipedia.org"]
+    d = ct.drift(bl_cfg, blocks, "admin")
+    assert d["add_web"] == [] and d["extra_web"] == []
+    # an allowlist mode is unchanged: '*.*' is wanted
+    blocks = {"mode: research": {**mode_block(bl_cfg, "research", "false"), "web": []}}
+    assert ct.drift(bl_cfg, blocks, "research")["add_web"] == ["*.*"]
+
+
+def test_export_writes_a_blocklist_modes_own_sites(bl_cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    out = tmp_path / "x.ctbbl"
+    ct.cmd_export(bl_cfg, out)
+    data = json.loads(out.read_text())
+    assert data["mode: admin"]["web"] == ["nytimes.com", "wikipedia.org"]
+    assert data["mode: research"]["web"] == ["*.*"]
+
+
+def test_pull_puts_a_blocklist_modes_extra_sites_in_its_block_list(bl_cfg, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    blocks = {
+        "mode: admin": {
+            **mode_block(bl_cfg, "admin", "false"),
+            "web": ["*.*", "nytimes.com", "wikipedia.org", "cnn.com"],
+        }
+    }
+    plan = [e for e in ct.pull_plan(bl_cfg, blocks) if e["ref"][1] == "admin"]
+    assert [(e["sites"], e["ref"][2]) for e in plan] == [(["cnn.com"], "block")]
+
+
+def test_switching_into_a_blocklist_mode_loosens(bl_cfg, monkeypatch):
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    assert ct.switch_loosens(bl_cfg, ["writing"], "admin")
+    assert not ct.switch_loosens(bl_cfg, ["admin"], "admin")
+
+
+def test_screenzen_pauses_nothing_in_a_blocklist_mode_and_says_it_loosens(
+    bl_cfg, monkeypatch
 ):
+    template = {
+        "groupName": "✅ focus: shared",
+        "id": "S",
+        "isDisabled": False,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs([template]))
+    monkeypatch.setattr(ct, "ct_held_bundles", lambda modes: set())
+    loosen = ct.cmd_screenzen(bl_cfg, dry_run=True, modes=["admin"], quiet=True)
+    assert "screenzen:every-site" in loosen
+    # an allowlist mode still turns its own group on: no every-site loosening
+    loosen = ct.cmd_screenzen(bl_cfg, dry_run=True, modes=["research"], quiet=True)
+    assert "screenzen:every-site" not in loosen
+    assert ct.sz_open_web(bl_cfg, ["admin"]) and not ct.sz_open_web(bl_cfg, [])
+
+
+def test_no_mode_screenzen_list_keeps_a_blocklist_modes_allow_groups(bl_cfg):
+    # '✅ focus: shared' is built from every mode's allow list, admin's included, so
+    # turning admin into a blocklist pauses nothing new when no mode runs.
+    assert "opentable.com" in ct.sz_allow_sites(bl_cfg, [])
+
+
+def test_starting_a_blocklist_mode_from_no_mode_waits_for_an_agent(bl_cfg, monkeypatch):
+    blocks = {
+        "mode: research": mode_block(bl_cfg, "research", "false"),
+        "mode: writing": mode_block(bl_cfg, "writing", "false"),
+        "mode: admin": mode_block(bl_cfg, "admin", "false"),
+    }
+    fake_cold_turkey(monkeypatch, blocks)
+    monkeypatch.setattr(ct, "sz_follow", lambda *a, **k: True)
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with pytest.raises(SystemExit) as e:
+        ct.cmd_start(bl_cfg, "admin")
+    assert e.value.code == 3 and blocks["mode: admin"]["enabled"] == "false"
+    # an allowlist mode from no mode still starts at once
+    ct.cmd_start(bl_cfg, "writing")
+    assert blocks["mode: writing"]["enabled"] == "true"
+
+
+def test_leaving_a_blocklist_mode_for_an_allow_group_loosens_nothing(
+    bl_cfg, monkeypatch
+):
+    # Found by review: with every ✅ group off the web is open, so turning the shared
+    # group back on only tightens; it used to count every listed site as a gain and
+    # make an agent's approved 'focus off' wait a second time.
+    shared = {
+        "groupName": "✅ focus: shared",
+        "id": "S",
+        "isDisabled": True,
+        "alwaysActive": True,
+        "customSites": [],
+        "apps": [],
+    }
+    monkeypatch.setattr(ct, "sz_export", lambda: sz_prefs([shared]))
+    monkeypatch.setattr(ct, "ct_held_bundles", lambda modes: set())
+    assert ct.cmd_screenzen(bl_cfg, dry_run=True, modes=[], quiet=True) == []
+    assert ct.cmd_screenzen(bl_cfg, dry_run=True, modes=["writing"], quiet=True) == []
+
+
+def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
+    tmp_path, monkeypatch
+):
+    # Found by review: a Cold Turkey exception overrides its own block, so a banned
+    # site must not also be an exception; ScreenZen's no-mode list still has it.
+    monkeypatch.setattr(ct, "resolve_app", lambda name: None)
+    p = tmp_path / "overlap.md"
+    p.write_text(
+        NOTE.replace("always_allow:", BLOCKLIST + "always_allow:").replace(
+            "  writing: {allow: [papers]}\n",
+            "  writing: {allow: [papers]}\n"
+            "  admin: {kind: blocklist, allow: [errands, news], block: [news]}\n",
+        )
+    )
+    cfg = ct.load_config(p)
+    # only always_allow becomes an exception, so no allow pattern can undo a pattern ban
+    # ('*.wikipedia.org' against 'en.wikipedia.org'); found by the second review round
+    assert ct.ct_exceptions(cfg, "admin") == ["file://*.*", "localhost"]
+    assert "nytimes.com" in ct.sz_allow_sites(cfg, [])
+    assert "opentable.com" in ct.sz_allow_sites(cfg, [])
+    # a leftover exception for a banned site is flagged for hand removal
+    blocks = {
+        "mode: admin": {
+            "enabled": "false",
+            "web": ["nytimes.com", "wikipedia.org"],
+            "exceptions": ct.desired_exceptions(cfg, "admin"),
+            "apps": [],
+        }
+    }
+    assert ct.drift(cfg, blocks, "admin")["extra_exc"] == [
+        "opentable.com",
+        "nytimes.com",
+        "wikipedia.org",
+    ]
+    out = tmp_path / "x.ctbbl"
+    ct.cmd_export(cfg, out)
+    assert "nytimes.com" not in json.loads(out.read_text())["mode: admin"]["exceptions"]
+
+
+def test_an_unread_command_is_taken_back_so_it_cannot_run_hours_later(cfg, monkeypatch):
     # 23 Nov 2026: a start missed in a 09:14 dark wake waited in the slot and ran when
     # the lid opened at 12:48, inside the lunch window.
     blocks = {"mode: research": mode_block(cfg, "research", "false")}

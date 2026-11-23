@@ -54,6 +54,10 @@ Cold Turkey blocks hard, one mode at a time. Each mode is a block named
 `always_allow` plus the mode's `allow` groups; it blocks the apps of its `block`
 groups, since Cold Turkey cannot allowlist apps. Only one mode runs at a time:
 two running allowlist blocks would allow only the sites that are in both.
+A mode with `kind: blocklist` is the reverse: its website list is the sites of its
+`block` groups, so the rest of the web opens, and ScreenZen switches every ✅ group
+off while it runs, as in an open window. Its `allow` groups still feed '✅ focus:
+shared'. Starting one, even from no mode, loosens, so an agent waits.
 `blocklists.cold_turkey` describes the always-on blocks; `status` reports their
 drift but nothing writes them, because their delay locks stop the CLI. A site a
 mode allows but an always-on block bans stays banned, and `status` flags it.
@@ -476,8 +480,10 @@ def load_config(path: Path) -> dict:
         ("no_mode_allow", cfg.get("no_mode_allow") or []),
     ]
     for name, mode in (cfg.get("modes") or {}).items():
-        if set(mode or {}) - {"allow", "block"}:
-            problems.append(f"mode {name!r} may only have 'allow' and 'block'")
+        if set(mode or {}) - {"allow", "block", "kind"}:
+            problems.append(f"mode {name!r} may only have 'allow', 'block' and 'kind'")
+        if (mode or {}).get("kind", "allowlist") not in ("allowlist", "blocklist"):
+            problems.append(f"mode {name!r}: 'kind' must be allowlist or blocklist")
         refs += [
             (f"mode {name}", (mode.get("allow") or []) + (mode.get("block") or []))
         ]
@@ -580,6 +586,33 @@ def desired_exceptions(cfg: dict, mode: str) -> list[str]:
     return group_items(cfg, names, "sites")
 
 
+def is_blocklist(cfg: dict, mode: str) -> bool:
+    """A blocklist mode ('kind: blocklist') blocks only the sites of its `block` groups
+    and opens the rest of the web; an allowlist mode (the default) blocks '*.*' except
+    its `allow` groups. Errands reach an open-ended set of sites, so admin is a
+    blocklist; research and writing stay allowlists (Yulong, 2026-11-22). A blocklist
+    mode keeps its `allow` list: it still feeds '✅ focus: shared', what no mode lets
+    through without a pause."""
+    return (cfg["modes"].get(mode) or {}).get("kind") == "blocklist"
+
+
+def ct_exceptions(cfg: dict, mode: str) -> list[str]:
+    """The exceptions of a mode's Cold Turkey block. An exception overrides its own
+    block, and a pattern ban ('*.wikipedia.org') cannot be checked against an allowed
+    entry ('en.wikipedia.org') by string, so a blocklist mode takes only `always_allow`
+    as exceptions: its own `allow` groups feed '✅ focus: shared' and nothing else."""
+    if is_blocklist(cfg, mode):
+        return group_items(cfg, cfg.get("always_allow") or [], "sites")
+    return desired_exceptions(cfg, mode)
+
+
+def desired_web(cfg: dict, mode: str) -> list[str]:
+    """The website list of a mode's Cold Turkey block."""
+    if is_blocklist(cfg, mode):
+        return group_items(cfg, cfg["modes"][mode].get("block") or [], "sites")
+    return [BLOCK_ALL]
+
+
 def resolve_app(name: str) -> tuple[Path, str] | None:
     """Return the app bundle and its bundle id, or None if it is not installed."""
     for d in APP_DIRS:
@@ -619,7 +652,7 @@ def overlaps(cfg: dict) -> list[tuple[str, str, str]]:
     for bl_name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
         banned = set(group_items(cfg, bl.get("block") or [], "sites"))
         for mode in cfg["modes"]:
-            for site in desired_exceptions(cfg, mode):
+            for site in ct_exceptions(cfg, mode):
                 if site in banned:
                     out.append((site, mode, bl_name))
     return out
@@ -1028,6 +1061,10 @@ def switch_loosens(cfg: dict, from_modes: list[str], target: str) -> bool:
     would loosen, and going back to research from comms would cost a reason."""
     if target in (cfg.get("capped_modes") or {}):
         return True
+    if is_blocklist(cfg, target) and any(
+        not is_blocklist(cfg, m) for m in from_modes if m in cfg["modes"]
+    ):
+        return True  # it opens the whole web
     keep = mode_apps(cfg, target)
     return any(not mode_apps(cfg, m) <= keep for m in from_modes if m in cfg["modes"])
 
@@ -1598,6 +1635,14 @@ def cmd_start(
                 f"focus: {name!r} is locked, so it cannot be stopped; not starting {target!r}."
             )
     session = read_only()
+    if not (running or session) and is_blocklist(cfg, mode):
+        # From no mode, a blocklist mode still loosens: ScreenZen stops pausing the
+        # sites no mode lists, so an agent waits as for any loosening.
+        gate(
+            cfg,
+            f"switch:none->{mode}",
+            f"starting {target!r}, a blocklist mode that opens every site it does not ban",
+        )
     if running or session:
         # Starting from no mode only tightens; switching may allow sites the current mode blocks.
         # The key names the current state too, so an approval for one switch does not
@@ -1657,12 +1702,7 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> bool:
     # gate's result.
     if not by_agent():
         spawn_self("sz-apply")
-        print(
-            f"{paint('ScreenZen', '1')}: "
-            + paint(
-                f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen", "32"
-            )
-        )
+        print(f"{paint('ScreenZen', '1')}: " + paint(sz_summary(cfg, modes), "32"))
         return True
     try:
         loosen = cmd_screenzen(cfg, dry_run=True, modes=modes, quiet=True)
@@ -1683,6 +1723,8 @@ def sz_follow(cfg: dict, modes: list[str], switched: bool = False) -> bool:
                 .items()
                 if sz_group_off(bl, modes)
             }
+            if sz_open_web(cfg, modes):
+                mode_off.add("screenzen:every-site")
         other = [
             x
             for x in loosen
@@ -1855,15 +1897,18 @@ def describe(kind: str, items: list[str], indent: str = "  ") -> str:
 
 def drift(cfg: dict, blocks: dict, mode: str) -> dict:
     block = blocks.get(PREFIX + mode)
-    want_exc = desired_exceptions(cfg, mode)
+    want_exc = ct_exceptions(cfg, mode)
     want_apps, missing_apps = desired_apps(cfg, mode)
     if block is None:
         return {"exists": False, "missing_apps": missing_apps}
     have_exc, have_apps = block.get("exceptions", []), block.get("apps", [])
+    want_web, have_web = desired_web(cfg, mode), block.get("web", [])
     return {
         "exists": True,
-        "add_web": [] if BLOCK_ALL in block.get("web", []) else [BLOCK_ALL],
-        "extra_web": [w for w in block.get("web", []) if w != BLOCK_ALL],
+        # For a blocklist mode '*.*' is extra: removing it is a hand edit, and sync
+        # must never add it back.
+        "add_web": [w for w in want_web if w not in have_web],
+        "extra_web": [w for w in have_web if w not in want_web],
         "add_exc": [e for e in want_exc if e not in have_exc],
         "extra_exc": [e for e in have_exc if e not in want_exc],
         "add_apps": [a for a in want_apps if a not in have_apps],
@@ -2322,7 +2367,7 @@ def cmd_export(cfg: dict, out: Path) -> None:
     for m in cfg["modes"]:
         apps, missing[PREFIX + m] = desired_apps(cfg, m)
         data[PREFIX + m] = build_block(
-            [BLOCK_ALL], desired_exceptions(cfg, m), apps, now
+            desired_web(cfg, m), ct_exceptions(cfg, m), apps, now
         )
     for t in cfg.get("timers") or {}:
         web, apps, missing[TIMER_PREFIX + t] = timer_lists(cfg, t)
@@ -2548,6 +2593,20 @@ def ct_held_bundles(modes: list[str]) -> set[str]:
     return held
 
 
+def sz_open_web(cfg: dict, modes: list[str]) -> bool:
+    """Whether ScreenZen pauses no site for these modes: every one is a blocklist mode.
+    Its Cold Turkey block bans what it bans, so no ✅ group goes on, as in an open window."""
+    return bool(modes) and all(
+        m in cfg["modes"] and is_blocklist(cfg, m) for m in modes
+    )
+
+
+def sz_summary(cfg: dict, modes: list[str]) -> str:
+    if sz_open_web(cfg, modes):
+        return "no site paused except by the 🚫 groups (blocklist mode)"
+    return f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen"
+
+
 def sz_mode_group(mode: str | None) -> str:
     """Name of the ScreenZen allow group focus owns for a mode (None: no mode runs)."""
     return f"{SZ_MODE_PREFIX}{mode or 'shared'}"
@@ -2602,7 +2661,7 @@ def cmd_screenzen(
     open_window = not modes and bool(in_window(cfg))
     # One allow group per mode, plus the no-mode group; keep each list current.
     want_on = {sz_mode_group(m) for m in modes} or {sz_mode_group(None)}
-    if open_window:
+    if open_window or sz_open_web(cfg, modes):
         want_on = set()
     for mode in [None, *cfg["modes"], *([ONLY] if "only" in cfg else [])]:
         name = sz_mode_group(mode)
@@ -2680,11 +2739,20 @@ def cmd_screenzen(
                 f"{name}: apps not found on this Mac, left out: {', '.join(missing)}"
             )
 
-    # What now passes without a pause screen that did not before.
-    loosen.extend(
-        f"screenzen:+{s}"
-        for s in sorted(sz_effective_allow(groups) - sz_effective_allow(before))
-    )
+    # Every ✅ group switched off pauses no site at all: the widest state, though
+    # sz_effective_allow sees an empty set. So leaving it for an allow group gains
+    # nothing, and entering it loosens everything.
+    def any_on(gs: list[dict]) -> bool:
+        return any(g["groupName"].startswith("✅") and not g["isDisabled"] for g in gs)
+
+    if any_on(before) and not any_on(groups):
+        loosen.append("screenzen:every-site")
+    if any_on(before):
+        # What now passes without a pause screen that did not before.
+        loosen.extend(
+            f"screenzen:+{s}"
+            for s in sorted(sz_effective_allow(groups) - sz_effective_allow(before))
+        )
     changed = groups != before
     if not quiet:
         on = ", ".join(sorted(want_on)) or "nothing (open window)"
@@ -2734,12 +2802,7 @@ def cmd_screenzen(
         )
     hand_back_focus(front)
     if quiet:
-        print(
-            f"{paint('ScreenZen', '1')}: "
-            + paint(
-                f"{len(sz_allow_sites(cfg, modes))} sites without a pause screen", "32"
-            )
-        )
+        print(f"{paint('ScreenZen', '1')}: " + paint(sz_summary(cfg, modes), "32"))
     else:
         print(f"wrote ScreenZen and reopened it; backup at {backup}")
     return loosen
@@ -2823,9 +2886,15 @@ def pull_plan(cfg: dict, blocks: dict) -> list[dict]:
     for mode in cfg["modes"]:
         d = drift(cfg, blocks, mode)
         if d["exists"]:
-            entry(PREFIX + mode, d["extra_exc"], [], ("modes", mode, "allow"))
+            # A blocklist mode's Cold Turkey exceptions leave out its own allow groups,
+            # so a leftover exception the note already allows is not new.
+            known = set(desired_exceptions(cfg, mode))
+            exc = [e for e in d["extra_exc"] if e not in known]
+            entry(PREFIX + mode, exc, [], ("modes", mode, "allow"))
+            # A blocklist mode's own banned sites go with its apps; entry() drops '*.*'.
+            web = d["extra_web"] if is_blocklist(cfg, mode) else []
             entry(
-                PREFIX + mode + " apps", [], d["extra_apps"], ("modes", mode, "block")
+                PREFIX + mode + " apps", web, d["extra_apps"], ("modes", mode, "block")
             )
     for name, bl in (cfg.get("blocklists") or {}).get("cold_turkey", {}).items():
         block = blocks.get(name)
@@ -4400,6 +4469,11 @@ def cmd_overview(cfg: dict) -> None:
     capped = cfg.get("capped_modes") or {}
     for m, spec in cfg["modes"].items():
         detail = ", ".join(spec.get("allow") or [])
+        if is_blocklist(cfg, m):
+            sites = [
+                b for b in spec.get("block") or [] if cfg["groups"][b].get("sites")
+            ]
+            detail = "every site except " + (", ".join(sites) or "the always-on blocks")
         if m in capped:
             cap = capped[m].get("minutes", DEFAULT_CAPPED_MIN)
             detail += f" · at most {cap} min a time"
