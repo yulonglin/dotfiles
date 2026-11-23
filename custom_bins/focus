@@ -768,12 +768,34 @@ def ct_apply(args: tuple[str, ...], done, more_polls: int = 80) -> bool:
     wake_agent(args)
     landed = wait_for(done, 20)
     give_front_back(front)
-    return landed or wait_for(done, more_polls)
+    if landed or wait_for(done, more_polls):
+        return True
+    withdraw_command(args)
+    return False
+
+
+def withdraw_command(args: tuple[str, ...]) -> None:
+    """Take an unread command back out of the slot, if it is still this one.
+
+    Left there, the agent runs it whenever Cold Turkey next comes to the front, which
+    can be hours later: on 23 Nov 2026 the default start that a 09:14 dark wake missed
+    ran when the lid opened at 12:48, and research came back in the middle of the lunch
+    window. Every caller either retries or reports the miss, so nothing is lost. The
+    agent may read the slot first; then the key is gone and this deletes nothing."""
+    slot = subprocess.run(
+        ["defaults", "read", CT_DEFAULTS, "commandArgs"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    if slot and all(a in slot for a in args):
+        subprocess.run(
+            ["defaults", "delete", CT_DEFAULTS, "commandArgs"], capture_output=True
+        )
 
 
 CT_DROPPED = (
-    "the agent did not read the command. It stays queued and can run when Cold Turkey "
-    "next comes to the front, so bring Cold Turkey forward and run this again"
+    "the agent did not read the command, so focus took it back and nothing is left to "
+    "run later. Bring Cold Turkey forward and run this again"
 )
 
 
@@ -4496,9 +4518,31 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+class Stamped:
+    """A text stream that starts every line with the local time, for the tick log
+    (~/Library/Logs/focus-tick.log). Without times, the 23 Nov 2026 lunch-window
+    failure had to be pieced together from file times and the sleep log."""
+
+    def __init__(self, stream):
+        self.stream, self.at_line_start = stream, True
+
+    def write(self, text: str) -> int:
+        for part in text.splitlines(keepends=True):
+            if self.at_line_start:
+                self.stream.write(f"{dt.datetime.now():%Y-%m-%d %H:%M:%S} ")
+            self.stream.write(part)
+            self.at_line_start = part.endswith("\n")
+        return len(text)
+
+    def __getattr__(self, name: str):
+        return getattr(self.stream, name)
+
+
 def main() -> None:
     # Intermixed, so a flag may come before or after the minutes: 'focus x --day 90'.
     a = build_parser().parse_intermixed_args()
+    if a.command == "tick":  # its output is the tick log, which needs times to trace
+        sys.stdout, sys.stderr = Stamped(sys.stdout), Stamped(sys.stderr)
     # Before load_config: uninstalling must work when the config note is gone.
     if a.command == "uninstall-agent":
         cmd_uninstall_agent()
@@ -4626,7 +4670,8 @@ def default_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     if in_window(cfg, now):  # an open window wins; the day is not marked, so the
         return None  # default can still start after the window, inside its span
     today = now.strftime("%Y-%m-%d")
-    if (read_state(DEFAULT_FILE) or {}).get("date") == today:
+    before = read_state(DEFAULT_FILE)
+    if (before or {}).get("date") == today:
         return None
     write_state(DEFAULT_FILE, {"date": today})
     busy = (
@@ -4639,7 +4684,14 @@ def default_start(cfg: dict, now: dt.datetime | None = None) -> str | None:
     )
     if busy:
         return None
-    cmd_start(cfg, d["mode"])
+    try:
+        cmd_start(cfg, d["mode"])
+    except SystemExit:
+        # Cold Turkey did not read the start, as in the dark wake at 09:14 on 23 Nov
+        # 2026: give the day back so the next tick in the span tries again, as
+        # scheduled_start does. Nothing ran, so the busy check above still holds then.
+        restore_state(DEFAULT_FILE, before)
+        raise
     notify(f"focus: {d['mode']} started, the default from {start}")
     return d["mode"]
 
