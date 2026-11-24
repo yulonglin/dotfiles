@@ -169,6 +169,7 @@ operational = {
     "session_start_notes.sh",
     "show_auth_account.sh",
     "ssh_check.py",
+    "verify_subagent_model.py",
     "watchdog_mark.sh",
     "watchdog_start.sh",
     "watchdog_stop.sh",

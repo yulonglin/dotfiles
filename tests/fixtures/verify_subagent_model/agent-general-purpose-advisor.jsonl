@@ -1,0 +1,33 @@
+{"type": "attachment", "attachment": {"type": "model", "identity": {"modelId": "claude-opus-5-5", "marketingName": "Opus 5.5", "knowledgeCutoff": "June 2026"}}}
+{"type": "attachment", "attachment": {"type": "advisor_tool", "model": "claude-fable-5-2", "available": true}}
+{"type": "api-request-shape", "shape": {"tools": [{"name": "advisor", "model": "claude-fable-5-2"}]}}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_002", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_002", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_003", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_004", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request-shape", "shape": {"tools": [{"name": "advisor", "model": "claude-fable-5-2"}]}}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "api-request", "params": {"model": "claude-opus-5-5"}}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "claude-opus-5-5"}, "requestedModel": "claude-opus-5-5", "advisorModel": "claude-fable-5-2"}

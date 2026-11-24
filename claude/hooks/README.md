@@ -24,6 +24,14 @@ Hooks for automating task and agent management workflows.
 
 **Off switch:** `nudges.computer-use-esc = off` in `features.conf`. **Test:** `tests/test_nudge_computer_use_esc.zsh`.
 
+### verify_subagent_model.py (which model really answered a subagent)
+
+**Purpose:** An agent's label says what was requested, not what answered: a routing name the model-router gateway does not serve is answered by the default Claude model under the foreign label. At SubagentStop this hook reads the agent's transcript, counts the answering model per reply (`message.model` on `type: "assistant"` records, deduplicated by `message.id`; `requestedModel`, `api-request.params.model` and `advisorModel` are the request or a sidecar, not the answer), and compares it with the expected model (sibling `agent-<id>.meta.json` `model`, else `requestedModel`, else frontmatter, resolved through `config/model-router.toml`). Every check is one line in `~/.local/state/model-router/agent-model-checks.jsonl`. A mismatch shows the user a `systemMessage`; a mismatch or a verified non-Claude match is also handed to the main model as `additionalContext` at its next tool call (PostToolUse) or, for mismatches only, at Stop. SubagentStop's own `additionalContext` and `decision` go to the subagent and keep it running, so they are never used, and a background Agent's tool result is written at launch, so PostToolUse on `Agent` cannot carry the verdict.
+
+**Retroactive check:** `verify_subagent_model.py --transcript <agent-…jsonl> [--expect MODEL] [--json]`; exit 0 match, 1 mismatch, 2 usage error, 3 indeterminate.
+
+**Off switch:** `agents.verify-model = off` in `features.conf`. **Test:** `tests/test_verify_subagent_model.py`.
+
 ### agent_spawned.sh
 
 **Purpose:** Reminds user to save agent IDs when agents are spawned

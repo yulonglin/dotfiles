@@ -1,0 +1,157 @@
+{"type": "attachment", "attachment": {"type": "model", "identity": {"modelId": "gemini", "marketingName": null, "knowledgeCutoff": null}}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_002", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_002", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_003", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_003", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_003", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_003", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_004", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_004", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_004", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_011", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_011", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_012", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_013", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_013", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_013", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_014", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_014", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_015", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_016", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_016", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_017", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_017", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_018", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_018", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_019", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_019", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_020", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_021", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_021", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_021", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_021", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_021", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_022", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_022", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_022", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_022", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_023", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_023", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_024", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_024", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_025", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_025", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_026", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_027", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_028", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_029", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_030", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_031", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_032", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_033", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_034", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_034", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_034", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_034", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_035", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_035", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_035", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_035", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_036", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_037", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_037", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_037", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_037", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_038", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_039", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_040", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_041", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_042", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_043", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "message": {"id": "msg_044", "role": "assistant", "model": "google/gemini-4-neon"}, "requestedModel": "gemini"}
+{"type": "assistant", "message": {"id": "msg_044", "role": "assistant", "model": "google/gemini-4-neon"}, "isApiErrorMessage": false}
