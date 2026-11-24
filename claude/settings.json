@@ -235,7 +235,6 @@
     "review-pr-queue": "off",
     "mv-repo": "off",
     "setup-channel": "off",
-    "ship": "off",
     "auto-mode-probe": "off",
     "update-auto-mode": "off"
   },

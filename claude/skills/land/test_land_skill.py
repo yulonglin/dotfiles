@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Structural checks for the concise ship workflow skill."""
+"""Structural checks for the concise land workflow skill."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-SKILL = ROOT / "claude" / "skills" / "ship" / "SKILL.md"
+SKILL = ROOT / "claude" / "skills" / "land" / "SKILL.md"
 CATALOG = ROOT / "claude" / "skills" / "catalog" / "SKILL.md"
 
 text = SKILL.read_text()
 catalog = CATALOG.read_text()
 required = {
-    "natural trigger": "ship this",
+    "natural trigger": "land this",
     "scope boundary": "original task files",
     "review cap": "two review-fix rounds",
     "large merge PR": "large or structural",
@@ -29,10 +29,10 @@ required = {
     "branch fallback": "merge the branch manually from the parent checkout",
 }
 missing = [label for label, phrase in required.items() if phrase not in text]
-if "| `ship` |" not in catalog:
+if "| `land` |" not in catalog:
     missing.append("catalog registration")
 if "finishing-a-development-branch" not in text:
     missing.append("branch-menu supersession cross-reference")
 if missing:
-    raise SystemExit("missing ship contracts: " + ", ".join(missing))
-print("ship skill structural contract: PASS")
+    raise SystemExit("missing land contracts: " + ", ".join(missing))
+print("land skill structural contract: PASS")

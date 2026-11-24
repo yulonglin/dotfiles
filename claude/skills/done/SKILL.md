@@ -1,6 +1,6 @@
 ---
 name: done
-description: Mark the session as done — generate a descriptive session title if it has none, prepend a checkmark, and hand back the /rename line that applies it. Use when wrapping up or closing out a session, and when the user says "done", "finished", "that's it", "ship it", "mark this done", or invokes /done.
+description: Mark the session as done — generate a descriptive session title if it has none, prepend a checkmark, and hand back the /rename line that applies it. Use when wrapping up or closing out a session, and when the user says "done", "finished", "that's it", "mark this done", or invokes /done.
 ---
 
 # Mark Session Done

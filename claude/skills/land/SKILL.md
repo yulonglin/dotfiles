@@ -1,11 +1,11 @@
 ---
-name: ship
-description: Use when the user says "ship this" or explicitly asks to review, finish, merge, and push implementation that is ready to deliver.
+name: land
+description: Use when the user says "land this" or explicitly asks to review, finish, merge, and push implementation that is ready to deliver.
 ---
 
-# Ship
+# Land
 
-Complete an authorized delivery path. This supersedes `finishing-a-development-branch` only when the user already selected merge and push.
+Complete an authorized delivery path. This supersedes `finishing-a-development-branch` only when the user already selected merge and push. For PR-only review and CI watching without merging, use Claude Code's built-in `/ship`.
 
 ## Authorization Boundary
 
