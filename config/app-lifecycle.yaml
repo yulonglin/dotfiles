@@ -49,6 +49,7 @@ apps:
   Things:                {manual: close}
   Things3:               {manual: close}
   Focusmate (Safari):    {manual: minimise}   # the Dock, not off screen - see below
+  OBS:                   {manual: hide, auto: skip}   # OBS Virtual Camera feeds Focusmate; hiding keeps it streaming, quitting drops the camera mid-session
   zoom.us:               {manual: skip}
   Obsidian:              {manual: minimise}
   VoiceInk:              {manual: close}

@@ -31,4 +31,34 @@ with open(dst, 'w') as f:
 PYEOF
         echo "Synced Mouseless config → $dst (stripped keyboard_layout, app_version)"
     }
+
+    # Sync OBS Studio profile and scene collection back to dotfiles (macOS only)
+    sync-obs() {
+        local src="$HOME/Library/Application Support/obs-studio/basic"
+        local dst="$DOT_DIR/config/obs/basic"
+        if [[ ! -d "$src" ]]; then
+            echo "OBS config not found at $src"
+            return 1
+        fi
+        mkdir -p "$dst/profiles/Untitled" "$dst/scenes"
+        python3 - "$src" "$dst" "$HOME" <<'PYEOF'
+import json, pathlib, sys
+src, dst, home = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+
+ini_src = src / "profiles/Untitled/basic.ini"
+if ini_src.is_file():
+    lines = [
+        line.replace(home, "__HOME__")
+        for line in ini_src.read_text(encoding="utf-8-sig").splitlines()
+        if not line.startswith("CookieId=")
+    ]
+    (dst / "profiles/Untitled/basic.ini").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+scene_src = src / "scenes/Untitled.json"
+if scene_src.is_file():
+    data = json.loads(scene_src.read_text(encoding="utf-8"))
+    (dst / "scenes/Untitled.json").write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
+PYEOF
+        echo "Synced OBS config → $dst (stripped CookieId, templated \$HOME)"
+    }
 fi

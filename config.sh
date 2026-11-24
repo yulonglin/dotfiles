@@ -96,6 +96,7 @@ DEPLOY_REGISTRY=(
     "bedtime|Bedtime timezone enforcement|macos|false|macOS"
     "text-replacements|Sync macOS + Alfred text replacements|macos|true|macOS"
     "mouseless|Keyboard-driven mouse control|macos|true|macOS"
+    "obs|OBS Studio Focusmate scene and profile (copied)|macos|true|macOS"
     "alfred|Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and watch for wedged workflow scripts|macos|true|macOS"
     "focus|End Cold Turkey focus breaks on time (focus tick every minute via launchd)|macos|true|macOS"
     "bearcli|Symlink Bear CLI to /usr/local/bin (works in cron/scripts)|macos|true|macOS"

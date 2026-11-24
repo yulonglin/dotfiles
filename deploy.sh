@@ -91,6 +91,7 @@ COMPONENTS:
     --antigravity     Deploy Antigravity global config (~/.gemini/config)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
+    --obs             Deploy OBS Studio Focusmate scene and profile (macOS only)
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
                       schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
@@ -1139,6 +1140,51 @@ if [[ "$DEPLOY_MOUSELESS" == "true" ]]; then
         fi
     else
         log_info "Mouseless is macOS-only, skipping"
+    fi
+fi
+
+# ─── OBS Studio (macOS only) ─────────────────────────────────────────────────
+# Copied rather than symlinked because OBS rewrites scene JSON and profile INI
+# atomically on exit (replacing symlinks) and basic.ini holds a machine-local
+# home path and browser-panel CookieId. Use `sync-obs` to pull UI edits back.
+
+if [[ "$DEPLOY_OBS" == "true" ]]; then
+    if is_macos; then
+        log_info "Deploying OBS Studio configuration..."
+
+        OBS_DOTFILES="$DOT_DIR/config/obs/basic"
+        OBS_TARGET="$HOME/Library/Application Support/obs-studio/basic"
+
+        if [[ ! -d "$OBS_DOTFILES" ]]; then
+            log_warning "OBS config not found at $OBS_DOTFILES"
+        elif [[ ! -d "/Applications/OBS.app" ]]; then
+            log_info "OBS.app not installed — skipping OBS config deploy"
+        else
+            mkdir -p "$OBS_TARGET/profiles/Untitled" "$OBS_TARGET/scenes"
+
+            OBS_INI_SRC="$OBS_DOTFILES/profiles/Untitled/basic.ini"
+            OBS_INI_DST="$OBS_TARGET/profiles/Untitled/basic.ini"
+            if [[ -f "$OBS_INI_SRC" ]]; then
+                [[ -f "$OBS_INI_DST" && ! -L "$OBS_INI_DST" ]] && backup_file "$OBS_INI_DST"
+                python3 - "$OBS_INI_SRC" "$OBS_INI_DST" "$HOME" <<'PYEOF' && \
+                    log_success "Deployed OBS profile (basic.ini)"
+import pathlib, sys
+src, dst, home = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+dst.write_text(src.read_text(encoding="utf-8").replace("__HOME__", home), encoding="utf-8")
+PYEOF
+            fi
+
+            OBS_SCENE_SRC="$OBS_DOTFILES/scenes/Untitled.json"
+            OBS_SCENE_DST="$OBS_TARGET/scenes/Untitled.json"
+            if [[ -f "$OBS_SCENE_SRC" ]]; then
+                [[ -f "$OBS_SCENE_DST" && ! -L "$OBS_SCENE_DST" ]] && backup_file "$OBS_SCENE_DST"
+                cp "$OBS_SCENE_SRC" "$OBS_SCENE_DST" && \
+                    log_success "Deployed OBS scene collection (Untitled.json)" && \
+                    log_info "  To sync UI changes back: sync-obs"
+            fi
+        fi
+    else
+        log_info "OBS config deploy is macOS-only, skipping"
     fi
 fi
 
