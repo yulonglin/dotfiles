@@ -5,7 +5,7 @@ description: Use when the user says "land this" or explicitly asks to review, fi
 
 # Land
 
-Complete an authorized delivery path. This supersedes `finishing-a-development-branch` only when the user already selected merge and push. For PR-only review and CI watching without merging, use Claude Code's built-in `/ship`.
+Complete an authorized delivery path. This supersedes `finishing-a-development-branch` only when the user already selected merge and push. For committing, pushing, opening a PR, reviewing, and watching CI without merging, tell the user to type `/ship` (Claude Code's built-in `ship-local` skill).
 
 ## Authorization Boundary
 
