@@ -2,7 +2,6 @@ sandbox_mode = "workspace-write"
 model = "gpt-6.2-astra"
 model_reasoning_effort = "medium"
 service_tier = "default"
-# Default to "Approve for me": automatically review requests, keeping the sandbox.
 approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 
@@ -133,10 +132,23 @@ enabled = true
 [plugins."unified-computer-use@openai-bundled"]
 enabled = true
 
+[plugins."model-router@alignment-hive"]
+enabled = true
+
+[plugins."rust-analyzer-lsp@claude-plugins-official"]
+enabled = true
+
+[plugins."bear-mcp@productivity-tools"]
+enabled = true
+
+[plugins."things-mcp@productivity-tools"]
+enabled = true
+
 [features]
 memories = true
 js_repl = false
 computer_use = false
+chronicle = false
 
 [mcp_servers.context7]
 url = "https://mcp.context7.com/mcp"
@@ -144,6 +156,18 @@ url = "https://mcp.context7.com/mcp"
 [mcp_servers.bear]
 command = "/Applications/Bear.app/Contents/MacOS/bearcli"
 args = ["mcp-server"]
+
+[mcp_servers.slack]
+url = "https://mcp.slack.com/mcp"
+http_headers_helper = 'bash "${DOT_DIR:-$HOME/code/dotfiles}/custom_bins/slack-mcp-headers"'
+
+[mcp_servers.mats_slack]
+command = "mats-slack-mcp"
+args = ["--bitwarden"]
+startup_timeout_sec = 60
+
+[mcp_servers.superlogical]
+url = "https://www.superlogical.com/rex/community-mcp"
 
 [shell_environment_policy]
 inherit = "core"
@@ -158,6 +182,10 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
 CLAUDE_CODE_NO_FLICKER = "1"
 ENABLE_TOOL_SEARCH = "1"
 NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "9230e2bd8b24b7ac7a0ba6774c64bf0d78ecdabbdd91d0ed627b02a587bae2df"
+CLAUDE_CODE_MAX_CONTEXT_TOKENS = "1000000"
+CLAUDE_CODE_STOP_HOOK_BLOCK_CAP = "5"
+CODEX_COMPANION_DATA_DIR = "/tmp/claude/codex-data"
+TMPDIR = "/tmp/claude"
 
 [hooks.state]
 
@@ -198,16 +226,20 @@ trusted_hash = "sha256:6157c9f3776a29424b3a497707296124a3f628909fc09129dc89412d1
 trusted_hash = "sha256:063ea45c81012b7c36a92e4f0de9e8aaf2dcefeac5c09c6b45466acc62695486"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:0:0"]
-trusted_hash = "sha256:e1f574c07fd492df4de2ceb615c3b0a2a3eca27329bf0929ff9095650c7174bf"
+trusted_hash = "sha256:c41548fce53de5012ad9caaff8a2bfdbcc615f76a1697682a8af6d86644bab07"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:0"]
 trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:1"]
 trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:2"]
 trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:3"]
 trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
@@ -217,12 +249,15 @@ trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:session_start:0:0"]
 trusted_hash = "sha256:3def3be0b299c29f829ea4b057509c24f3c6f8eede7b8c719bbd4167866d6cf6"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:user_prompt_submit:0:0"]
 trusted_hash = "sha256:c22701bf949e9ffd219867faec1158e0124874e94f3668dab6209fa3acc92dd6"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:stop:0:0"]
 trusted_hash = "sha256:5d8880157e747997146b5eb0443a43909e23fb0203e64ae4895eff5a1b0282fa"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
 
 [hooks.state."codex@codex-plugin-cc:hooks/hooks.json:session_start:1:0"]
 enabled = false
@@ -233,15 +268,19 @@ trusted_hash = "sha256:317a07045dfc95aef2e80c55428a2f817e2768be867e3b1ef29a73da8
 
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:post_tool_use:0:0"]
 trusted_hash = "sha256:b54eb6fa509b1829789b3c820f29cacd3636120ad2a563b8b839d94face0170a"
+trusted_content_hash = "sha256:e5ab327d7c848ce91ccfadb3dbb7715b1cee122fb0d1580e0014199ea7acd9cb"
 
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:session_start:0:0"]
 trusted_hash = "sha256:cd46d4c1408a0c59a707c959639837696d2fa1f17346db351523e3c04916ef56"
+trusted_content_hash = "sha256:e5ab327d7c848ce91ccfadb3dbb7715b1cee122fb0d1580e0014199ea7acd9cb"
 
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:session_end:0:0"]
 trusted_hash = "sha256:72c553c0f49b70f00f7c41756a190376c8b2b2d0629f4ba8f5becba3ea9e3dce"
+trusted_content_hash = "sha256:e5ab327d7c848ce91ccfadb3dbb7715b1cee122fb0d1580e0014199ea7acd9cb"
 
 [hooks.state."remember@claude-plugins-official:hooks/hooks.codex.json:user_prompt_submit:0:0"]
 trusted_hash = "sha256:71d43e21408ae365e00406e47e68fc72a78df1a758513ad07dcbf2490467ecd1"
+trusted_content_hash = "sha256:e5ab327d7c848ce91ccfadb3dbb7715b1cee122fb0d1580e0014199ea7acd9cb"
 
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:1:5"]
 trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827a68b6d6"
@@ -252,13 +291,17 @@ trusted_hash = "sha256:ff051adf363232a355758bbc96941b87ab8b38bd47e6c5940b1232827
 [hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:subagent_stop:0:0"]
 trusted_hash = "sha256:259af6de997af555cb363624a6db1b8e9a9ec644864293ec97b5abe3ad30eb55"
 
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:2:0"]
+trusted_hash = "sha256:3c4ccf11441e3b148ff79f7c48dac5b69770424df40c34b0af0b30b2ca876e13"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
+
+[hooks.state."security-guidance@claude-plugins-official:hooks/hooks.json:post_tool_use:2:1"]
+trusted_hash = "sha256:3c4ccf11441e3b148ff79f7c48dac5b69770424df40c34b0af0b30b2ca876e13"
+trusted_content_hash = "sha256:5a7786173068689e075d0b3bccd13edcea0da15f3019c691b88a6cc61d5123ce"
+
 [memories]
 generate_memories = true
 use_memories = true
 
 [apps.connector_openai_codex_document_control]
 enabled = false
-
-[mcp_servers.slack]
-url = "https://mcp.slack.com/mcp"
-http_headers_helper = 'bash "${DOT_DIR:-$HOME/code/dotfiles}/custom_bins/slack-mcp-headers"'

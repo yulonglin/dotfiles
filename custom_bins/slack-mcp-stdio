@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Stdio MCP wrapper for Slack's official Streamable HTTP endpoint
+# (https://mcp.slack.com/mcp). Resolves SLACK_MCP_USER_TOKEN on demand via
+# Bitwarden (`secrets run`) so no token is ever stored in mcp_config.json.
+set -euo pipefail
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    cat <<'EOF'
+Usage: slack-mcp-stdio
+
+Stdio MCP server bridging local MCP clients (such as Antigravity) to Slack's
+official Streamable HTTP MCP server (https://mcp.slack.com/mcp) using
+SLACK_MCP_USER_TOKEN resolved on demand via `secrets run`.
+EOF
+    exit 0
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PATH="${PATH:-/usr/bin:/bin}:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin"
+
+exec "$SCRIPT_DIR/secrets" run SLACK_MCP_USER_TOKEN -- \
+    python3 "$DOT_DIR/scripts/helpers/mcp_http_stdio_bridge.py" \
+    --url "https://mcp.slack.com/mcp" \
+    --bearer-env "SLACK_MCP_USER_TOKEN" \
+    --token-prefix "xoxp-"

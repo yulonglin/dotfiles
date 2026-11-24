@@ -1,0 +1,446 @@
+{
+  "records": [
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/b42b6d61-a8c4-42b5-9464-47682420b5c9.jsonl",
+      "content_sha256": "84e5389d1493daf6fe24405d9bdee44ee2d2083e0f72ee865aa937e6a6164580",
+      "imported_thread_id": "01a20a9d-a472-7ff1-a646-73e1513feb76",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795473982457664358,
+      "connector_names": [],
+      "title": "apps-conf-mic-audio-search"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-brew-relaunch-upgraded-apps/b50eb6de-45e1-46cd-ace5-be6333734878.jsonl",
+      "content_sha256": "0cd91b908f740b6d66aa10bdea8a25e5c9a1512a9e7884a37d7a9052f608c688",
+      "imported_thread_id": "01a20a9d-a479-7b51-9fa3-5ac5729d642a",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795474416274369906,
+      "connector_names": [],
+      "title": "brew-upgrade-app-restart"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-drop-codex-plugin/9621f402-8744-42b9-92d4-f099467b5a5f.jsonl",
+      "content_sha256": "16a5caae9a988d041bdd2b78d631b5040afe25a828667dc13d24f5d131ef0579",
+      "imported_thread_id": "01a20a9d-a47f-7cb0-867e-1f67cf419e42",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795473186949000000,
+      "connector_names": [],
+      "title": "sessionstart-codex-setup-message"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-clear-mac-apps-signpost/93bb06d2-59a0-41c2-a14d-2778c1d90c51.jsonl",
+      "content_sha256": "e4989976cc9de4321106cd734544761c5d7f0453edefd83a0724657f4dab15e5",
+      "imported_thread_id": "01a20a9d-a483-7d93-94d3-f8b91ada328d",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469923954100892,
+      "connector_names": [],
+      "title": "dotfiles/Mac Apps Cleanup Guide"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/ea74c379-9bee-4d32-b986-09567f7f9fe9.jsonl",
+      "content_sha256": "84153b7a35c2253a75caf522cebb20ec088cb88d85a4c8c7a80297b76d4013e6",
+      "imported_thread_id": "01a20a9d-a489-76d2-be22-f759c78c64c5",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795474186959000000,
+      "connector_names": [],
+      "title": "bear-note-recompute-diagrams-experiments"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/c9a004cd-74c8-4115-b2cc-d63ee35a2a91.jsonl",
+      "content_sha256": "c261f60c7baf01ff75f8a47c2f2c09a85ac1e52fb7993c905067153be7ab5834",
+      "imported_thread_id": "01a20a9d-a4f9-7543-8475-9b9e4bf4b2bd",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469921369541598,
+      "connector_names": [],
+      "title": "Bear Notes Read/Edit Playbook"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/69d60905-bac7-4d22-ab7f-1fd534053cfb.jsonl",
+      "content_sha256": "a1157411dfebce79c5729d9df1f11ab6b3b4ec0d53ac3491ff8a8990aa3fde38",
+      "imported_thread_id": "01a20a9d-a4db-7ca0-8927-765140daa070",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469922760222485,
+      "connector_names": [],
+      "title": "app-lifecycle-yaml-merge-conflict"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/1402638f-d979-461d-a8aa-dbf8edcf954a.jsonl",
+      "content_sha256": "366b61079444dd1d5e97add8f6abdfa60dc8e0bef344197f9e73271f000dc976",
+      "imported_thread_id": "01a20a9d-a4f3-75c2-8cc2-29b5b53b8a7e",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469915161165757,
+      "connector_names": [],
+      "title": "tailscale-connection-status-check"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-stale-ct-command/ae427f7c-3065-4051-8be7-a60ce50955da.jsonl",
+      "content_sha256": "22976bf018d627a1a673ea0f987be7eb324928e7796ae27eac93e156d403fd69",
+      "imported_thread_id": "01a20a9d-a4fe-7303-b73d-50b13f7ec579",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469911615736768,
+      "connector_names": [],
+      "title": "focus-stale-ct-command/Instagram DM Blocked"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/2aa40996-8719-4279-891a-c01acbe39751.jsonl",
+      "content_sha256": "2884b5424a4fd322fca8f6866f06982073e77ccde2dcad08578bd835ecd6394e",
+      "imported_thread_id": "01a20a9d-a56f-7891-a622-ce3fd05b9a1d",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795467027513092341,
+      "connector_names": [],
+      "title": "deconflict ship skill"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/3c819c27-a044-46aa-b019-5f665337d028.jsonl",
+      "content_sha256": "a06b67eb6795bfc63f31e4497df784ad2f4b3736769277976d35be38cce9f1ad",
+      "imported_thread_id": "01a20a9d-a518-7680-bd29-abdb539faf20",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469910005099691,
+      "connector_names": [],
+      "title": "focus-blocklist-mode/Blacklist vs whitelist tradeoff"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/d0595852-3163-4e76-bd20-703b257e8b33.jsonl",
+      "content_sha256": "04ed59895972622a9a987fa8277d73b72448a01b533f9e7b2f21966c0724fde7",
+      "imported_thread_id": "01a20a9d-a544-7780-b425-32d432ef10f5",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795467664773150760,
+      "connector_names": [],
+      "title": "focus-modes claude-code messaging"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/7cfa6b6a-8581-4c28-9017-1ee30c85d14e.jsonl",
+      "content_sha256": "9608145e014d667e83de9c1d57ec4cd4f01f40cd60b90c0b738993c52cd2a513",
+      "imported_thread_id": "01a20a9d-a586-7793-a724-b5eab172ba70",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795469840432900374,
+      "connector_names": [],
+      "title": "Popular Rex Requests Prioritization"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/91da5708-d220-493f-8b7c-1abbda5fde46.jsonl",
+      "content_sha256": "05079f0741119c7c816ede96ad4ac41e2f92371288176f430ed56bb343e7149e",
+      "imported_thread_id": "01a20a9d-a562-7481-a41a-c500eb86f685",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795467443251451237,
+      "connector_names": [],
+      "title": "ship-skill-conflict"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/7592cf39-5243-46d5-a8b4-982744b51911.jsonl",
+      "content_sha256": "b3212a5e90604f67f3a9860ec371a5f515b888ff402465ecfc0ad9fd1e034eb6",
+      "imported_thread_id": "01a20a9d-a589-7852-9405-3e156194228f",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795466955941354610,
+      "connector_names": [],
+      "title": "bear://x-callback-url/open-note?id=6746AA9F-CBAB-47C9-BE82-2D754A6D4270"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-emergency-break/9a9ef326-9692-4191-abd7-76690646c829.jsonl",
+      "content_sha256": "2f94112d43438895b8c45d8e66573e8e752a511864e7eb626c68bb47822cf7c8",
+      "imported_thread_id": "01a20a9d-a5a4-7e70-968b-fda37d540806",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795461959408620726,
+      "connector_names": [],
+      "title": "focus-emergency-break/Quick Focus Break Session"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/aba6efc1-62d5-4ebc-806d-fddc9cb37ad7.jsonl",
+      "content_sha256": "f898d15403c2985206a14ddb71804e04da2c3176d69c06ae85d02a0215c95e57",
+      "imported_thread_id": "01a20a9d-a5be-7a63-bd8e-a2619fde637f",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795374303851846596,
+      "connector_names": [],
+      "title": "❯ cc"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-cc-alias/779b4549-57fd-4196-9b8e-5e05d1564c9c.jsonl",
+      "content_sha256": "970b1e85d59645f0d2ddf5d03712c79da413b0162501dc612296b8f94664d2af",
+      "imported_thread_id": "01a20a9d-a5ba-77e0-ac98-dec23a029355",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795389861263071492,
+      "connector_names": [],
+      "title": "cc-alias/CC alias for Claude"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/0bd5d4bd-2329-4f9c-9b2d-3b5df0d894d2.jsonl",
+      "content_sha256": "eec33ff459d30db1508d9f9cab567b64e6140159a0ea446715a87545367c1812",
+      "imported_thread_id": "01a20a9d-a626-7392-b70e-60590905109b",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795372914938000000,
+      "connector_names": [],
+      "title": "gmail-unsubscribe-sweep"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/ebbba5cd-32e1-4198-9532-6e0d93d145bc.jsonl",
+      "content_sha256": "09f7740755038f6cb6f26fe936cff769707a766187f8c97d31ab11a1551a82d0",
+      "imported_thread_id": "01a20a9d-a5eb-7493-9928-f6a19d493a7e",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795372914946000000,
+      "connector_names": [],
+      "title": "bear-grindr-convo-attribution"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/5463ca8e-e005-49b8-93d1-f20c32927817.jsonl",
+      "content_sha256": "b0813f5a31562c619b5a4d7294d655f1bffd5ce9ffdd4ad5a88e1d5fcdbe06e1",
+      "imported_thread_id": "01a20a9d-a5fd-77f2-9309-a150f912991c",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795372938340651717,
+      "connector_names": [],
+      "title": "dotfiles/Closing Open Loops"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/d970851a-8ac7-4fcf-a2e3-af036ecd7baf.jsonl",
+      "content_sha256": "b663c31136a67b89f4191e053f4f07c1152d5167a4a02ca308c6f6f231d71fc7",
+      "imported_thread_id": "01a20a9d-a65a-7111-ba43-7459feb44801",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795370902590000000,
+      "connector_names": [],
+      "title": "Kiwi.com baggage refund dispute"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/30b1c08a-5558-45a4-94c1-8ac78d3d8e0a.jsonl",
+      "content_sha256": "253ec02288d3f49999121a1ffccf4e62a524ecc36a53757c31a1da196754ab61",
+      "imported_thread_id": "01a20a9d-a621-7e53-a066-9b566f2e8974",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795371363799689033,
+      "connector_names": [],
+      "title": "harrowhealth-focus-admin-allowlist"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-alfred-reason/c015e447-f59b-40c3-a3c5-458fd44d7181.jsonl",
+      "content_sha256": "f533178c7515ebafde3ed88edca12e68c52cfbd8ab518604f2222241a39ae413",
+      "imported_thread_id": "01a20a9d-a632-7492-8ce6-936fa1fe09f0",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795371607950211482,
+      "connector_names": [],
+      "title": "focus-alfred-reason/CLI messaging for Alfred fix"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/ae30ef79-6404-44bf-87ba-29783ce487ff.jsonl",
+      "content_sha256": "10eb18ec2f13aebc195c65e8154351810f1592d937980d0e0c8bcb20acf1f6cb",
+      "imported_thread_id": "01a20a9d-a64d-7322-85e5-cd743b2d8761",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795370902597000000,
+      "connector_names": [],
+      "title": "coding harness optimisations"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/e4ce3ac8-dda1-44b1-8f59-c0e114ef1d60.jsonl",
+      "content_sha256": "80209010e6401df2d51aa5f05062d47f222879e20aed74cf3a588f3901063877",
+      "imported_thread_id": "01a20a9d-a68b-7242-afc7-7bb7d7adf8df",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795370632814000000,
+      "connector_names": [],
+      "title": "macOS Display Troubleshooting"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/89ef93cb-e72d-4958-8e52-bfcf5ea23455.jsonl",
+      "content_sha256": "0520d413b1326078d83535b0fd35bd8339d770d7d4267402b1bf3c567ddb95b4",
+      "imported_thread_id": "01a20a9d-a69d-7411-a8fc-fb4d6857d76e",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795367957436182829,
+      "connector_names": [],
+      "title": "when we do focus only bear, do we also allow things like preview (for reading pdfs)? might be good to do that by default"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/f45729e0-939b-4a49-8419-814aa27a296e.jsonl",
+      "content_sha256": "efac9dd4437dbcb6c0f9c9a362b2d8726d843bae9d07dd25a8cf05ea5042f1f6",
+      "imported_thread_id": "01a20a9d-a686-7572-813a-4cd218375e10",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795368176134147819,
+      "connector_names": [],
+      "title": "focus-mode-bear-preview-allowlist"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/cdb38184-86f3-48aa-bae6-d2f620fa7a3c.jsonl",
+      "content_sha256": "cbb539776dc5fb3cb85fac831e2dfc463863cbf4b7c2f7868a43846cca034aa3",
+      "imported_thread_id": "01a20a9d-a6a1-7480-8e9a-8df5c9bd09ef",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795370846332000000,
+      "connector_names": [],
+      "title": "NeurIPS 2026 Workshop Deadlines"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/e095e43c-18cd-43f2-ae24-71bce4e0fc3e.jsonl",
+      "content_sha256": "a1d5d527895cda96fa944dba12d3bab27b3e9de557cbe6045ec00056b20e6841",
+      "imported_thread_id": "01a20a9d-a6bf-7fb1-98c2-3572c48a4f71",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795346676758481007,
+      "connector_names": [],
+      "title": "research-runs/Tier-0 Research-Loop Tooling"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-fix-main-ci/bb994999-d48f-4010-87c2-e9ce9d0ebc59.jsonl",
+      "content_sha256": "1a1843976195d21f5c72aabead0c3ee01be6d3560c71b21d661664990ad78985",
+      "imported_thread_id": "01a20a9d-a6c1-73b3-92e7-366e4311a9eb",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795346796766294544,
+      "connector_names": [],
+      "title": "fix-main-ci/Fix PR CI Failures"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-retry-triggers/c3cfa261-b240-448a-8eae-484c26970f1a.jsonl",
+      "content_sha256": "e9bf21e1b15c82c8bcb920acd5fe3f825a2cbfaea5d64ae77dbfb895140194ea",
+      "imported_thread_id": "01a20a9d-a6c3-7062-901a-f6e4637e2042",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795351095683266717,
+      "connector_names": [],
+      "title": "focus-retry-triggers/Debugging scheduled block sync"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-sync-import/69e46b2f-daa2-462e-b01a-a56c3e6e0c1d.jsonl",
+      "content_sha256": "9a2d6e9c7242a12d0d9d7a78c68146da5f0781e9561fb717a5a6e7a253339af5",
+      "imported_thread_id": "01a20a9d-a6eb-7542-ab88-51ad4e264822",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795317952689987294,
+      "connector_names": [],
+      "title": "dotfiles/Email Services Whitelist Audit"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/3825eedb-71f6-4497-821c-1d7e255e089a.jsonl",
+      "content_sha256": "0263c2f96738b13a1d851998d10d966a3e44c9e9a9b13e8d2ab1b57bc7aefa86",
+      "imported_thread_id": "01a20a9d-a6fd-7291-ad06-97b3bb63c9ff",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795317916057470951,
+      "connector_names": [],
+      "title": "dotfiles/Document Restructuring Discussion"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-scratch-firstmate-trial/88c3fb68-7d32-49e6-a6a3-362413f6bdb7.jsonl",
+      "content_sha256": "34a265a0f112f1a98e76e498b6b046029e3cb04ccf9e3804d66d24185a28b3db",
+      "imported_thread_id": "01a20a9d-a742-7440-bf62-da3d82506993",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795312459256390613,
+      "connector_names": [],
+      "title": "Firstmate home bin scripts report"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-builtin-display-heal/6886cc20-600b-4f69-bbc7-30b5501bfc93.jsonl",
+      "content_sha256": "2d954d14141aecce79dd831728ac3168eee6ea1396c0e402f1a24990df1f3304",
+      "imported_thread_id": "01a20a9d-a735-7951-b4c5-e68cec633cbe",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795317902483032835,
+      "connector_names": [],
+      "title": "builtin-display-placeholder/Display Not Waking After Disconnect"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-switch-verify/226d068c-c14f-4042-87d5-d88427d04ef1.jsonl",
+      "content_sha256": "ec3182d711287bffc170dc88ffc36c6106cc965500dc7008ddb3e8b6aa4ef094",
+      "imported_thread_id": "01a20a9d-a747-7c72-8a97-478b4587023b",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795312531656600035,
+      "connector_names": [],
+      "title": "focus-switch-verify/Comms blocked, messages enabled"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/b0595d07-961c-4573-afc2-72c8eba67d5b.jsonl",
+      "content_sha256": "be724c823b8a997df96555235b843a5003ef93c9a619916b9fe9eb03a3611874",
+      "imported_thread_id": "01a20a9d-a77b-7070-8ff1-bd1662d27f34",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795311531356797729,
+      "connector_names": [],
+      "title": "coding harness optimisations"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/43b01aec-ef61-40b0-b38f-e710ef401163.jsonl",
+      "content_sha256": "05f86113914b03d0e97cee3a18af6eff5cd6fb2096ee1938c904245c8e000a68",
+      "imported_thread_id": "01a20a9d-a772-7ec1-b780-6a6851689c21",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795311531461375610,
+      "connector_names": [],
+      "title": "agent-a8df3acca7530cbbb/Dotfiles PRs 151/191 Rework"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-push-notify-rule/31e3d325-ad91-4f00-9b94-e001356c152a.jsonl",
+      "content_sha256": "90db89e176ee0a8453c3ef4308c5fed7d476d9b71cc94e3a2e5846223b11462c",
+      "imported_thread_id": "01a20a9d-a7ae-75d0-ad4d-5618b6974202",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795309723191084918,
+      "connector_names": [],
+      "title": "push-notify-rule/Model Notifications in Claude Code"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-esc-tap-guard/44f7acee-e54d-4554-9d95-f7bc42fed44b.jsonl",
+      "content_sha256": "701022f6499ebc3b35bb4643b18c414b30c9e90b1cebdd120bceb57d3d168d72",
+      "imported_thread_id": "01a20a9d-a7d6-77c1-a1e6-17545a92e616",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795309714698726181,
+      "connector_names": [],
+      "title": "dotfiles/Keyboard Input Debugging Session"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-kill-sky-cua-anchor/e7f7d145-2b61-4328-974c-ac99bd7fd001.jsonl",
+      "content_sha256": "3a7e821de5d3826aeca695295bcbc967f646b841f8f5e2a9c42f4c99bfc400eb",
+      "imported_thread_id": "01a20a9d-a7ed-7a91-9223-8de9db6a5e20",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795304828506515268,
+      "connector_names": [],
+      "title": "kill-sky-cua-anchor/macOS App Restart Debug"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/d4dcf640-0fe4-491f-9bc5-bc6694fdda4d.jsonl",
+      "content_sha256": "f5f13c63198c426a6f5b5017c7ffc1370669d7a55e8f075097c2bf23a50dee51",
+      "imported_thread_id": "01a20a9d-a828-7e60-96b2-cb823ee251ca",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795296477614574758,
+      "connector_names": [],
+      "title": "gmail-unsubscribe-senders"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-things-orphans/03838cf8-7b0a-4925-b0e9-a03bd50de2f1.jsonl",
+      "content_sha256": "c62ead3ff71a0131e01c26ff854c099aef1df15ab13987f3044cabeeb8fa4d86",
+      "imported_thread_id": "01a20a9d-a7d9-7833-a371-8ac728dd462c",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795311262244189688,
+      "connector_names": [],
+      "title": "dotfiles/Things TODO List Cleanup"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/bbd36953-54df-4f92-9b34-6444a75ebeb8.jsonl",
+      "content_sha256": "ee5eea52e26467503beb027ba6b3d49639b6a4ad03237100e7f4902d0757ef22",
+      "imported_thread_id": "01a20a9d-a821-7f70-bfde-89f8938d372d",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795293792804355093,
+      "connector_names": [],
+      "title": "dotfiles/Focus Mode Unblock"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/275ae280-4ebd-4f28-8e3e-93b08a4e3e9e.jsonl",
+      "content_sha256": "b2bd975b2474a4a81b35a301c178605c0022396a4ec26480c6c7a534d5b1e558",
+      "imported_thread_id": "01a20a9d-a853-7881-a739-fa87b7135182",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795290144902714810,
+      "connector_names": [],
+      "title": "pasted-screenshot-review"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-menu/c2d69d48-48ab-4271-8f0e-60d5307ebfc6.jsonl",
+      "content_sha256": "21cef4df5397f05fd9ad54c524356aa8a58510c4758810528da27a28b5110c28",
+      "imported_thread_id": "01a20a9d-a860-7180-831d-ccdd2f39f91a",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795288143235159057,
+      "connector_names": [],
+      "title": "focus-menu/Focus Mode Selection Interface"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-tick-fda-msg/f19b246c-cb65-4fbd-a5b3-0f614dbfb76a.jsonl",
+      "content_sha256": "39d3d3fed6024520c6a61046bfad6f76871dcbb9fc121d931e000f5575d85fb8",
+      "imported_thread_id": "01a20a9d-a871-7853-80d2-f47645ea1f50",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795288136138338223,
+      "connector_names": [],
+      "title": "dotfiles/I don't have the ability to view images. Could you describe"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/9065de1e-4ed2-4999-82b6-3254f8caf933.jsonl",
+      "content_sha256": "375db3e8d6c7d789a5aac5e13ac90d1a635d6ac9cadbcc7801cd3baad736805a",
+      "imported_thread_id": "01a20a9d-a879-70f3-9cfe-d5dc9bb66c8e",
+      "imported_at": 1795474434,
+      "source_modified_at": 1795286589193336509,
+      "connector_names": [],
+      "title": "testing"
+    }
+  ],
+  "detected_connector_records": []
+}

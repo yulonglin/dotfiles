@@ -25,7 +25,7 @@ ChatGPT Work and regular ChatGPT chats use their own account connection; they do
 
 After launching a fresh session, check `/mcp` for Slack tools and make a read-only call. Configuration presence alone does not verify authentication. An authentication failure can mean the token's app lacks MCP access; a tool permission failure can mean missing user scopes. Token rotation or revocation requires updating the stored token.
 
-Keep this HTTP entry out of `config/mcp-servers.json`: the current shared sync copies fields verbatim, while Claude and Codex use different HTTP authentication schemas. For Claude Code, register it separately with an environment-variable header and launch with the same secret:
+Keep this HTTP entry out of `config/mcp-servers.json`: the current shared sync copies fields verbatim, while Claude, Codex, and Antigravity use different HTTP authentication schemas. For Antigravity, `scripts/sync_claude_to_antigravity.sh` seeds `mcpServers.slack` pointing at `custom_bins/slack-mcp-stdio`, which bridges stdio to `https://mcp.slack.com/mcp` via `scripts/helpers/mcp_http_stdio_bridge.py` and resolves `SLACK_MCP_USER_TOKEN` on demand through `secrets run` (never storing the token in `mcp_config.json`). For Claude Code, register it separately with an environment-variable header and launch with the same secret:
 
 ```bash
 claude mcp add --transport http --scope user slack https://mcp.slack.com/mcp --header 'Authorization: Bearer ${SLACK_MCP_USER_TOKEN}'

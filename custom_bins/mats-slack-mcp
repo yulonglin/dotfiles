@@ -1,32 +1,36 @@
 #!/usr/bin/env bash
-# Run the MATS Slack MCP server with browser-session credentials read from the
-# local macOS Login Keychain only for this process.
+# Use Bitwarden OAuth for Codex or the local Keychain for the existing tunnel.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-export PATH="$DOT_DIR/custom_bins:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH="$DOT_DIR/custom_bins:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin}"
 
 KEYCHAIN_HELPER_BIN="${KEYCHAIN_HELPER_BIN:-$DOT_DIR/tools/mats-slack-keychain/mats-slack-keychain}"
 NPX_BIN="${NPX_BIN:-$(command -v npx || true)}"
-[[ -x "$KEYCHAIN_HELPER_BIN" ]] || {
-    echo "mats-slack-mcp: local Keychain helper is not available" >&2
-    exit 1
-}
 [[ -x "$NPX_BIN" ]] || {
     echo "mats-slack-mcp: npx is not available" >&2
     exit 1
 }
 
-SLACK_MCP_XOXC_TOKEN=$("$KEYCHAIN_HELPER_BIN" get \
-    com.yulonglin.mats-slack-mcp.xoxc) || exit 1
-SLACK_MCP_XOXD_TOKEN=$("$KEYCHAIN_HELPER_BIN" get \
-    com.yulonglin.mats-slack-mcp.xoxd) || exit 1
-[[ "$SLACK_MCP_XOXC_TOKEN" == xoxc-* && "$SLACK_MCP_XOXD_TOKEN" == xoxd-* ]] || {
-    echo "mats-slack-mcp: Keychain entries have unexpected formats" >&2
-    exit 1
-}
-export SLACK_MCP_XOXC_TOKEN SLACK_MCP_XOXD_TOKEN
+if [[ "${1:-}" == --bitwarden ]]; then
+    exec "$SCRIPT_DIR/secrets" run SLACK_MCP_USER_TOKEN -- "$0" --oauth
+elif [[ "${1:-}" == --oauth ]]; then
+    [[ ${SLACK_MCP_USER_TOKEN:-} == xoxp-* ]] || {
+        echo "mats-slack-mcp: expected an xoxp user token from Bitwarden" >&2
+        exit 1
+    }
+    export SLACK_MCP_XOXP_TOKEN="$SLACK_MCP_USER_TOKEN"
+    unset SLACK_MCP_USER_TOKEN SLACK_MCP_XOXC_TOKEN SLACK_MCP_XOXD_TOKEN SLACK_MCP_XOXB_TOKEN
+else
+    SLACK_MCP_XOXC_TOKEN=$("$KEYCHAIN_HELPER_BIN" get com.yulonglin.mats-slack-mcp.xoxc)
+    SLACK_MCP_XOXD_TOKEN=$("$KEYCHAIN_HELPER_BIN" get com.yulonglin.mats-slack-mcp.xoxd)
+    [[ "$SLACK_MCP_XOXC_TOKEN" == xoxc-* && "$SLACK_MCP_XOXD_TOKEN" == xoxd-* ]] || {
+        echo "mats-slack-mcp: Keychain entries have unexpected formats" >&2
+        exit 1
+    }
+    export SLACK_MCP_XOXC_TOKEN SLACK_MCP_XOXD_TOKEN
+fi
 
 readonly READ_ONLY_TOOLS="conversations_history,conversations_replies,conversations_search_messages,channels_list,channels_me,users_search,attachment_get_data"
 

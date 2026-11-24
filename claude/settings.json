@@ -162,7 +162,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "gemini",
   "modelPicker": {
     "options": [
       {

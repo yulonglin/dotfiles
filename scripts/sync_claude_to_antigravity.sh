@@ -16,16 +16,22 @@ set -euo pipefail
 #                     `trigger: always_on` frontmatter; stale managed files are
 #                     pruned while user-authored rules are preserved
 #   5. mcp_config.json -> shared MCPs via sync_mcp_servers.py plus baseline
-#                         portable servers (context7, macOS bear) if absent
+#                         portable servers (context7, macOS bear, slack-mcp-stdio)
+#                         if absent
+#   6. antigravity-cli/settings.json -> defaults (agentMode="auto",
+#                         enableTerminalSandbox=true), curated Antigravity
+#                         permissions (antigravity/permissions.json), and
+#                         portable Claude Bash token-prefix rules from
+#                         claude/settings.json (non-destructive merge)
 #
-# Hooks and permissions are intentionally NOT auto-imported from Claude Code
-# (incompatible JSON contracts, synchronous-only execution, and different tool
-# names). Curate native Antigravity hooks/permissions directly if needed.
+# Claude hooks are intentionally NOT auto-imported (incompatible JSON contracts
+# and synchronous-only execution). Curate native Antigravity hooks separately.
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET_DIR="$HOME/.gemini/config"
+SETTINGS_PATH=""
 CLAUDE_DIR="$DOTFILES_DIR/claude"
 EXCLUDE_RULES=("background-jobs.md")
 
@@ -33,13 +39,17 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Project portable Claude Code config one-way into Antigravity (~/.gemini/config).
+Project portable Claude Code config one-way into Antigravity (~/.gemini/config)
+and sync managed permissions/defaults into ~/.gemini/antigravity-cli/settings.json.
 
 Options:
-  --target-dir PATH    Target Antigravity config dir (default: ~/.gemini/config)
-  --dotfiles-dir PATH  Dotfiles repo root (default: repo containing this script)
-  --claude-dir PATH    Source Claude config dir (default: <dotfiles-dir>/claude)
-  -h, --help           Show this help
+  --target-dir PATH     Target Antigravity config dir (default: ~/.gemini/config)
+  --settings-path PATH  Target Antigravity CLI settings.json
+                        (default: ~/.gemini/antigravity-cli/settings.json when
+                        using the default target dir, else <target-dir>/antigravity-cli/settings.json)
+  --dotfiles-dir PATH   Dotfiles repo root (default: repo containing this script)
+  --claude-dir PATH     Source Claude config dir (default: <dotfiles-dir>/claude)
+  -h, --help            Show this help
 EOF
 }
 
@@ -47,6 +57,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --target-dir)
             TARGET_DIR="$2"
+            shift 2
+            ;;
+        --settings-path)
+            SETTINGS_PATH="$2"
             shift 2
             ;;
         --dotfiles-dir)
@@ -69,11 +83,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -z "$SETTINGS_PATH" ]]; then
+    if [[ "$TARGET_DIR" == "$HOME/.gemini/config" ]]; then
+        SETTINGS_PATH="$HOME/.gemini/antigravity-cli/settings.json"
+    else
+        SETTINGS_PATH="$TARGET_DIR/antigravity-cli/settings.json"
+    fi
+fi
+
 ANTIGRAVITY_SRC="$DOTFILES_DIR/antigravity"
 RULES_SRC="$CLAUDE_DIR/rules"
 RULES_DST="$TARGET_DIR/rules"
 MCP_SOURCE="$DOTFILES_DIR/config/mcp-servers.json"
 MCP_SYNC_SCRIPT="$DOTFILES_DIR/scripts/helpers/sync_mcp_servers.py"
+SETTINGS_SYNC_SCRIPT="$DOTFILES_DIR/scripts/helpers/sync_antigravity_settings.py"
 MCP_TARGET="$TARGET_DIR/mcp_config.json"
 
 if [[ ! -d "$ANTIGRAVITY_SRC" ]]; then
@@ -210,7 +233,7 @@ if [[ -f "$MCP_SOURCE" && -f "$MCP_SYNC_SCRIPT" ]]; then
         --apply >/dev/null
 fi
 
-python3 - "$MCP_TARGET" <<'PY'
+python3 - "$MCP_TARGET" "$DOTFILES_DIR" <<'PY'
 import json
 import os
 import platform
@@ -219,6 +242,7 @@ import tempfile
 from pathlib import Path
 
 target = Path(sys.argv[1])
+dotfiles_dir = Path(sys.argv[2])
 data = {"mcpServers": {}}
 if target.exists():
     try:
@@ -243,6 +267,9 @@ defaults = {
 bearcli = "/Applications/Bear.app/Contents/MacOS/bearcli"
 if platform.system() == "Darwin" and os.access(bearcli, os.X_OK):
     defaults["bear"] = {"command": bearcli, "args": ["mcp-server"]}
+slack_stdio = dotfiles_dir / "custom_bins" / "slack-mcp-stdio"
+if slack_stdio.exists() and os.access(slack_stdio, os.X_OK):
+    defaults["slack"] = {"command": str(slack_stdio)}
 
 for name, cfg in defaults.items():
     if name not in servers:
@@ -267,6 +294,15 @@ if added or not target.exists():
 else:
     print(f"  MCP: {target} already up to date ({len(servers)} server(s))")
 PY
+
+# 4. Antigravity CLI settings.json (defaults + curated permissions + Claude Bash rules)
+if [[ -f "$SETTINGS_SYNC_SCRIPT" ]]; then
+    python3 "$SETTINGS_SYNC_SCRIPT" \
+        --claude-settings "$CLAUDE_DIR/settings.json" \
+        --antigravity-perms "$ANTIGRAVITY_SRC/permissions.json" \
+        --target-settings "$SETTINGS_PATH" \
+        --apply
+fi
 
 # Flag legacy skill-symlink directory from the pre-2026-11 script if present
 if [[ "$TARGET_DIR" == "$HOME/.gemini/config" && -d "$HOME/.gemini/antigravity-cli/skills" ]]; then

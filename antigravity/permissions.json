@@ -1,0 +1,42 @@
+{
+  "defaults": {
+    "agentMode": "auto",
+    "enableTerminalSandbox": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp(bear/get_note)",
+      "mcp(bear/read_note_content)",
+      "mcp(bear/read_note_outline)",
+      "mcp(bear/search_notes)",
+      "mcp(bear/search_in_note)",
+      "mcp(bear/list_notes)",
+      "mcp(bear/list_tags)",
+      "mcp(bear/list_pins)",
+      "mcp(bear/list_attachments)",
+      "mcp(bear/app_get_selection)",
+      "mcp(context7/*)",
+      "mcp(slack/slack_search_public)",
+      "mcp(slack/slack_search_public_and_private)",
+      "mcp(slack/slack_search_channels)",
+      "mcp(slack/slack_search_users)",
+      "mcp(slack/slack_read_channel)",
+      "mcp(slack/slack_read_thread)",
+      "mcp(slack/slack_read_canvas)",
+      "mcp(slack/slack_read_user_profile)",
+      "command(gws gmail users messages list)",
+      "command(gws gmail users messages get)",
+      "command(gws gmail users threads list)",
+      "command(gws gmail users threads get)",
+      "command(gws gmail users labels list)",
+      "command(gws gmail users drafts list)",
+      "command(gws drive files list)",
+      "command(gws drive files get)",
+      "command(gws calendar events list)",
+      "command(gws calendar events get)",
+      "command(gws calendar calendarList list)"
+    ],
+    "ask": [],
+    "deny": []
+  }
+}

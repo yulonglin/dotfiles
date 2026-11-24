@@ -43,6 +43,7 @@ defaults:
 
 apps:
   Ghostty:               {manual: quit, auto: skip}   # Yulong 2026-10-12: quit on the manual Shortcut; confirm-close-surface is off, so live shells and non-tmux sessions die with it. Never touched by the idle job
+  Rex Beta:               {manual: quit, auto: skip}   # Yulong 2026-10-12: quit on the manual Shortcut; confirm-close-surface is off, so live shells and non-tmux sessions die with it. Never touched by the idle job
   Lettera:               {manual: skip}
   Super Productivity:    {manual: close}
   Things:                {manual: close}
