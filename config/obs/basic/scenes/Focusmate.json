@@ -1,5 +1,5 @@
 {
-    "name": "Untitled",
+    "name": "Focusmate",
     "AuxAudioDevice1": {
         "prev_ver": 553648131,
         "name": "Mic/Aux",
@@ -42,7 +42,6 @@
             "id": "screen_capture",
             "versioned_id": "screen_capture",
             "settings": {
-                "display_uuid": "EEBD150B-6520-42C1-92D8-71CBAE4A60B5",
                 "show_cursor": false,
                 "hide_obs": false
             },
@@ -108,8 +107,6 @@
             "id": "macos-avcapture",
             "versioned_id": "macos-avcapture",
             "settings": {
-                "device_name": "Studio Display Camera",
-                "device": "0x2014000015bc0000",
                 "preset": "AVCaptureSessionPreset960x540"
             },
             "mixers": 255,

@@ -1144,43 +1144,30 @@ if [[ "$DEPLOY_MOUSELESS" == "true" ]]; then
 fi
 
 # ─── OBS Studio (macOS only) ─────────────────────────────────────────────────
-# Copied rather than symlinked because OBS rewrites scene JSON and profile INI
-# atomically on exit (replacing symlinks) and basic.ini holds a machine-local
-# home path and browser-panel CookieId. Use `sync-obs` to pull UI edits back.
+# Deployed into a dedicated `Focusmate` profile and scene collection so OBS's
+# default `Untitled` profile/scene and local profile state (CookieId, OAuth)
+# and per-Mac display/camera bindings are never clobbered. Pull edits back with
+# `sync-obs`.
 
 if [[ "$DEPLOY_OBS" == "true" ]]; then
     if is_macos; then
-        log_info "Deploying OBS Studio configuration..."
+        log_info "Deploying OBS Studio Focusmate configuration..."
 
         OBS_DOTFILES="$DOT_DIR/config/obs/basic"
-        OBS_TARGET="$HOME/Library/Application Support/obs-studio/basic"
 
         if [[ ! -d "$OBS_DOTFILES" ]]; then
             log_warning "OBS config not found at $OBS_DOTFILES"
         elif [[ ! -d "/Applications/OBS.app" ]]; then
             log_info "OBS.app not installed — skipping OBS config deploy"
+        elif [[ ! -x "$DOT_DIR/custom_bins/obs-focusmate-sync" ]]; then
+            log_warning "obs-focusmate-sync not found or not executable"
         else
-            mkdir -p "$OBS_TARGET/profiles/Untitled" "$OBS_TARGET/scenes"
-
-            OBS_INI_SRC="$OBS_DOTFILES/profiles/Untitled/basic.ini"
-            OBS_INI_DST="$OBS_TARGET/profiles/Untitled/basic.ini"
-            if [[ -f "$OBS_INI_SRC" ]]; then
-                [[ -f "$OBS_INI_DST" && ! -L "$OBS_INI_DST" ]] && backup_file "$OBS_INI_DST"
-                python3 - "$OBS_INI_SRC" "$OBS_INI_DST" "$HOME" <<'PYEOF' && \
-                    log_success "Deployed OBS profile (basic.ini)"
-import pathlib, sys
-src, dst, home = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
-dst.write_text(src.read_text(encoding="utf-8").replace("__HOME__", home), encoding="utf-8")
-PYEOF
-            fi
-
-            OBS_SCENE_SRC="$OBS_DOTFILES/scenes/Untitled.json"
-            OBS_SCENE_DST="$OBS_TARGET/scenes/Untitled.json"
-            if [[ -f "$OBS_SCENE_SRC" ]]; then
-                [[ -f "$OBS_SCENE_DST" && ! -L "$OBS_SCENE_DST" ]] && backup_file "$OBS_SCENE_DST"
-                cp "$OBS_SCENE_SRC" "$OBS_SCENE_DST" && \
-                    log_success "Deployed OBS scene collection (Untitled.json)" && \
-                    log_info "  To sync UI changes back: sync-obs"
+            if DOT_DIR="$DOT_DIR" "$DOT_DIR/custom_bins/obs-focusmate-sync" apply; then
+                log_success "Deployed OBS Focusmate profile and scene collection"
+                log_info "  In OBS, choose Profile -> Focusmate and Scene Collection -> Focusmate"
+                log_info "  On a new Mac, pick your display and camera once; sync edits back with: sync-obs"
+            else
+                log_warning "OBS Focusmate config deploy failed"
             fi
         fi
     else

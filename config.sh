@@ -437,6 +437,8 @@ apply_profile() {
             DEPLOY_ALFRED=false
             # Schedules a once-a-minute launchd job for a GUI blocker a server never has.
             DEPLOY_FOCUS=false
+            # GUI virtual-camera app; never belongs on a headless server.
+            DEPLOY_OBS=false
             ;;
         cloud)
             # Lean remote dev box (RunPod): server minus the heavy compiles/MCP.
