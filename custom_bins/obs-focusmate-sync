@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""Sync the OBS Studio Focusmate profile and scene collection with dotfiles.
+
+Keeps a dedicated `Focusmate` profile and scene collection under
+`config/obs/basic/` without touching OBS's default `Untitled` profile/scene.
+
+Security & portability guarantees:
+- Profile capture uses a strict allowlist (only `[General] Name` and `[Video]`
+  keys). OAuth tokens, stream keys, browser-panel `CookieId`, and local file
+  paths are never exported to git.
+- Scene capture validates every source type against an allowlist (`scene`,
+  `screen_capture`, `macos-avcapture`) and refuses to write if an unexpected
+  source (e.g. `browser_source` with a private URL) is present.
+- Machine-local hardware bindings (`display_uuid` on `screen_capture`,
+  `device` and `device_name` on `macos-avcapture`) are stripped on capture and
+  preserved from the local machine on apply.
+- Both inputs are validated before either destination file is replaced.
+
+Usage:
+  obs-focusmate-sync capture [--profile NAME] [--scene NAME]
+  obs-focusmate-sync apply
+"""
+
+from __future__ import annotations
+
+import argparse
+import configparser
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+DEFAULT_NAME = "Focusmate"
+DOT_DIR = Path(os.environ.get("DOT_DIR") or Path(__file__).resolve().parent.parent)
+DEFAULT_REPO_BASIC = DOT_DIR / "config" / "obs" / "basic"
+DEFAULT_OBS_BASIC = Path(
+    os.environ.get("OBS_BASIC_DIR")
+    or (Path.home() / "Library" / "Application Support" / "obs-studio" / "basic")
+)
+
+ALLOWED_VIDEO_KEYS = (
+    "BaseCX",
+    "BaseCY",
+    "OutputCX",
+    "OutputCY",
+    "FPSType",
+    "FPSCommon",
+    "FPSInt",
+    "FPSNum",
+    "FPSDen",
+    "ScaleType",
+    "ColorFormat",
+    "ColorSpace",
+    "ColorRange",
+    "SdrWhiteLevel",
+    "HdrNominalPeakLevel",
+)
+
+ALLOWED_SOURCE_IDS = frozenset({"scene", "screen_capture", "macos-avcapture"})
+HARDWARE_KEYS_BY_SOURCE_ID: dict[str, tuple[str, ...]] = {
+    "screen_capture": ("display_uuid",),
+    "macos-avcapture": ("device", "device_name"),
+}
+ALLOWED_AUX_AUDIO_KEYS = frozenset({"device_id"})
+
+
+def _make_parser() -> configparser.RawConfigParser:
+    parser = configparser.RawConfigParser(interpolation=None)
+    parser.optionxform = str  # type: ignore[assignment]  # preserve OBS key casing
+    return parser
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _read_ini(path: Path) -> configparser.RawConfigParser:
+    if not path.is_file():
+        raise ValueError(f"OBS profile not found: {path}")
+    parser = _make_parser()
+    try:
+        parser.read_string(path.read_text(encoding="utf-8-sig"))
+    except (OSError, configparser.Error) as exc:
+        raise ValueError(f"Cannot parse OBS profile {path}: {exc}") from exc
+    return parser
+
+
+def _render_ini(parser: configparser.RawConfigParser) -> str:
+    lines: list[str] = []
+    for section in parser.sections():
+        lines.append(f"[{section}]")
+        for key, value in parser.items(section):
+            lines.append(f"{key}={value}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _sanitize_profile(src_ini: Path, target_name: str) -> str:
+    src = _read_ini(src_ini)
+    if not src.has_section("Video"):
+        raise ValueError(f"OBS profile {src_ini} has no [Video] section")
+
+    out = _make_parser()
+    out.add_section("General")
+    out.set("General", "Name", target_name)
+    out.add_section("Video")
+    for key in ALLOWED_VIDEO_KEYS:
+        if src.has_option("Video", key):
+            out.set("Video", key, src.get("Video", key))
+    return _render_ini(out)
+
+
+def _sanitize_scene(src_json: Path, target_name: str) -> str:
+    if not src_json.is_file():
+        raise ValueError(f"OBS scene collection not found: {src_json}")
+    try:
+        data = json.loads(src_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot parse OBS scene collection {src_json}: {exc}") from exc
+
+    if not isinstance(data, dict) or not isinstance(data.get("sources"), list):
+        raise ValueError(f"Unexpected OBS scene collection format in {src_json}")
+
+    data["name"] = target_name
+    # Projector window geometries are display-specific; never sync them.
+    data["saved_projectors"] = []
+
+    for source in data["sources"]:
+        if not isinstance(source, dict):
+            raise ValueError(f"Malformed source entry in {src_json}")
+        src_id = source.get("id")
+        if src_id not in ALLOWED_SOURCE_IDS:
+            raise ValueError(
+                f"Refusing to sync unexpected OBS source type {src_id!r} "
+                f"(name={source.get('name')!r}); allowed: {sorted(ALLOWED_SOURCE_IDS)}"
+            )
+        settings = source.get("settings")
+        if isinstance(settings, dict):
+            for hw_key in HARDWARE_KEYS_BY_SOURCE_ID.get(src_id, ()):
+                settings.pop(hw_key, None)
+
+    aux = data.get("AuxAudioDevice1")
+    if isinstance(aux, dict):
+        aux_settings = aux.get("settings")
+        if isinstance(aux_settings, dict):
+            aux["settings"] = {
+                k: ("default" if k == "device_id" else v)
+                for k, v in aux_settings.items()
+                if k in ALLOWED_AUX_AUDIO_KEYS
+            }
+
+    return json.dumps(data, indent=4) + "\n"
+
+
+def _merge_profile_for_apply(repo_ini: Path, local_ini: Path, target_name: str) -> str:
+    repo = _read_ini(repo_ini)
+    if not repo.has_section("Video"):
+        raise ValueError(f"Repo OBS profile {repo_ini} has no [Video] section")
+
+    if local_ini.is_file():
+        out = _read_ini(local_ini)
+    else:
+        out = _make_parser()
+
+    if not out.has_section("General"):
+        out.add_section("General")
+    out.set("General", "Name", target_name)
+
+    if not out.has_section("Video"):
+        out.add_section("Video")
+    for key in ALLOWED_VIDEO_KEYS:
+        if repo.has_option("Video", key):
+            out.set("Video", key, repo.get("Video", key))
+    return _render_ini(out)
+
+
+def _merge_scene_for_apply(repo_json: Path, local_json: Path, target_name: str) -> str:
+    if not repo_json.is_file():
+        raise ValueError(f"Repo OBS scene collection not found: {repo_json}")
+    try:
+        repo_data = json.loads(repo_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot parse repo OBS scene {repo_json}: {exc}") from exc
+
+    local_hw: dict[tuple[str, str], dict[str, object]] = {}
+    if local_json.is_file():
+        try:
+            local_data = json.loads(local_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            local_data = None
+        if isinstance(local_data, dict) and isinstance(local_data.get("sources"), list):
+            for src in local_data["sources"]:
+                if not isinstance(src, dict):
+                    continue
+                src_id = src.get("id")
+                src_name = src.get("name")
+                settings = src.get("settings")
+                if (
+                    isinstance(src_id, str)
+                    and isinstance(src_name, str)
+                    and isinstance(settings, dict)
+                    and src_id in HARDWARE_KEYS_BY_SOURCE_ID
+                ):
+                    saved = {
+                        k: settings[k]
+                        for k in HARDWARE_KEYS_BY_SOURCE_ID[src_id]
+                        if k in settings
+                    }
+                    if saved:
+                        local_hw[(src_id, src_name)] = saved
+
+    repo_data["name"] = target_name
+    for src in repo_data.get("sources", []):
+        if not isinstance(src, dict):
+            continue
+        key = (src.get("id", ""), src.get("name", ""))
+        if key in local_hw:
+            settings = src.setdefault("settings", {})
+            if isinstance(settings, dict):
+                settings.update(local_hw[key])
+
+    return json.dumps(repo_data, indent=4) + "\n"
+
+
+def cmd_capture(args: argparse.Namespace) -> int:
+    src_profile = args.obs_basic / "profiles" / args.profile / "basic.ini"
+    src_scene = args.obs_basic / "scenes" / f"{args.scene}.json"
+
+    # Validate and render BOTH before writing either file.
+    profile_text = _sanitize_profile(src_profile, args.name)
+    scene_text = _sanitize_scene(src_scene, args.name)
+
+    dst_profile = args.repo_basic / "profiles" / args.name / "basic.ini"
+    dst_scene = args.repo_basic / "scenes" / f"{args.name}.json"
+
+    _atomic_write_text(dst_profile, profile_text)
+    _atomic_write_text(dst_scene, scene_text)
+    print(f"Synced OBS '{args.name}' profile and scene -> {args.repo_basic}")
+    return 0
+
+
+def cmd_apply(args: argparse.Namespace) -> int:
+    repo_profile = args.repo_basic / "profiles" / args.name / "basic.ini"
+    repo_scene = args.repo_basic / "scenes" / f"{args.name}.json"
+
+    dst_profile = args.obs_basic / "profiles" / args.name / "basic.ini"
+    dst_scene = args.obs_basic / "scenes" / f"{args.name}.json"
+
+    # Validate and render BOTH before writing either file.
+    profile_text = _merge_profile_for_apply(repo_profile, dst_profile, args.name)
+    scene_text = _merge_scene_for_apply(repo_scene, dst_scene, args.name)
+
+    _atomic_write_text(dst_profile, profile_text)
+    _atomic_write_text(dst_scene, scene_text)
+    print(f"Applied OBS '{args.name}' profile and scene -> {args.obs_basic}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="obs-focusmate-sync",
+        description="Sanitize and sync the OBS Studio Focusmate profile and scene collection.",
+    )
+    parser.add_argument(
+        "--obs-basic",
+        type=Path,
+        default=DEFAULT_OBS_BASIC,
+        help="OBS basic/ config directory (default: ~/Library/Application Support/obs-studio/basic)",
+    )
+    parser.add_argument(
+        "--repo-basic",
+        type=Path,
+        default=DEFAULT_REPO_BASIC,
+        help="Dotfiles OBS basic/ directory (default: <dotfiles>/config/obs/basic)",
+    )
+    parser.add_argument(
+        "--name",
+        default=DEFAULT_NAME,
+        help=f"Target OBS profile and scene collection name (default: {DEFAULT_NAME})",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    cap = sub.add_parser("capture", help="Export sanitized OBS config into dotfiles")
+    cap.add_argument(
+        "--profile",
+        default=None,
+        help="Source OBS profile name to read (defaults to --name)",
+    )
+    cap.add_argument(
+        "--scene",
+        default=None,
+        help="Source OBS scene collection name to read (defaults to --name)",
+    )
+    cap.set_defaults(func=cmd_capture)
+
+    app = sub.add_parser("apply", help="Deploy dotfiles OBS config to local OBS (preserving local state)")
+    app.set_defaults(func=cmd_apply)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.command == "capture":
+        args.profile = args.profile or args.name
+        args.scene = args.scene or args.name
+    try:
+        return args.func(args)
+    except (ValueError, OSError) as exc:
+        print(f"obs-focusmate-sync: error: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

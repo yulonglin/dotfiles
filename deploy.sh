@@ -91,6 +91,7 @@ COMPONENTS:
     --antigravity     Deploy Antigravity global config (~/.gemini/config)
     --serena          Deploy Serena MCP config (~/.serena symlink)
     --mouseless       Deploy Mouseless keyboard mouse control config (macOS only)
+    --obs             Deploy OBS Studio Focusmate scene and profile (macOS only)
     --alfred          Repair Dropbox-synced Alfred prefs (de-quarantine, +x, hotkey) and
                       schedule alfred-watchdog for wedged workflow scripts (macOS only)
     --ghostty         Deploy Ghostty terminal config
@@ -1139,6 +1140,38 @@ if [[ "$DEPLOY_MOUSELESS" == "true" ]]; then
         fi
     else
         log_info "Mouseless is macOS-only, skipping"
+    fi
+fi
+
+# ─── OBS Studio (macOS only) ─────────────────────────────────────────────────
+# Deployed into a dedicated `Focusmate` profile and scene collection so OBS's
+# default `Untitled` profile/scene and local profile state (CookieId, OAuth)
+# and per-Mac display/camera bindings are never clobbered. Pull edits back with
+# `sync-obs`.
+
+if [[ "$DEPLOY_OBS" == "true" ]]; then
+    if is_macos; then
+        log_info "Deploying OBS Studio Focusmate configuration..."
+
+        OBS_DOTFILES="$DOT_DIR/config/obs/basic"
+
+        if [[ ! -d "$OBS_DOTFILES" ]]; then
+            log_warning "OBS config not found at $OBS_DOTFILES"
+        elif [[ ! -d "/Applications/OBS.app" ]]; then
+            log_info "OBS.app not installed — skipping OBS config deploy"
+        elif [[ ! -x "$DOT_DIR/custom_bins/obs-focusmate-sync" ]]; then
+            log_warning "obs-focusmate-sync not found or not executable"
+        else
+            if DOT_DIR="$DOT_DIR" "$DOT_DIR/custom_bins/obs-focusmate-sync" apply; then
+                log_success "Deployed OBS Focusmate profile and scene collection"
+                log_info "  In OBS, choose Profile -> Focusmate and Scene Collection -> Focusmate"
+                log_info "  On a new Mac, pick your display and camera once; sync edits back with: sync-obs"
+            else
+                log_warning "OBS Focusmate config deploy failed"
+            fi
+        fi
+    else
+        log_info "OBS config deploy is macOS-only, skipping"
     fi
 fi
 
