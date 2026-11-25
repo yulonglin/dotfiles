@@ -19,14 +19,14 @@
 #
 # Started as `clear-mac-apps --migrate-config` output from the old sectioned
 # config, then five apps were deliberately moved to the `quit` default:
-#   Tailscale, NordVPN, Codex - the GUI is not the daemon. Quitting the
-#     Tailscale and NordVPN apps leaves their network extensions running
-#     (io.tailscale.ipn.macsys.network-extension 58 MB, com.nordvpn.macos.helper
-#     plus Shield.systemextension 205 MB), so the connection survives.
-#     Tailscale has since been pulled back to `close` below: the reasoning
-#     above says quitting is SAFE, not that it is wanted, and reopening the
-#     menu bar app is the friction this avoids. NordVPN still quits. Codex
-#     now ships as ChatGPT.app (bundle com.openai.codex), which is `close`.
+#   Tailscale, NordVPN, Codex - originally moved to `quit` assuming the GUI was
+#     separate from the daemon. Tailscale has since been pulled back to `close`
+#     below (quitting is safe, just unwanted menu-bar friction). NordVPN has
+#     been pulled back to `hide` (2026-11-24): in Menu bar mode (`appIcon = 1`),
+#     NordVPN's own Cmd+Q calls `NSApplication.shared.hide(nil)`, whereas
+#     AppleScript `quit` hits `applicationShouldTerminate:` which prompts to
+#     disconnect the VPN (and disconnects on confirm). Codex now ships as
+#     ChatGPT.app (bundle com.openai.codex), which is `close`.
 #   Claude, Granola - the one change that will actually be felt, and the point
 #     of the exercise: closing their windows left the processes resident.
 #   ChatGPT, FineTune - Yulong 2026-10-02: keep ChatGPT and FineTune running;
@@ -59,6 +59,7 @@ apps:
   Mouseless:             {manual: close}
   Antinote:              {manual: close}
   Tailscale:             {manual: close}
+  NordVPN:               {manual: hide}   # matches NordVPN's own Cmd+Q in menu-bar mode (hide:); AppleScript quit prompts to disconnect VPN
   ChatGPT:               {manual: close}
   FineTune:              {manual: close}
   Spark Desktop:         {slow: true}      # ignores keystrokes; poll up to 30 s
