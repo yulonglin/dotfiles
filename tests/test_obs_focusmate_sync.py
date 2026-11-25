@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,12 +11,16 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parent.parent / "custom_bins" / "obs-focusmate-sync"
 
 
-def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _run(args: list[str], obs_running: bool | None = False) -> subprocess.CompletedProcess[str]:
+    # Pin the running-OBS check so tests never depend on the real machine.
+    state = "unknown" if obs_running is None else ("1" if obs_running else "0")
+    env = {**os.environ, "OBS_SYNC_ASSUME_RUNNING": state}
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
 
 
@@ -201,3 +206,148 @@ def test_apply_preserves_local_profile_state_and_hardware_bindings(tmp_path: Pat
     assert by_id["macos-avcapture"]["settings"]["device"] == "LOCAL-CAM-ID"
     assert by_id["macos-avcapture"]["settings"]["device_name"] == "FaceTime HD Camera"
     assert by_id["macos-avcapture"]["settings"]["preset"] == "AVCaptureSessionPreset960x540"
+
+
+_USER_INI = (
+    "[General]\n"
+    "Pre19Defaults=true\n"
+    "FirstRun=true\n"
+    "ConfirmOnExit=false\n"
+    "\n"
+    "[BasicWindow]\n"
+    "SysTrayEnabled=true\n"
+    "geometry=AdnQywADAAAAAAPEAAAA\n"
+    "ExtraBrowserDocks=[{\"url\":\"https://private.internal/?token=abc\"}]\n"
+    "\n"
+    "[Basic]\n"
+    "Profile=Untitled\n"
+    "ProfileDir=Untitled\n"
+    "SceneCollection=Untitled\n"
+    "SceneCollectionFile=Untitled.json\n"
+)
+
+_GLOBAL_INI = (
+    "[General]\n"
+    "MaxLogs=10\n"
+    "InstallGUID=0123456789abcdef\n"
+    "LastVersion=553648131\n"
+    "\n"
+    "[Video]\n"
+    "Renderer=OpenGL\n"
+    "\n"
+    "[Locations]\n"
+    "Configuration=/Users/alice/Library/Application Support\n"
+)
+
+
+def _seed_app_inis(obs_root: Path) -> None:
+    (obs_root / "user.ini").write_text(_USER_INI, encoding="utf-8")
+    (obs_root / "global.ini").write_text(_GLOBAL_INI, encoding="utf-8")
+
+
+def test_capture_app_settings_allowlist_only(tmp_path: Path) -> None:
+    obs_basic = tmp_path / "obs" / "basic"
+    repo_basic = tmp_path / "repo" / "basic"
+    _seed_obs(obs_basic, _sample_ini(), json.dumps(_sample_scene()))
+    _seed_app_inis(obs_basic.parent)
+
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "capture"])
+    assert res.returncode == 0, res.stderr
+
+    user = (repo_basic.parent / "user.ini").read_text(encoding="utf-8")
+    assert "ConfirmOnExit=false" in user
+    assert "SysTrayEnabled=true" in user
+    for forbidden in ("FirstRun", "Pre19Defaults", "geometry", "private.internal", "[Basic]"):
+        assert forbidden not in user
+
+    glob = (repo_basic.parent / "global.ini").read_text(encoding="utf-8")
+    assert "MaxLogs=10" in glob and "Renderer=OpenGL" in glob
+    for forbidden in ("InstallGUID", "LastVersion", "/Users/alice", "[Locations]"):
+        assert forbidden not in glob
+
+
+def test_apply_merges_app_settings_and_sets_default_profile(tmp_path: Path) -> None:
+    seed_basic = tmp_path / "seed" / "basic"
+    repo_basic = tmp_path / "repo" / "basic"
+    obs_basic = tmp_path / "obs" / "basic"
+    _seed_obs(seed_basic, _sample_ini(), json.dumps(_sample_scene()))
+    _seed_app_inis(seed_basic.parent)
+    assert _run(["--obs-basic", str(seed_basic), "--repo-basic", str(repo_basic), "capture"]).returncode == 0
+
+    _seed_obs(obs_basic, _sample_ini(), json.dumps(_sample_scene()))
+    (obs_basic.parent / "user.ini").write_text(
+        _USER_INI.replace("ConfirmOnExit=false", "ConfirmOnExit=true"), encoding="utf-8"
+    )
+    (obs_basic.parent / "global.ini").write_text(
+        _GLOBAL_INI.replace("InstallGUID=0123456789abcdef", "InstallGUID=local-guid"), encoding="utf-8"
+    )
+
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "apply"])
+    assert res.returncode == 0, res.stderr
+
+    user = (obs_basic.parent / "user.ini").read_text(encoding="utf-8")
+    assert "ConfirmOnExit=false" in user  # repo value wins for allowlisted keys
+    assert "geometry=AdnQywADAAAAAAPEAAAA" in user  # local-only keys survive
+    assert "Profile=Focusmate" in user
+    assert "SceneCollectionFile=Focusmate.json" in user
+    glob = (obs_basic.parent / "global.ini").read_text(encoding="utf-8")
+    assert "InstallGUID=local-guid" in glob
+
+
+def test_apply_refuses_while_obs_running(tmp_path: Path) -> None:
+    seed_basic = tmp_path / "seed" / "basic"
+    repo_basic = tmp_path / "repo" / "basic"
+    obs_basic = tmp_path / "obs" / "basic"
+    _seed_obs(seed_basic, _sample_ini().replace("FPSCommon=10", "FPSCommon=15"), json.dumps(_sample_scene()))
+    assert _run(["--obs-basic", str(seed_basic), "--repo-basic", str(repo_basic), "capture"]).returncode == 0
+    _seed_obs(obs_basic, _sample_ini(), json.dumps(_sample_scene()))
+    args = ["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "apply"]
+
+    res = _run(args, obs_running=True)
+    assert res.returncode == 75
+    assert "FPSCommon=10" in (obs_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+
+    forced = _run([*args, "--force"], obs_running=True)
+    assert forced.returncode == 0, forced.stderr
+    assert "FPSCommon=15" in (obs_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+
+
+def test_capture_profile_audio_and_hotkeys_without_device_ids(tmp_path: Path) -> None:
+    obs_basic = tmp_path / "obs"
+    repo_basic = tmp_path / "repo"
+    ini = _sample_ini() + (
+        "\n[Audio]\nSampleRate=48000\nMonitoringDeviceId=AppleUSBAudioEngine:XYZ\n"
+        "MonitoringDeviceName=Studio Display Speakers\n"
+        '\n[Hotkeys]\nOBSBasic.StartVirtualCam={"bindings":[{"key":"OBS_KEY_V"}]}\n'
+    )
+    _seed_obs(obs_basic, ini, json.dumps(_sample_scene()))
+
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "capture"])
+    assert res.returncode == 0, res.stderr
+    out_ini = (repo_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+    assert "SampleRate=48000" in out_ini
+    assert "OBSBasic.StartVirtualCam=" in out_ini
+    assert "MonitoringDevice" not in out_ini
+    assert "Studio Display Speakers" not in out_ini
+
+
+def test_apply_refuses_when_running_state_unknown(tmp_path: Path) -> None:
+    seed_basic = tmp_path / "seed" / "basic"
+    repo_basic = tmp_path / "repo" / "basic"
+    obs_basic = tmp_path / "obs" / "basic"
+    _seed_obs(seed_basic, _sample_ini(), json.dumps(_sample_scene()))
+    assert _run(["--obs-basic", str(seed_basic), "--repo-basic", str(repo_basic), "capture"]).returncode == 0
+    _seed_obs(obs_basic, _sample_ini(), json.dumps(_sample_scene()))
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "apply"], obs_running=None)
+    assert res.returncode == 75
+    assert "may be running" in res.stderr
+
+
+def test_capture_keeps_empty_video_section_so_apply_accepts_it(tmp_path: Path) -> None:
+    obs_basic = tmp_path / "obs"
+    repo_basic = tmp_path / "repo"
+    _seed_obs(obs_basic, "[General]\nName=X\n\n[Video]\nUnlistedKey=1\n", json.dumps(_sample_scene()))
+    assert _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "capture"]).returncode == 0
+    assert "[Video]" in (repo_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "apply"])
+    assert res.returncode == 0, res.stderr

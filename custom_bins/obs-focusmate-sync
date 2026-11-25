@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""Sync the OBS Studio Focusmate profile and scene collection with dotfiles.
+"""Sync OBS Studio settings with dotfiles: the Focusmate profile and scene
+collection, plus the app-wide preferences in `user.ini` and `global.ini`.
 
 Keeps a dedicated `Focusmate` profile and scene collection under
 `config/obs/basic/` without touching OBS's default `Untitled` profile/scene.
+App-wide preferences live in `config/obs/user.ini` and `config/obs/global.ini`.
+`apply` also makes Focusmate the profile and scene collection OBS opens by
+default, so a Dock or Spotlight launch lands on it too, not only `obs-start`.
 
 Security & portability guarantees:
-- Profile capture uses a strict allowlist (only `[General] Name` and `[Video]`
-  keys). OAuth tokens, stream keys, browser-panel `CookieId`, and local file
-  paths are never exported to git.
+- Every INI capture uses a per-key allowlist (profile: `[General] Name`,
+  `[Video]`, `[Audio]` and `[Hotkeys]`; app: UI preferences and renderer).
+  OAuth tokens, stream keys, browser-panel `CookieId`, local file paths, window
+  geometry, install IDs and audio device IDs are never exported to git.
 - Scene capture validates every source type against an allowlist (`scene`,
   `screen_capture`, `macos-avcapture`) and refuses to write if an unexpected
   source (e.g. `browser_source` with a private URL) is present.
 - Machine-local hardware bindings (`display_uuid` on `screen_capture`,
   `device` and `device_name` on `macos-avcapture`) are stripped on capture and
   preserved from the local machine on apply.
-- Both inputs are validated before either destination file is replaced.
+- Every input is validated before any destination file is replaced.
+- `apply` refuses while OBS is running: OBS rewrites its config files on quit,
+  which would silently undo the apply. `--force` overrides.
 
 Usage:
   obs-focusmate-sync capture [--profile NAME] [--scene NAME]
-  obs-focusmate-sync apply
+  obs-focusmate-sync apply [--force]
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ import argparse
 import configparser
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -38,6 +46,7 @@ DEFAULT_OBS_BASIC = Path(
     os.environ.get("OBS_BASIC_DIR")
     or (Path.home() / "Library" / "Application Support" / "obs-studio" / "basic")
 )
+APP_INI_FILES = ("user.ini", "global.ini")
 
 ALLOWED_VIDEO_KEYS = (
     "BaseCX",
@@ -56,6 +65,66 @@ ALLOWED_VIDEO_KEYS = (
     "SdrWhiteLevel",
     "HdrNominalPeakLevel",
 )
+
+# Profile sections beyond [Video]. [Hotkeys] keys are action names (any name is
+# allowed); their values are key-binding JSON, which carries no secret or path.
+# Audio device IDs are per-Mac and stay out.
+ALLOWED_PROFILE_KEYS: dict[str, tuple[str, ...] | None] = {
+    "Video": ALLOWED_VIDEO_KEYS,
+    "Audio": ("SampleRate", "ChannelSetup", "MeterDecayRate", "PeakMeterType"),
+    "Hotkeys": None,  # None = every key in the section
+}
+
+# App-wide preferences, per file. Left out on purpose: migration markers
+# (Pre*Defaults, FirstRun, YtDockCleanupDone), window geometry and DockState,
+# ExtraBrowserDocks (may hold private URLs), [Basic] (set by apply instead),
+# InstallGUID, LastVersion, [Locations] (local paths), [PropertiesWindow].
+ALLOWED_APP_KEYS: dict[str, dict[str, tuple[str, ...] | None]] = {
+    "user.ini": {
+        "General": ("ConfirmOnExit", "HotkeyFocusType"),
+        "BasicWindow": (
+            "PreviewEnabled",
+            "PreviewProgramMode",
+            "SceneDuplicationMode",
+            "SwapScenesMode",
+            "SnappingEnabled",
+            "ScreenSnapping",
+            "SourceSnapping",
+            "CenterSnapping",
+            "SnapDistance",
+            "SpacingHelpersEnabled",
+            "RecordWhenStreaming",
+            "KeepRecordingWhenStreamStops",
+            "SysTrayEnabled",
+            "SysTrayWhenStarted",
+            "SaveProjectors",
+            "ShowTransitions",
+            "ShowListboxToolbars",
+            "ShowStatusBar",
+            "ShowSourceIcons",
+            "ShowContextToolbars",
+            "StudioModeLabels",
+            "SideDocks",
+            "VerticalVolumeControl",
+            "MultiviewMouseSwitch",
+            "MultiviewDrawNames",
+            "MultiviewDrawAreas",
+            "MediaControlsCountdownTimer",
+            "MixerShowInactive",
+            "MixerKeepInactiveLast",
+            "MixerShowHidden",
+            "MixerKeepHiddenLast",
+            "AlwaysOnTop",
+            "EditPropertiesMode",
+            "DocksLocked",
+        ),
+        "Appearance": ("FontScale", "Density"),
+    },
+    "global.ini": {
+        "General": ("MaxLogs", "ProcessPriority", "EnableAutoUpdates", "BrowserHWAccel"),
+        "Video": ("Renderer", "DisableOSXVSync", "ResetOSXVSyncOnExit"),
+    },
+}
 
 ALLOWED_SOURCE_IDS = frozenset({"scene", "screen_capture", "macos-avcapture"})
 HARDWARE_KEYS_BY_SOURCE_ID: dict[str, tuple[str, ...]] = {
@@ -115,10 +184,47 @@ def _sanitize_profile(src_ini: Path, target_name: str) -> str:
     out = _make_parser()
     out.add_section("General")
     out.set("General", "Name", target_name)
-    out.add_section("Video")
-    for key in ALLOWED_VIDEO_KEYS:
-        if src.has_option("Video", key):
-            out.set("Video", key, src.get("Video", key))
+    out.add_section("Video")  # always present: apply requires it
+    _copy_allowed(src, out, ALLOWED_PROFILE_KEYS)
+    return _render_ini(out)
+
+
+def _copy_allowed(
+    src: configparser.RawConfigParser,
+    out: configparser.RawConfigParser,
+    allow: dict[str, tuple[str, ...] | None],
+) -> None:
+    """Copy only allowlisted keys from src into out, overwriting them in out."""
+    for section, keys in allow.items():
+        if not src.has_section(section):
+            continue
+        wanted = [k for k, _ in src.items(section)] if keys is None else keys
+        for key in wanted:
+            if src.has_option(section, key):
+                if not out.has_section(section):
+                    out.add_section(section)
+                out.set(section, key, src.get(section, key))
+
+
+def _sanitize_app_ini(src_ini: Path, file_name: str) -> str:
+    out = _make_parser()
+    _copy_allowed(_read_ini(src_ini), out, ALLOWED_APP_KEYS[file_name])
+    return _render_ini(out)
+
+
+def _merge_app_ini_for_apply(
+    repo_ini: Path, local_ini: Path, file_name: str, target_name: str
+) -> str:
+    out = _read_ini(local_ini) if local_ini.is_file() else _make_parser()
+    _copy_allowed(_read_ini(repo_ini), out, ALLOWED_APP_KEYS[file_name])
+    if file_name == "user.ini":
+        # Make the synced profile and scene collection the ones OBS opens by default.
+        if not out.has_section("Basic"):
+            out.add_section("Basic")
+        out.set("Basic", "Profile", target_name)
+        out.set("Basic", "ProfileDir", target_name)
+        out.set("Basic", "SceneCollection", target_name)
+        out.set("Basic", "SceneCollectionFile", f"{target_name}.json")
     return _render_ini(out)
 
 
@@ -178,11 +284,7 @@ def _merge_profile_for_apply(repo_ini: Path, local_ini: Path, target_name: str) 
         out.add_section("General")
     out.set("General", "Name", target_name)
 
-    if not out.has_section("Video"):
-        out.add_section("Video")
-    for key in ALLOWED_VIDEO_KEYS:
-        if repo.has_option("Video", key):
-            out.set("Video", key, repo.get("Video", key))
+    _copy_allowed(repo, out, ALLOWED_PROFILE_KEYS)
     return _render_ini(out)
 
 
@@ -234,37 +336,76 @@ def _merge_scene_for_apply(repo_json: Path, local_json: Path, target_name: str) 
     return json.dumps(repo_data, indent=4) + "\n"
 
 
+def _obs_running() -> bool | None:
+    """True/False if OBS is/isn't running; None if the process list is unreadable."""
+    override = os.environ.get("OBS_SYNC_ASSUME_RUNNING")  # tests: "1", "0" or "unknown"
+    if override is not None:
+        return None if override == "unknown" else override == "1"
+    try:
+        res = subprocess.run(["pgrep", "-x", "OBS"], capture_output=True, check=False)
+    except OSError:
+        return None
+    if res.returncode in (0, 1):
+        return res.returncode == 0
+    return None
+
+
 def cmd_capture(args: argparse.Namespace) -> int:
     src_profile = args.obs_basic / "profiles" / args.profile / "basic.ini"
     src_scene = args.obs_basic / "scenes" / f"{args.scene}.json"
+    obs_root, repo_root = args.obs_basic.parent, args.repo_basic.parent
 
-    # Validate and render BOTH before writing either file.
-    profile_text = _sanitize_profile(src_profile, args.name)
-    scene_text = _sanitize_scene(src_scene, args.name)
+    # Validate and render EVERYTHING before writing any file.
+    writes: list[tuple[Path, str]] = [
+        (args.repo_basic / "profiles" / args.name / "basic.ini", _sanitize_profile(src_profile, args.name)),
+        (args.repo_basic / "scenes" / f"{args.name}.json", _sanitize_scene(src_scene, args.name)),
+    ]
+    for file_name in APP_INI_FILES:
+        src = obs_root / file_name
+        if src.is_file():
+            writes.append((repo_root / file_name, _sanitize_app_ini(src, file_name)))
+        else:
+            print(f"obs-focusmate-sync: note: no {src}, skipped", file=sys.stderr)
 
-    dst_profile = args.repo_basic / "profiles" / args.name / "basic.ini"
-    dst_scene = args.repo_basic / "scenes" / f"{args.name}.json"
-
-    _atomic_write_text(dst_profile, profile_text)
-    _atomic_write_text(dst_scene, scene_text)
-    print(f"Synced OBS '{args.name}' profile and scene -> {args.repo_basic}")
+    for dst, text in writes:
+        _atomic_write_text(dst, text)
+    print(f"Synced OBS '{args.name}' profile, scene and app settings -> {repo_root}")
     return 0
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
+    running = _obs_running()
+    if running is not False and not args.force:
+        state = "is running" if running else "may be running (process list unreadable)"
+        print(
+            f"obs-focusmate-sync: OBS {state}; it rewrites its config on quit, "
+            "which would undo this apply. Quit OBS and rerun, or pass --force.",
+            file=sys.stderr,
+        )
+        return 75  # EX_TEMPFAIL: try again later
+
     repo_profile = args.repo_basic / "profiles" / args.name / "basic.ini"
     repo_scene = args.repo_basic / "scenes" / f"{args.name}.json"
-
     dst_profile = args.obs_basic / "profiles" / args.name / "basic.ini"
     dst_scene = args.obs_basic / "scenes" / f"{args.name}.json"
+    obs_root, repo_root = args.obs_basic.parent, args.repo_basic.parent
 
-    # Validate and render BOTH before writing either file.
-    profile_text = _merge_profile_for_apply(repo_profile, dst_profile, args.name)
-    scene_text = _merge_scene_for_apply(repo_scene, dst_scene, args.name)
+    # Validate and render EVERYTHING before writing any file.
+    writes: list[tuple[Path, str]] = [
+        (dst_profile, _merge_profile_for_apply(repo_profile, dst_profile, args.name)),
+        (dst_scene, _merge_scene_for_apply(repo_scene, dst_scene, args.name)),
+    ]
+    for file_name in APP_INI_FILES:
+        repo_ini = repo_root / file_name
+        if repo_ini.is_file():
+            local_ini = obs_root / file_name
+            writes.append(
+                (local_ini, _merge_app_ini_for_apply(repo_ini, local_ini, file_name, args.name))
+            )
 
-    _atomic_write_text(dst_profile, profile_text)
-    _atomic_write_text(dst_scene, scene_text)
-    print(f"Applied OBS '{args.name}' profile and scene -> {args.obs_basic}")
+    for dst, text in writes:
+        _atomic_write_text(dst, text)
+    print(f"Applied OBS '{args.name}' profile, scene and app settings -> {obs_root}")
     return 0
 
 
@@ -306,6 +447,7 @@ def build_parser() -> argparse.ArgumentParser:
     cap.set_defaults(func=cmd_capture)
 
     app = sub.add_parser("apply", help="Deploy dotfiles OBS config to local OBS (preserving local state)")
+    app.add_argument("--force", action="store_true", help="Apply even while OBS is running")
     app.set_defaults(func=cmd_apply)
     return parser
 

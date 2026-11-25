@@ -55,7 +55,7 @@ Codex has one configured owner in `config/codex-install.conf`: `homebrew` by def
 Getting this wrong is the most common cause of "I edited the config and nothing changed".
 
 - **Symlinked** (edits are live): Finicky, Ghostty, Claude (`claude/` → `~/.claude/`), Codex (`codex/` → `~/.codex/`), Serena (`config/serena/serena_config.yml` → `~/.serena/serena_config.yml`), Zed, gitui, `~/.ignore_global`, `~/.config/fd/ignore`, and the matplotlib `.mplstyle` files.
-- **Copied** (needs a re-deploy to take effect): git config, Mouseless, OBS Studio (`deploy.sh --obs` merges into the dedicated `Focusmate` profile/scene without touching `Untitled` or local device bindings; pull edits back with `sync-obs`), and the `lib/plotting/*.py` modules (`deploy.sh --matplotlib`).
+- **Copied** (needs a re-deploy to take effect): git config, Mouseless, OBS Studio (`deploy.sh --obs` merges into the dedicated `Focusmate` profile/scene plus allowlisted `user.ini`/`global.ini` preferences without touching `Untitled` or local device bindings; pull edits back with `sync-obs`, start with `obs-start`), and the `lib/plotting/*.py` modules (`deploy.sh --matplotlib`).
 - **Sourced by reference**: ZSH. `~/.zshrc` is a plain file containing only `source $DOT_DIR/config/zshrc.sh`, so edits to `config/zshrc.sh` in the main checkout are live in any new shell with no `deploy.sh` step.
 - **Composed**: `~/.gitignore_global` is concatenated from `config/ignore/gitignore_base` + `config/ignore/gitignore_research`.
 
