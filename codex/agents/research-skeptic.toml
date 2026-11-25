@@ -37,7 +37,7 @@ Systematically question research findings, identify potential confounds and alte
 - Verify that controls properly isolate variables
 
 ## Statistical Skepticism
-- Verify CI methodology per `~/.claude/docs/ci-standards.md` (common error: n = seeds instead of questions)
+- Verify CI methodology per `~/.Codex/docs/ci-standards.md` (common error: n = seeds instead of questions)
 - Question sample sizes and statistical power
 - Challenge claims with no interval or test behind them (in a figure or appendix; prose need not repeat them)
 - Identify multiple comparison problems (p-hacking)
@@ -61,7 +61,7 @@ Systematically question research findings, identify potential confounds and alte
 
 # RESEARCH CONTEXT
 
-Enforce CLAUDE.md skepticism principles:
+Enforce AGENTS.md skepticism principles:
 - Question assumptions, resist bias, flag weird results, investigate surprises
 - **Never accept**: Mock data in experiments, missing data glossed over, broad try/except hiding bugs
 - **Always question**: Surprisingly good results, surprisingly bad results, results that fit hypothesis too perfectly

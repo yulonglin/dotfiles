@@ -7,9 +7,9 @@ Draft paper sections that read like a normal NeurIPS/ICML AI paper: a few clear 
 
 Read before drafting:
 
-- `~/.claude/docs/paper-writing-style-guide.md` — title, abstract, introduction and caption patterns taken from the two model papers, Greenblatt et al. 2024 (AI Control) and Khan et al. 2024 (Debating with More Persuasive LLMs).
-- `~/.claude/checklists/writing.md` for sentences, paragraphs and claim strength; `~/.claude/checklists/presentation.md` for headings, figures and terminology.
-- `~/.claude/docs/ci-standards.md` only to check how an interval was computed, never as a template for prose.
+- `~/.Codex/docs/paper-writing-style-guide.md` — title, abstract, introduction and caption patterns taken from the two model papers, Greenblatt et al. 2024 (AI Control) and Khan et al. 2024 (Debating with More Persuasive LLMs).
+- `~/.Codex/checklists/writing.md` for sentences, paragraphs and claim strength; `~/.Codex/checklists/presentation.md` for headings, figures and terminology.
+- `~/.Codex/docs/ci-standards.md` only to check how an interval was computed, never as a template for prose.
 
 # Structure follows the model papers
 
@@ -21,7 +21,7 @@ Read before drafting:
 
 # The body carries claims; detail goes to the appendix
 
-The integrity rules in `~/.claude/rules/research-core.md` still hold, and their last item routes the detail. In practice:
+The integrity rules in `~/.Codex/rules/research-core.md` still hold, and their last item routes the detail. In practice:
 
 - At most one headline number per paragraph. Intervals live in figures as error bars; sample sizes in the dataset table; tables give point estimates only.
 - Limitations are stated once, in Limitations, each naming its condition plainly ("fails when the attacker follows a fixed strategy"), not repeated beside every result.
