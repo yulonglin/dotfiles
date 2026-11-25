@@ -11,9 +11,10 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parent.parent / "custom_bins" / "obs-focusmate-sync"
 
 
-def _run(args: list[str], obs_running: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(args: list[str], obs_running: bool | None = False) -> subprocess.CompletedProcess[str]:
     # Pin the running-OBS check so tests never depend on the real machine.
-    env = {**os.environ, "OBS_SYNC_ASSUME_RUNNING": "1" if obs_running else "0"}
+    state = "unknown" if obs_running is None else ("1" if obs_running else "0")
+    env = {**os.environ, "OBS_SYNC_ASSUME_RUNNING": state}
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
@@ -328,3 +329,25 @@ def test_capture_profile_audio_and_hotkeys_without_device_ids(tmp_path: Path) ->
     assert "OBSBasic.StartVirtualCam=" in out_ini
     assert "MonitoringDevice" not in out_ini
     assert "Studio Display Speakers" not in out_ini
+
+
+def test_apply_refuses_when_running_state_unknown(tmp_path: Path) -> None:
+    seed_basic = tmp_path / "seed" / "basic"
+    repo_basic = tmp_path / "repo" / "basic"
+    obs_basic = tmp_path / "obs" / "basic"
+    _seed_obs(seed_basic, _sample_ini(), json.dumps(_sample_scene()))
+    assert _run(["--obs-basic", str(seed_basic), "--repo-basic", str(repo_basic), "capture"]).returncode == 0
+    _seed_obs(obs_basic, _sample_ini(), json.dumps(_sample_scene()))
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "apply"], obs_running=None)
+    assert res.returncode == 75
+    assert "may be running" in res.stderr
+
+
+def test_capture_keeps_empty_video_section_so_apply_accepts_it(tmp_path: Path) -> None:
+    obs_basic = tmp_path / "obs"
+    repo_basic = tmp_path / "repo"
+    _seed_obs(obs_basic, "[General]\nName=X\n\n[Video]\nUnlistedKey=1\n", json.dumps(_sample_scene()))
+    assert _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "capture"]).returncode == 0
+    assert "[Video]" in (repo_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "apply"])
+    assert res.returncode == 0, res.stderr

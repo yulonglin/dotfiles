@@ -65,8 +65,15 @@ done
 obs_dir="$HOME/Library/Application Support/obs-studio/basic"
 [[ -f "$obs_dir/profiles/$profile/basic.ini" ]] \
   || warn "warning: no OBS profile '$profile' yet; OBS will fall back to its last one (run: deploy.sh --obs)"
-[[ -f "$obs_dir/scenes/$collection.json" ]] \
-  || warn "warning: no OBS scene collection '$collection' yet; OBS will fall back to its last one (run: deploy.sh --obs)"
+if [[ ! -f "$obs_dir/scenes/$collection.json" ]]; then
+  if $vcam; then
+    # OBS would fall back to its last scene and put THAT on the virtual camera,
+    # which may be a full-screen capture nobody meant to share.
+    err "obs-start: no OBS scene collection '$collection'; refusing to start the virtual camera on another scene (run: deploy.sh --obs, or pass --no-vcam)"
+    exit 78
+  fi
+  warn "warning: no OBS scene collection '$collection' yet; OBS will fall back to its last one (run: deploy.sh --obs)"
+fi
 
 open_cmd=(open -a OBS)
 $show || open_cmd+=(-j -g)   # -j launch hidden, -g keep it in the background
@@ -76,7 +83,7 @@ $vcam && open_cmd+=(--startvirtualcam)
 if pgrep -qx OBS 2>/dev/null; then
   if $show; then
     $dry_run && { print -r -- "open -a OBS"; exit 0 }
-    open -a OBS
+    open -a OBS || { err "obs-start: could not bring OBS to front (open exit $?)"; exit 1 }
     ok "OBS already running: brought to front"
   else
     ok "OBS already running: left as it is (launch arguments only apply to a fresh start)"
@@ -89,7 +96,7 @@ if $dry_run; then
   exit 0
 fi
 
-"${open_cmd[@]}"
+"${open_cmd[@]}" || { err "obs-start: launching OBS failed (open exit $?)"; exit 1 }
 
 if ! $show; then
   # Qt can show the main window after a hidden launch; hide the app once it is

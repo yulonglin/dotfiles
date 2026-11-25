@@ -184,6 +184,7 @@ def _sanitize_profile(src_ini: Path, target_name: str) -> str:
     out = _make_parser()
     out.add_section("General")
     out.set("General", "Name", target_name)
+    out.add_section("Video")  # always present: apply requires it
     _copy_allowed(src, out, ALLOWED_PROFILE_KEYS)
     return _render_ini(out)
 
@@ -337,9 +338,9 @@ def _merge_scene_for_apply(repo_json: Path, local_json: Path, target_name: str) 
 
 def _obs_running() -> bool | None:
     """True/False if OBS is/isn't running; None if the process list is unreadable."""
-    override = os.environ.get("OBS_SYNC_ASSUME_RUNNING")  # tests: "1" or "0"
+    override = os.environ.get("OBS_SYNC_ASSUME_RUNNING")  # tests: "1", "0" or "unknown"
     if override is not None:
-        return override == "1"
+        return None if override == "unknown" else override == "1"
     try:
         res = subprocess.run(["pgrep", "-x", "OBS"], capture_output=True, check=False)
     except OSError:
@@ -374,15 +375,14 @@ def cmd_capture(args: argparse.Namespace) -> int:
 
 def cmd_apply(args: argparse.Namespace) -> int:
     running = _obs_running()
-    if running and not args.force:
+    if running is not False and not args.force:
+        state = "is running" if running else "may be running (process list unreadable)"
         print(
-            "obs-focusmate-sync: OBS is running and rewrites its config on quit, "
+            f"obs-focusmate-sync: OBS {state}; it rewrites its config on quit, "
             "which would undo this apply. Quit OBS and rerun, or pass --force.",
             file=sys.stderr,
         )
         return 75  # EX_TEMPFAIL: try again later
-    if running is None:
-        print("obs-focusmate-sync: warning: cannot tell whether OBS is running", file=sys.stderr)
 
     repo_profile = args.repo_basic / "profiles" / args.name / "basic.ini"
     repo_scene = args.repo_basic / "scenes" / f"{args.name}.json"
