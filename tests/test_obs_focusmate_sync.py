@@ -309,3 +309,22 @@ def test_apply_refuses_while_obs_running(tmp_path: Path) -> None:
     forced = _run([*args, "--force"], obs_running=True)
     assert forced.returncode == 0, forced.stderr
     assert "FPSCommon=15" in (obs_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+
+
+def test_capture_profile_audio_and_hotkeys_without_device_ids(tmp_path: Path) -> None:
+    obs_basic = tmp_path / "obs"
+    repo_basic = tmp_path / "repo"
+    ini = _sample_ini() + (
+        "\n[Audio]\nSampleRate=48000\nMonitoringDeviceId=AppleUSBAudioEngine:XYZ\n"
+        "MonitoringDeviceName=Studio Display Speakers\n"
+        '\n[Hotkeys]\nOBSBasic.StartVirtualCam={"bindings":[{"key":"OBS_KEY_V"}]}\n'
+    )
+    _seed_obs(obs_basic, ini, json.dumps(_sample_scene()))
+
+    res = _run(["--obs-basic", str(obs_basic), "--repo-basic", str(repo_basic), "capture"])
+    assert res.returncode == 0, res.stderr
+    out_ini = (repo_basic / "profiles" / "Focusmate" / "basic.ini").read_text(encoding="utf-8")
+    assert "SampleRate=48000" in out_ini
+    assert "OBSBasic.StartVirtualCam=" in out_ini
+    assert "MonitoringDevice" not in out_ini
+    assert "Studio Display Speakers" not in out_ini
