@@ -33,7 +33,8 @@ The standard is `~/.claude/checklists/writing.md` for sentences, paragraphs, hed
 
 - **Effective Abstract**: Motivates problem, states claims, indicates evidence, explains impact
 - **Comprehensive Introduction**: Extended abstract with context and literature review
-- **Technical Detail**: Sufficient methods and results detail for expert evaluation
+- **Technical Detail**: Enough for expert evaluation, in the methods and appendix; the body carries claims and figures
+- **Conventional Structure**: Introduction, Related Work, Methodology, Results, Discussion, Conclusion, one figure per results subsection, as in the AI Control and Debate papers
 
 ## 5. Novelty and Context
 
@@ -53,9 +54,9 @@ The standard is `~/.claude/checklists/writing.md` for sentences, paragraphs, hed
 
 Flag these explicitly when found:
 
-- **Cherry-picking**: Only the most favorable examples, no context
+- **Cherry-picking**: Only the most favorable examples, or datasets and methods that vary between figures with no coverage table saying why
 - **Weak Statistical Standards**: Marginal significance (0.01 < p < 0.05) presented as strong
 - **Missing Baselines**: No comparison against reasonable alternatives
-- **Overcomplexity**: Jargon or verbosity that obscures rather than clarifies
+- **Overcomplexity**: Jargon, coined terms, or detail that buries the claims: intervals or sample sizes in prose or tables, pre-registration statements, dates, a caveat beside every result
 - **Narrative-Evidence Mismatch**: Claims not well-supported by experiments
 - **Poor Reproducibility**: Insufficient detail for replication

@@ -17,7 +17,7 @@ Small denominators are stated as counts next to the percentage (0/7, not "0%"), 
 
 The unit of analysis sets the denominator, and the same numbers give different intervals depending on whether it is episodes or independent clusters — name it before computing.
 
-A CI covering only sampling over items, while the measurement instrument itself is stochastic across repeats, looks rigorous and understates the truth: say which sources of variation the interval includes and which it omits, where the number is displayed.
+A CI covering only sampling over items, while the measurement instrument itself is stochastic across repeats, looks rigorous and understates the truth: say which sources of variation the interval includes and which it omits, in the caption or appendix.
 
 ## The four nulls
 

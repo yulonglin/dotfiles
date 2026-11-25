@@ -24,7 +24,7 @@ So: state the g-mean, then immediately state what fraction of its true positives
 
 ## The noise floor is set by seven negatives
 
-TNR rests on **n=7 negatives**, so a single false alarm moves it by 0.143 and **any gap under roughly 0.06 is noise**. Say this wherever a TNR or a g-mean built on it is displayed, and never rank cells by differences the floor cannot resolve. The sweep is wide — layers (early/mid/hi/dist3/dist5 = [20, 27, 34, 42, 49]), positions (pos_1/pos_8/pos_50end/pos_197), phase splits, glossed against unglossed — and a wide sweep read against a coarse floor manufactures winners.
+TNR rests on **n=7 negatives**, so a single false alarm moves it by 0.143 and **any gap under roughly 0.06 is noise**. Say this once, in the caption or Limitations, and never rank cells by differences the floor cannot resolve. The sweep is wide — layers (early/mid/hi/dist3/dist5 = [20, 27, 34, 42, 49]), positions (pos_1/pos_8/pos_50end/pos_197), phase splits, glossed against unglossed — and a wide sweep read against a coarse floor manufactures winners.
 
 Report the null beside the metric: what g-mean does a monitor with no signal at all achieve on this label distribution, given the acknowledgment-gate default?
 

@@ -12,4 +12,6 @@
 
 **Say which findings you went looking for:** each is pre-specified or discovered in this data, with the number of slices and comparisons stated. A discovered finding is a hypothesis until fresh episodes test it.
 
+**Detail goes where its reader is.** Results pages, audit trails and data READMEs carry all of the above. A paper or reader-facing report applies the same checks, but its body carries claims and figures: sample sizes, units, tests, contrast counts, pre-specified labels, provenance, run dates and per-sample transcripts go in figures, the appendix or the data README, and limitations are stated once, in a Limitations paragraph.
+
 The rest — nulls, ceilings, intervals and their unit of analysis, causal register, scorer versus judge: `~/.claude/checklists/results-analysis.md`; statistical machinery and slicing: `results-artifact`.
