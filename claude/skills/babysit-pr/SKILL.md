@@ -1,13 +1,13 @@
 ---
 name: babysit-pr
-description: Shepherd one open pull request to a mergeable state without re-prompting — fix failing CI one root cause at a time, act on the review comments that have a single mechanical answer, resolve conflicts on a branch that is ours, and re-check on a sensible cadence until it is green or a real decision is needed. Use on "babysit this PR", "get it green", "fix CI", "the checks are failing", "keep an eye on PR N", or after opening a PR the user wants driven to green. For a backlog of several PRs use `review-pr-queue`; to merge and push a finished change use `ship`.
+description: Shepherd one open pull request to a mergeable state without re-prompting — fix failing CI one root cause at a time, act on the review comments that have a single mechanical answer, resolve conflicts on a branch that is ours, and re-check on a sensible cadence until it is green or a real decision is needed. Use on "babysit this PR", "get it green", "fix CI", "the checks are failing", "keep an eye on PR N", or after opening a PR the user wants driven to green. For a backlog of several PRs use `review-pr-queue`; to merge and push a finished change use `land`.
 ---
 
 # Babysit a PR
 
 Adapted from pstack's `babysit` and `fix-ci` skills in [pstack-claude](https://github.com/michael-denyer/pstack-claude) (MIT), the Claude Code port of Lauren Tan's pstack, folded into one skill and fitted to this setup's background-job and merge rules.
 
-One PR, driven to mergeable. This skill does not merge: merging follows the rule in `coding-conventions.md` (merge it yourself only when simple, otherwise ask) or `ship` when the user already authorised merge and push. A subagent that opens a PR does not babysit it; it returns to its caller.
+One PR, driven to mergeable. This skill does not merge: merging follows the rule in `coding-conventions.md` (merge it yourself only when simple, otherwise ask) or `land` when the user already authorised merge and push. A subagent that opens a PR does not babysit it; it returns to its caller.
 
 ## Loop
 

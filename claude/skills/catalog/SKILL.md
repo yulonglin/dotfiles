@@ -97,7 +97,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 |---|---|
 | `commit` | "commit this", "commit these changes", "save my work" |
 | `commit-push-sync` | "commit and push", "sync changes", "update remote" |
-| `ship` | "ship this" or review, finish, merge, and push an authorized completed change |
+| `land` | "land this" or review, finish, merge, and push an authorized completed change (renamed from `ship` to avoid colliding with Claude Code's built-in `/ship`) |
 | `merge-worktree` | "merge this worktree", "merge my branch back", "finish this worktree" |
 | `review-pr-queue` | "address the comments on these PRs", "review and merge the queue", "clear the PR backlog" |
 | `babysit-pr` | "babysit this PR", "get it green", "fix CI" — one open PR driven to mergeable, one root cause per round |
@@ -112,7 +112,7 @@ The five files at `claude/checklists/` say what good looks like. They are **not*
 | `mv-repo` | Moving a repo to a new directory (venv, project state, symlinks, tmux sessions) |
 | `wrap-up` (user-invoked only) | A stalled session needs a terminal state — land it, state the blocker, or take one step |
 | `session-sweep` | "clean up the sessions", "clear agent view", "finish up open sessions" — every session checked for really done, stranded work landed, decisions bundled, only finished sessions removed |
-| `done` | "done", "finished", "ship it" — titles the finished session and hands back the `/rename` line |
+| `done` | "done", "finished" — titles the finished session and hands back the `/rename` line |
 
 ## Permission gates and auto mode
 
