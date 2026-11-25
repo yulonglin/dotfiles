@@ -1,11 +1,11 @@
 #!/usr/bin/env zsh
-# obs-start: start OBS Studio in the background, hidden, on the Focusmate
+# obs-start: start OBS Studio in the background, minimised to the Dock, on the Focusmate
 # profile and scene collection, with the virtual camera on.
 #
 # `obs` on PATH is Homebrew's wrapper, which runs OBS in the foreground tied to
 # the terminal; this detaches through LaunchServices instead. clear-mac-apps
-# hides OBS too (config/app-lifecycle.yaml), never quits it, so the virtual
-# camera keeps feeding Focusmate.
+# minimises OBS too (config/app-lifecycle.yaml), never quits it, so the
+# virtual camera keeps feeding Focusmate.
 #
 # Usage: obs-start [--show] [--no-vcam] [--profile NAME] [--collection NAME] [--dry-run]
 
@@ -30,10 +30,10 @@ fi
 
 usage() {
   cat <<'EOF'
-obs-start: start OBS Studio hidden, on the Focusmate profile and scene, with the virtual camera on.
+obs-start: start OBS Studio minimised to the Dock, on the Focusmate profile and scene, with the virtual camera on.
 
 Usage: obs-start [options]
-  --show             Bring the OBS window to the front instead of starting hidden
+  --show             Bring the OBS window to the front instead of minimising it
   --no-vcam          Do not start the virtual camera
   --profile NAME     OBS profile to use (default: Focusmate)
   --collection NAME  OBS scene collection to use (default: Focusmate)
@@ -41,7 +41,7 @@ Usage: obs-start [options]
   -h, --help         Show this help
 
 If OBS is already running, it is left as it is (OBS ignores launch arguments
-then); --show brings it to the front. Hide it again with Cmd+H or clear-mac-apps.
+then); --show brings it to the front. Minimise it again with Cmd+M or clear-mac-apps.
 Profile and scene are synced from dotfiles: deploy.sh --obs / sync-obs.
 EOF
 }
@@ -76,7 +76,7 @@ if [[ ! -f "$obs_dir/scenes/$collection.json" ]]; then
 fi
 
 open_cmd=(open -a OBS)
-$show || open_cmd+=(-j -g)   # -j launch hidden, -g keep it in the background
+$show || open_cmd+=(-g)   # keep it in the background; not -j, a hidden app's minimised windows stay off the Dock
 open_cmd+=(--args --profile "$profile" --collection "$collection" --disable-missing-files-check)
 $vcam && open_cmd+=(--startvirtualcam)
 
@@ -99,14 +99,20 @@ fi
 "${open_cmd[@]}" || { err "obs-start: launching OBS failed (open exit $?)"; exit 1 }
 
 if ! $show; then
-  # Qt can show the main window after a hidden launch; hide the app once it is
-  # up. Detached so the shell returns at once; needs the terminal's Automation
-  # permission for System Events, which clear-mac-apps already relies on.
+  # Minimise OBS's windows to the Dock once its main window exists, the same
+  # AXMinimized route as clear-mac-apps' minimise_app. Detached so the shell
+  # returns at once; needs the Accessibility permission clear-mac-apps uses.
   {
-    for _ in {1..30}; do pgrep -qx OBS && break; sleep 0.5; done
-    sleep 2
-    osascript -e 'tell application "System Events" to set visible of (first process whose name is "OBS") to false' >/dev/null 2>&1
+    for _ in {1..40}; do
+      osascript -e 'tell application "System Events" to tell (first process whose name is "OBS")
+        if (count of windows) = 0 then error "no window yet"
+        repeat with w in windows
+          set value of attribute "AXMinimized" of w to true
+        end repeat
+      end tell' >/dev/null 2>&1 && break
+      sleep 0.5
+    done
   } &!
 fi
 
-ok "OBS started: profile $profile, scene collection $collection, virtual camera $($vcam && print on || print off), $($show && print shown || print hidden)"
+ok "OBS started: profile $profile, scene collection $collection, virtual camera $($vcam && print on || print off), $($show && print shown || print minimised)"
