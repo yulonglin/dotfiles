@@ -22,7 +22,7 @@ tabsFillAvailableSpace	bool	false
 terminalCopyOnSelect	bool	true
 terminalCursorStyle	string	bar
 terminalFontPointSize	float	16
-terminalFontSmoothing	bool	false
+terminalFontSmoothing	bool	true
 terminalPaddingColor	string	extend-always
 terminalPaddingX	float	10
 terminalPaddingY	float	10

@@ -19,15 +19,6 @@
       "title": "brew-upgrade-app-restart"
     },
     {
-      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-drop-codex-plugin/9621f402-8744-42b9-92d4-f099467b5a5f.jsonl",
-      "content_sha256": "16a5caae9a988d041bdd2b78d631b5040afe25a828667dc13d24f5d131ef0579",
-      "imported_thread_id": "01a20a9d-a47f-7cb0-867e-1f67cf419e42",
-      "imported_at": 1795474434,
-      "source_modified_at": 1795473186949000000,
-      "connector_names": [],
-      "title": "sessionstart-codex-setup-message"
-    },
-    {
       "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-clear-mac-apps-signpost/93bb06d2-59a0-41c2-a14d-2778c1d90c51.jsonl",
       "content_sha256": "e4989976cc9de4321106cd734544761c5d7f0453edefd83a0724657f4dab15e5",
       "imported_thread_id": "01a20a9d-a483-7d93-94d3-f8b91ada328d",
@@ -35,15 +26,6 @@
       "source_modified_at": 1795469923954100892,
       "connector_names": [],
       "title": "dotfiles/Mac Apps Cleanup Guide"
-    },
-    {
-      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/ea74c379-9bee-4d32-b986-09567f7f9fe9.jsonl",
-      "content_sha256": "84153b7a35c2253a75caf522cebb20ec088cb88d85a4c8c7a80297b76d4013e6",
-      "imported_thread_id": "01a20a9d-a489-76d2-be22-f759c78c64c5",
-      "imported_at": 1795474434,
-      "source_modified_at": 1795474186959000000,
-      "connector_names": [],
-      "title": "bear-note-recompute-diagrams-experiments"
     },
     {
       "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/c9a004cd-74c8-4115-b2cc-d63ee35a2a91.jsonl",
@@ -440,6 +422,240 @@
       "source_modified_at": 1795286589193336509,
       "connector_names": [],
       "title": "testing"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/ea74c379-9bee-4d32-b986-09567f7f9fe9.jsonl",
+      "content_sha256": "84153b7a35c2253a75caf522cebb20ec088cb88d85a4c8c7a80297b76d4013e6",
+      "imported_thread_id": "01a20a9d-a489-76d2-be22-f759c78c64c5",
+      "imported_at": 1795543588,
+      "source_modified_at": 1795541393390000000,
+      "connector_names": [],
+      "title": "bear-note-recompute-diagrams-experiments"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-drop-codex-plugin/9621f402-8744-42b9-92d4-f099467b5a5f.jsonl",
+      "content_sha256": "16a5caae9a988d041bdd2b78d631b5040afe25a828667dc13d24f5d131ef0579",
+      "imported_thread_id": "01a20a9d-a47f-7cb0-867e-1f67cf419e42",
+      "imported_at": 1795543588,
+      "source_modified_at": 1795540555288000000,
+      "connector_names": [],
+      "title": "sessionstart-codex-setup-message"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/0ceb260a-6c5c-4379-93ad-e875bd02d97d.jsonl",
+      "content_sha256": "833d8c74b0cfa40d9a96590c7ae79baaa1dd351399fcb9eda482f69df23c4810",
+      "imported_thread_id": "01a20ebc-e14c-7892-b917-5541a0ac46d3",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795286408860386493,
+      "connector_names": [],
+      "title": "check for the most popular rex requests, and let's figure out how to put the bold colour text thing higher up in rex ..."
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/9613ee32-6f7e-4092-9959-7ef18ac8ff48.jsonl",
+      "content_sha256": "f58b6f987820ec3308b8e1b84c97f8d7ee1212d4c957feb99edf2c253c9a7a2b",
+      "imported_thread_id": "01a20ebc-e13c-7f12-aaa5-09c23d3a47fd",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795541393387000000,
+      "connector_names": [],
+      "title": "clear-mac-apps-quit-behavior"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/69ed02b1-8bdd-427e-9494-c80bea8c2bda.jsonl",
+      "content_sha256": "f9a822d17b4c066f2e03f90dafd365b1cd447e7ebd00c63aa256a626ec8cfe7c",
+      "imported_thread_id": "01a20ebc-e157-7742-8590-d01319701e19",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795286194919863400,
+      "connector_names": [],
+      "title": "test-message-greeting"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-council-refresh-nov21/6f1ace5b-9e5e-4995-ba1a-8ac058ba67eb.jsonl",
+      "content_sha256": "d0988bdb0c5e4562c5f5384cee2ca41e7d7473252d47bdc33a67444a73944142",
+      "imported_thread_id": "01a20ebc-e160-76e0-b7c4-2bc0d82b6944",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795286230392831413,
+      "connector_names": [],
+      "title": "council-gemini-4-neon-priority"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-sz-reconcile/c9acd956-962a-493d-9aca-fba10382c7b7.jsonl",
+      "content_sha256": "34e2e57a4d20a8ff8176d72b0297e65075817353d89412243051e156ab74398a",
+      "imported_thread_id": "01a20ebc-e170-75c3-93b3-66781bd55c1c",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795284099382552244,
+      "connector_names": [],
+      "title": "focus-sz-reconcile/Messaging Block Rules"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/06ac3415-90c0-4425-80e3-ed4d46362c66.jsonl",
+      "content_sha256": "aff6de9798557dc2f75869c848ac94bab87eb83f954d2907a1b5c3019ac037f1",
+      "imported_thread_id": "01a20ebc-e19c-7ce0-b1e9-427aa619909c",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795234084604079302,
+      "connector_names": [],
+      "title": "GitHub Privacy & Feedback Workflow"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-attention-analyser/2801132e-e657-4e07-8759-15ab5eadd393.jsonl",
+      "content_sha256": "47bef2b709208641f071907c836a046bb7c8998912a8acab52c8d55767f7e973",
+      "imported_thread_id": "01a20ebc-e1a2-7982-93ca-9a95c7f32ce2",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795224454315149494,
+      "connector_names": [],
+      "title": "attention-analyser/YTD Time Tracking Review"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/be0da3da-80fc-47a4-8620-18495bdaf32e.jsonl",
+      "content_sha256": "a49a66376ef333066cee355c0f32d50dfd3ccbd1b643e5ccbb6ae0d7a1705714",
+      "imported_thread_id": "01a20ebc-e19e-7dd3-b089-adf38c32ed83",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795227814394760124,
+      "connector_names": [],
+      "title": "screenzen-cold-turkey-overlap"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/b3333511-b23f-407b-8c0b-461a48be18cd.jsonl",
+      "content_sha256": "cad9bc8a1a354ba3db4b10db324b21221a36d4f1d0001e19b0f32fceb39fa08d",
+      "imported_thread_id": "01a20ebc-e1ae-73b1-b67f-2028c9e3a9a6",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795217826832822771,
+      "connector_names": [],
+      "title": "dotfiles/iCloud Storage Upgrade Error"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/0d67fbfe-7442-4289-8131-d313f3f61c79.jsonl",
+      "content_sha256": "92ed98ed2b8fae544cad699ddd7308e00461f3db134c947dfb63c5c5447db063",
+      "imported_thread_id": "01a20ebc-e1b2-73b0-828f-f2fd3aed8a50",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795214149241181059,
+      "connector_names": [],
+      "title": "pasted-png-screenshot-question"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/e2d7cf82-2e78-4223-a874-259c58c48d84.jsonl",
+      "content_sha256": "cd214fca23b0142ca9ebf6f1039b82b8da3d94fc52e79c3ad395cd190ee4bb44",
+      "imported_thread_id": "01a20ebc-e1e7-7093-9902-b1ceabc530b7",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795175909673122495,
+      "connector_names": [],
+      "title": "focus-admin-allowlist-econnect"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-Documents-admin/14a0081c-56bd-4905-b8d7-378b17489f5d.jsonl",
+      "content_sha256": "aa74f15a07dea74b112661dce776ccaf89ad6a747ea4056546ac63f090c2c9c3",
+      "imported_thread_id": "01a20ebc-e20a-7552-878e-af686472b110",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795176029683073552,
+      "connector_names": [],
+      "title": "Great Eastern Policy Reinstatement"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/dc58db90-3830-4b81-b26f-8cb45f2a353c.jsonl",
+      "content_sha256": "a6f43e6cc19a79be44d429694a9a9f1873eae6431117c86b992ff6f620672190",
+      "imported_thread_id": "01a20ebc-e1fc-70e0-ba4c-4307fcc8b286",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795147229072073604,
+      "connector_names": [],
+      "title": "dotfiles/Comms vs Admin Split"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/d78947e1-4a59-4a91-824a-dccf8a205121.jsonl",
+      "content_sha256": "46a358c30eda02d771b42d6b0b23b29d003b3712412df5340478e6ca76fbaa44",
+      "imported_thread_id": "01a20ebc-e1ff-7713-bb32-475d3401640d",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795147589106082518,
+      "connector_names": [],
+      "title": "rex-config-text-sync"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-only-preset/afdebf23-c216-4ea4-9b7c-d80738556aa4.jsonl",
+      "content_sha256": "06c2183c223b6bc0878cbeb76c7593dd8dfc743a25ce9547a26b21f854320bd8",
+      "imported_thread_id": "01a20ebc-e1f8-7222-a3e8-f798a48e6d07",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795156349355388562,
+      "connector_names": [],
+      "title": "focus-only-always-on-presets"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/33fc1cf3-3a0f-4b15-b63d-aa2cdcfd575e.jsonl",
+      "content_sha256": "a7d29e55deb251e5e46cbd5db79e8378eb79d0a8698dd8e36d7be502cd4a93f1",
+      "imported_thread_id": "01a20ebc-e230-76f0-bb27-c8a40d7bc6fc",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795133774735127669,
+      "connector_names": [],
+      "title": "dotfiles/Domain DNS Configuration Issue"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-ghostty-font-size/97ffda13-665c-4a10-853c-299dd81e4207.jsonl",
+      "content_sha256": "80e74830049bd1e60c8a7162a360af6cf43cbbf013221cd46a3eea258b5e76e7",
+      "imported_thread_id": "01a20ebc-e242-7f51-8e99-9f46c779a39b",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795117617706946039,
+      "connector_names": [],
+      "title": "ghostty-font-size"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/fb5f6a9a-1e27-40ab-ab0d-1624f078f392.jsonl",
+      "content_sha256": "dc623651713636515d59cdb75dae460b4bca3933ec0d7ab214f332586da0d9bc",
+      "imported_thread_id": "01a20ebc-e24f-75c3-83c3-406076920924",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795108141461970921,
+      "connector_names": [],
+      "title": "testing"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-alfred-capped-minutes/adde449c-4b3f-49b2-af2e-03b50af56003.jsonl",
+      "content_sha256": "743830f2d509ac7c111468c339f87352c2806d1d994007e6f2044496ea8ab2fc",
+      "imported_thread_id": "01a20ebc-e253-7023-9fea-cb4b55e6e100",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795090523565904228,
+      "connector_names": [],
+      "title": "alfred-trigger-timing-focus"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-only-picker/c268b7ce-984a-46bb-93de-34ef9c304558.jsonl",
+      "content_sha256": "6e4f66abd55f376f6250eb1932cc5e09447942ae9adbda738ff3d469e4939d42",
+      "imported_thread_id": "01a20ebc-e250-70c0-bfd8-03eab8c0903c",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795110469703652043,
+      "connector_names": [],
+      "title": "multi-app-selection-focus"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-focus-reason-dialog/2d284b40-9ddc-4f50-a46f-8e61d719e842.jsonl",
+      "content_sha256": "0b6ab4bff3b4b8d1c02427272eb8b29ff12e16c82e88876fa736d448b670264e",
+      "imported_thread_id": "01a20ebc-e27c-70c0-bc30-ea6a29512977",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795088663526897600,
+      "connector_names": [],
+      "title": "focus-reason-dialog/Focus Admin Switch Broken"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles--claude-worktrees-gemini-neon/80fd1746-d124-40d3-b72c-9d39df0531f5.jsonl",
+      "content_sha256": "609b2c601641372997a4b3b23b5c26564b47c12b8ee51831ede5e00da3ec29c9",
+      "imported_thread_id": "01a20ebc-e288-7b03-8a6b-49e8a744e8eb",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795061594997503034,
+      "connector_names": [],
+      "title": "neon-carbon-gemini-router"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/171c321f-45b2-4bb9-b7d5-45bfca475efe.jsonl",
+      "content_sha256": "9492c27aa5e0bb98c9c7f5f3b84c800c3da72b55387260843171accc05f6ab66",
+      "imported_thread_id": "01a20ebc-e29a-7ea1-97e4-3ce01a80ac66",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795060804333388870,
+      "connector_names": [],
+      "title": "great-eastern-focus-admin"
+    },
+    {
+      "source_path": "/Users/yulong/code/dotfiles/claude/projects/-Users-yulong-code-dotfiles/0ab5e0e9-eba8-47f1-bcba-5c89e4e472d2.jsonl",
+      "content_sha256": "90ec67f20901b1a3890cbdf8f583727b86ab28fcbc8df850ebe8525abd65b7b9",
+      "imported_thread_id": "01a20ebc-e29e-79e0-81c3-3c7c707ccae9",
+      "imported_at": 1795543589,
+      "source_modified_at": 1795060789500022833,
+      "connector_names": [],
+      "title": "cold-turkey-hand-edit"
     }
   ],
   "detected_connector_records": []
