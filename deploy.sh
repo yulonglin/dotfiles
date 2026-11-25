@@ -1146,8 +1146,9 @@ fi
 # ─── OBS Studio (macOS only) ─────────────────────────────────────────────────
 # Deployed into a dedicated `Focusmate` profile and scene collection so OBS's
 # default `Untitled` profile/scene and local profile state (CookieId, OAuth)
-# and per-Mac display/camera bindings are never clobbered. Pull edits back with
-# `sync-obs`.
+# and per-Mac display/camera bindings are never clobbered. Allowlisted app-wide
+# preferences (user.ini, global.ini) are merged too. Pull edits back with
+# `sync-obs`; start OBS with `obs-start`.
 
 if [[ "$DEPLOY_OBS" == "true" ]]; then
     if is_macos; then
@@ -1162,10 +1163,14 @@ if [[ "$DEPLOY_OBS" == "true" ]]; then
         elif [[ ! -x "$DOT_DIR/custom_bins/obs-focusmate-sync" ]]; then
             log_warning "obs-focusmate-sync not found or not executable"
         else
-            if DOT_DIR="$DOT_DIR" "$DOT_DIR/custom_bins/obs-focusmate-sync" apply; then
-                log_success "Deployed OBS Focusmate profile and scene collection"
-                log_info "  In OBS, choose Profile -> Focusmate and Scene Collection -> Focusmate"
+            obs_rc=0
+            DOT_DIR="$DOT_DIR" "$DOT_DIR/custom_bins/obs-focusmate-sync" apply || obs_rc=$?
+            if [[ $obs_rc -eq 0 ]]; then
+                log_success "Deployed OBS Focusmate profile, scene collection and app settings (Focusmate is now OBS's default)"
+                log_info "  Start it hidden with the virtual camera on: obs-start"
                 log_info "  On a new Mac, pick your display and camera once; sync edits back with: sync-obs"
+            elif [[ $obs_rc -eq 75 ]]; then
+                log_warning "OBS is running, so its config was not deployed; quit OBS and rerun deploy.sh --obs"
             else
                 log_warning "OBS Focusmate config deploy failed"
             fi

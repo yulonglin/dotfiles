@@ -32,7 +32,7 @@ PYEOF
         echo "Synced Mouseless config → $dst (stripped keyboard_layout, app_version)"
     }
 
-    # Sync OBS Studio Focusmate profile and scene collection back to dotfiles (macOS only)
+    # Sync OBS Studio Focusmate profile, scene collection and app settings back to dotfiles (macOS only)
     sync-obs() {
         DOT_DIR="$DOT_DIR" "$DOT_DIR/custom_bins/obs-focusmate-sync" capture "$@"
     }
