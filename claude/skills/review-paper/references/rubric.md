@@ -57,6 +57,6 @@ Flag these explicitly when found:
 - **Cherry-picking**: Only the most favorable examples, or datasets and methods that vary between figures with no coverage table saying why
 - **Weak Statistical Standards**: Marginal significance (0.01 < p < 0.05) presented as strong
 - **Missing Baselines**: No comparison against reasonable alternatives
-- **Overcomplexity**: Jargon, coined terms, or detail that buries the claims: intervals or sample sizes in prose or tables, pre-registration statements, dates, a caveat beside every result
+- **Overcomplexity**: Jargon, coined terms, or detail that buries the claims: intervals in prose or tables, sample sizes repeated in running prose or metric tables (they belong in the dataset table), pre-registration statements, dates, a caveat beside every result
 - **Narrative-Evidence Mismatch**: Claims not well-supported by experiments
 - **Poor Reproducibility**: Insufficient detail for replication

@@ -27,7 +27,7 @@ The integrity rules in `~/.Codex/rules/research-core.md` still hold, and their l
 - Limitations are stated once, in Limitations, each naming its condition plainly ("fails when the attacker follows a fixed strategy"), not repeated beside every result.
 - No pre-registration statements, calendar dates, revision history or audit status in the body; one appendix clause can say which analyses were planned.
 - A qualitative claim about what models did ships with short transcript excerpts, and a claim about a pattern states the random sample read and its size, in the appendix.
-- A finding shown on one benchmark, or already reported in prior work, is not a headline: say "consistent with [ref]" and keep it short or move it to the appendix.
+- Scope a finding shown on one benchmark to that benchmark rather than claiming generality. Say "consistent with [ref]" only for a prior result you have verified in the cited paper, and keep that replication short.
 - No whole-clause italics; italics mark a term at its definition, if at all.
 
 # Before returning
