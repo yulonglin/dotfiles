@@ -1,0 +1,305 @@
+"""Tests for custom_bins/obs-watchdog: the freeze and screen-stop decisions, the
+BMP decoding, and the stdlib obs-websocket client against a fake server that
+follows the obs-websocket v5 auth spec."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+import socket
+import struct
+import threading
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parent.parent / "custom_bins" / "obs-watchdog"
+
+
+def _load():
+    loader = importlib.machinery.SourceFileLoader("obs_watchdog", str(SCRIPT))
+    spec = importlib.util.spec_from_loader("obs_watchdog", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+wd = _load()
+
+
+def _bmp(pixels: bytes) -> str:
+    # 14-byte file header (pixel offset 54) + 40-byte info header with 24 bits per pixel at offset 28
+    header = b"BM" + b"\0" * 8 + struct.pack("<I", 54) + b"\0" * 14 + struct.pack("<H", 24) + b"\0" * 24
+    return "data:image/bmp;base64," + base64.b64encode(header + pixels).decode()
+
+
+def _noisy(seed: int) -> bytes:
+    return hashlib.sha256(str(seed).encode()).digest() * 400
+
+
+# ── frame_verdict ────────────────────────────────────────────────────────────
+
+
+def test_live_camera_never_freezes():
+    cam: dict = {}
+    assert [wd.frame_verdict(_noisy(i), cam) for i in range(6)] == ["live"] * 6
+
+
+def test_identical_frames_freeze_after_three_checks():
+    cam: dict = {}
+    frame = _noisy(1)
+    assert [wd.frame_verdict(frame, cam) for _ in range(3)] == ["live", "same", "frozen"]
+
+
+def test_flat_frame_is_never_called_frozen():
+    cam: dict = {}
+    dark = bytes([3]) * 9000
+    assert [wd.frame_verdict(dark, cam) for _ in range(5)] == ["flat"] * 5
+
+
+def test_a_new_frame_resets_the_count():
+    cam: dict = {}
+    a, b = _noisy(1), _noisy(2)
+    verdicts = [wd.frame_verdict(f, cam) for f in (a, a, b, b, b)]
+    assert verdicts == ["live", "same", "live", "same", "frozen"]
+
+
+def test_solid_colour_is_flat_not_frozen():
+    # Codex review: a uniform (16, 32, 64) frame has high stddev across interleaved
+    # channel bytes, but no spatial variation; it must never trigger a restart.
+    cam: dict = {}
+    solid = bytes([16, 32, 64]) * (480 * 270)
+    assert [wd.frame_verdict(solid, cam) for _ in range(3)] == ["flat"] * 3
+
+
+def test_bmp_pixels_skips_the_header():
+    assert wd.bmp_pixels(_bmp(b"\x01\x02\x03")) == (b"\x01\x02\x03", 3)
+    with pytest.raises(ValueError):
+        wd.bmp_pixels("data:image/png;base64," + base64.b64encode(b"\x89PNG....").decode())
+
+
+# ── pending_screen_stop ──────────────────────────────────────────────────────
+
+LOG = (
+    "14:01:42.709: Starting Virtual Camera output to Program\n"
+    "20:37:40.459: [ mac-screencapture ]: Stream stopped as no capture source was not found.\n"
+)
+
+
+def test_screen_stop_is_pending_until_handled():
+    idx = wd.pending_screen_stop("a.txt", LOG, {})
+    assert idx == LOG.index("[ mac-screencapture ]")
+    assert wd.pending_screen_stop("a.txt", LOG, {"log": "a.txt", "offset": idx}) is None
+
+
+def test_a_later_stop_or_new_log_is_pending_again():
+    idx = LOG.index("[ mac-screencapture ]")
+    later = LOG + '21:10:00.000: [ mac-screencapture ]: Stream stopped with error -3821 ("x")\n'
+    assert wd.pending_screen_stop("a.txt", later, {"log": "a.txt", "offset": idx}) > idx
+    assert wd.pending_screen_stop("b.txt", LOG, {"log": "a.txt", "offset": idx}) == idx
+
+
+def test_no_stop_line_means_nothing_pending():
+    assert wd.pending_screen_stop("a.txt", "Starting Virtual Camera\n", {}) is None
+
+
+# ── websocket client against a fake obs-websocket server ─────────────────────
+
+PASSWORD = "hunter2-test"
+
+
+def _serve(conn: socket.socket, seen: list) -> None:
+    buf = b""
+    while b"\r\n\r\n" not in buf:
+        buf += conn.recv(4096)
+    key = [l.split(b": ", 1)[1] for l in buf.split(b"\r\n") if l.lower().startswith(b"sec-websocket-key")][0]
+    accept = base64.b64encode(hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+    conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                 b"Sec-WebSocket-Accept: " + accept + b"\r\n\r\n")
+
+    def send(obj):  # server frames are unmasked; use the 16-bit length path
+        data = json.dumps(obj).encode()
+        conn.sendall(bytes([0x81, 126]) + struct.pack(">H", len(data)) + data)
+
+    def recv():
+        b0, b1 = conn.recv(2)
+        n = b1 & 0x7F
+        if n == 126:
+            n = struct.unpack(">H", conn.recv(2))[0]
+        mask = conn.recv(4)
+        data = b""
+        while len(data) < n:
+            data += conn.recv(n - len(data))
+        return json.loads(bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+
+    salt, challenge = "c2FsdA==", "Y2hhbGxlbmdl"
+    send({"op": 0, "d": {"rpcVersion": 1, "authentication": {"salt": salt, "challenge": challenge}}})
+    ident = recv()
+    secret = base64.b64encode(hashlib.sha256((PASSWORD + salt).encode()).digest()).decode()
+    want = base64.b64encode(hashlib.sha256((secret + challenge).encode()).digest()).decode()
+    if ident["d"].get("authentication") != want:
+        conn.sendall(bytes([0x88, 2]) + struct.pack(">H", 4009))
+        return
+    send({"op": 2, "d": {"negotiatedRpcVersion": 1}})
+    req = recv()["d"]
+    seen.append(req)
+    send({"op": 5, "d": {"eventType": "Noise"}})  # an event in between must be skipped
+    ok = req["requestType"] != "Fail"
+    send({"op": 7, "d": {"requestId": req["requestId"], "requestType": req["requestType"],
+                         "requestStatus": {"result": ok, "code": 100 if ok else 600, "comment": "nope"},
+                         "responseData": {"outputActive": True}}})
+
+
+def _fake_server(seen: list) -> int:
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+
+    def run():
+        conn, _ = srv.accept()
+        with conn:
+            _serve(conn, seen)
+        srv.close()
+
+    threading.Thread(target=run, daemon=True).start()
+    return srv.getsockname()[1]
+
+
+def test_client_authenticates_and_calls():
+    seen: list = []
+    obs = wd.OBS(_fake_server(seen), PASSWORD, timeout=5)
+    assert obs.call("GetVirtualCamStatus") == {"outputActive": True}
+    assert seen[0]["requestType"] == "GetVirtualCamStatus"
+    obs.close()
+
+
+def test_wrong_password_is_a_connection_error():
+    with pytest.raises(ConnectionError):
+        wd.OBS(_fake_server([]), "wrong", timeout=5)
+
+
+def test_failed_request_raises_obs_error():
+    obs = wd.OBS(_fake_server([]), PASSWORD, timeout=5)
+    with pytest.raises(wd.OBSError):
+        obs.call("Fail")
+    obs.close()
+
+
+# ── check_camera: identical frames count as frozen only without effect ticks ──
+
+
+class FakeOBS:
+    def __init__(self, frame: bytes):
+        self.frame = frame
+
+    def call(self, request, data=None):
+        if request == "GetVirtualCamStatus":
+            return {"outputActive": True}
+        if request == "GetInputList":
+            return {"inputs": [{"inputName": "Cam"}] if data["inputKind"] == "macos-avcapture" else []}
+        if request == "GetCurrentProgramScene":
+            return {"currentProgramSceneName": "Scene"}
+        if request == "GetSceneItemList":
+            return {"sceneItems": [{"sourceName": "Cam", "sceneItemEnabled": True}]}
+        if request == "GetSourceScreenshot":
+            return {"imageData": _bmp(self.frame)}
+        raise AssertionError(request)
+
+
+@pytest.mark.parametrize("ticks,frozen", [("0", True), ("39", False), ("", False)])
+def test_identical_frames_need_silent_effects_to_be_frozen(monkeypatch, ticks, frozen):
+    # 39 ticks: background replacement with nobody in frame (live, static image).
+    # "" : the log could not be read, so never restart on a guess.
+    monkeypatch.setenv("OBS_WATCHDOG_EFFECT_TICKS", ticks)
+    obs, state = FakeOBS(_noisy(7)), {}
+    results = [wd.check_camera(obs, state, dry_run=False) for _ in range(3)]
+    assert results[-1] == ("Cam" if frozen else None)
+    assert results[:2] == [None, None]
+
+
+class StatusOBS:
+    def __init__(self, record=False, stream=False, collection="Focusmate"):
+        self.r, self.s, self.c = record, stream, collection
+
+    def call(self, request, data=None):
+        return {
+            "GetRecordStatus": {"outputActive": self.r},
+            "GetStreamStatus": {"outputActive": self.s},
+            "GetSceneCollectionList": {"currentSceneCollectionName": self.c},
+            "GetProfileList": {"currentProfileName": "Focusmate"},
+        }[request]
+
+
+@pytest.fixture
+def focusmate_dir(tmp_path, monkeypatch):
+    (tmp_path / "basic" / "scenes").mkdir(parents=True)
+    (tmp_path / "basic" / "scenes" / "Focusmate.json").write_text("{}")
+    monkeypatch.setattr(wd, "OBS_DIR", tmp_path)
+    monkeypatch.setenv("OBS_WATCHDOG_ASSUME_PIDS", "123")
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "obs,reason",
+    [
+        (StatusOBS(), None),
+        (StatusOBS(record=True), "recording"),
+        (StatusOBS(stream=True), "streaming"),
+        (StatusOBS(collection="Missing"), "Missing"),
+    ],
+)
+def test_restart_is_blocked_by_recording_streaming_or_missing_collection(focusmate_dir, obs, reason):
+    blocker = wd.restart_blocker(obs)
+    assert (blocker is None) if reason is None else (reason in blocker)
+
+
+def test_restart_relaunches_onto_the_running_collection(focusmate_dir):
+    (focusmate_dir / "basic" / "scenes" / "Untitled.json").write_text("{}")
+    obs = StatusOBS(collection="Untitled")
+    assert wd.restart_blocker(obs) is None
+    assert obs.relaunch_args == ["--profile", "Focusmate", "--collection", "Untitled"]
+
+
+def test_failed_screen_restart_keeps_the_stop_pending(tmp_path, monkeypatch):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "a.txt").write_text(LOG)
+    monkeypatch.setattr(wd, "LOG_DIR", logs)
+    monkeypatch.setenv("OBS_WATCHDOG_DISPLAY_ASLEEP", "0")
+
+    class Failing:
+        def call(self, request, data=None):
+            if request == "GetInputList":
+                return {"inputs": [{"inputName": "Screen"}] if data["inputKind"] == "screen_capture" else []}
+            raise wd.OBSError("boom")
+
+    state: dict = {}
+    wd.check_screen(Failing(), state, dry_run=False)
+    assert "screen_handled" not in state
+
+
+# ── setup ────────────────────────────────────────────────────────────────────
+
+
+def test_setup_enables_websocket_and_keeps_password(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"server_enabled": False, "auth_required": True,
+                               "server_password": "keep-me", "server_port": 4455}))
+    monkeypatch.setattr(wd, "WS_CONFIG", cfg)
+    monkeypatch.setenv("OBS_WATCHDOG_ASSUME_PIDS", "")
+    assert wd.setup() == 0
+    data = json.loads(cfg.read_text())
+    assert data["server_enabled"] is True and data["server_password"] == "keep-me"
+    assert oct(os.stat(cfg).st_mode & 0o777) == "0o600"
+
+
+def test_setup_generates_a_password_when_missing(tmp_path, monkeypatch):
+    cfg = tmp_path / "plugin_config" / "config.json"
+    monkeypatch.setattr(wd, "WS_CONFIG", cfg)
+    monkeypatch.setenv("OBS_WATCHDOG_ASSUME_PIDS", "")
+    assert wd.setup() == 0
+    assert len(json.loads(cfg.read_text())["server_password"]) >= 24

@@ -1,0 +1,654 @@
+#!/usr/bin/env python3
+"""obs-watchdog: unfreeze OBS's Focusmate feeds without anyone noticing first.
+
+Two failures froze the Focusmate virtual camera on 2026-11-25 while OBS itself
+kept rendering (861k frames, 13 late):
+
+1. Screen overlay. When the display sleeps, macOS stops OBS's ScreenCaptureKit
+   stream (`[ mac-screencapture ]: Stream stopped ...` in the OBS log) and OBS
+   never restarts it. Once the display is awake the watchdog flips the
+   source's `show_cursor` setting and back through obs-websocket: OBS treats a
+   changed setting as a reason to rebuild the stream. (Its "Restart capture"
+   button would do the same, but pressing a property button builds the source's
+   properties on a websocket thread, and listing this source's display property
+   that way segfaulted OBS 33.0.3 on 2026-11-25; the settings path is the one
+   OBS's own UI uses.)
+2. Camera. The Studio Display Camera feed stopped arriving with no error, once
+   at a display wake (13:58) and once with no display event (21:31), the second
+   time while the macOS video-effects thread was in a Neural Engine call. Only a
+   full OBS restart has been shown to clear it. The watchdog takes a screenshot
+   of each visible camera source every tick. A frame that stays bit-identical
+   for FREEZE_TICKS ticks is frozen only if OBS's per-second video-effects log
+   lines have also stopped: a raw sensor never repeats a frame exactly, but
+   background replacement with nobody in frame does, from a live camera. Then it
+   saves a `sample` of OBS's threads for diagnosis and restarts OBS through
+   obs-start. Near-uniform frames (lens covered, dark room) are skipped, and
+   restarts are rate-limited.
+
+Runs every 20 s from the com.user.obs-watchdog LaunchAgent
+(scripts/cleanup/setup_obs_watchdog.sh, part of `deploy.sh --obs`). Each run is
+one short check and exits 0 when OBS is not running. Stdlib only, because the
+LaunchAgent's PATH has no uv. State: ~/.local/state/obs-watchdog/.
+
+Usage:
+  obs-watchdog              one check (what the LaunchAgent runs)
+  obs-watchdog --dry-run    report what a check would do, change nothing
+  obs-watchdog --status     websocket config, connection and recent actions
+  obs-watchdog --setup      enable obs-websocket (localhost client, password
+                            auth); takes effect the next time OBS starts
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import ctypes
+import hashlib
+import json
+import os
+import secrets
+import signal
+import socket
+import statistics
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+OBS_DIR = Path(
+    os.environ.get("OBS_WATCHDOG_OBS_DIR", "~/Library/Application Support/obs-studio")
+).expanduser()
+WS_CONFIG = OBS_DIR / "plugin_config" / "obs-websocket" / "config.json"
+LOG_DIR = OBS_DIR / "logs"
+STATE_DIR = Path(os.environ.get("OBS_WATCHDOG_STATE", "~/.local/state/obs-watchdog")).expanduser()
+STATE_FILE = STATE_DIR / "state.json"
+OBS_START = Path(__file__).resolve().parent / "obs-start"
+
+SCREEN_STOP = "[ mac-screencapture ]: Stream stopped"
+SCREEN_KINDS = ("screen_capture",)
+CAMERA_KINDS = ("macos-avcapture", "macos-avcapture-fast", "av_capture_input")
+FREEZE_TICKS = 3  # identical frames on this many consecutive checks = frozen
+FLAT_STDDEV = 4.0  # below this the frame is near-uniform: cannot tell frozen from dark
+RESTART_COOLDOWN_S = 15 * 60
+SHOT_WIDTH = 480  # half the 960x540 preset: keeps per-pixel sensor noise
+RELAUNCH_TRIES = 3
+
+
+def paint(text: str, colour: str) -> str:
+    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+        return text
+    codes = {"green": "32", "yellow": "33", "red": "31", "bold": "1", "dim": "2"}
+    return f"\033[{codes[colour]}m{text}\033[0m"
+
+
+def log(msg: str) -> None:
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}", flush=True)
+
+
+# ── minimal obs-websocket v5 client (RFC 6455 text frames, stdlib only) ──────
+
+
+class OBSError(Exception):
+    pass
+
+
+class WebSocket:
+    def __init__(self, host: str, port: int, timeout: float) -> None:
+        self.sock = socket.create_connection((host, port), timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall(
+            (
+                f"GET / HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\n"
+                f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: obswebsocket.json\r\n\r\n"
+            ).encode()
+        )
+        self.buf = bytearray()
+        while b"\r\n\r\n" not in self.buf:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise ConnectionError("OBS closed the connection during the handshake")
+            self.buf += chunk
+        head, _, rest = bytes(self.buf).partition(b"\r\n\r\n")
+        if b" 101 " not in head.split(b"\r\n", 1)[0]:
+            raise ConnectionError(f"websocket handshake refused: {head[:80]!r}")
+        self.buf = bytearray(rest)
+
+    def _exact(self, n: int) -> bytes:
+        while len(self.buf) < n:
+            chunk = self.sock.recv(1 << 16)
+            if not chunk:
+                raise ConnectionError("OBS closed the connection")
+            self.buf += chunk
+        out = bytes(self.buf[:n])
+        del self.buf[:n]
+        return out
+
+    def _send_frame(self, opcode: int, data: bytes) -> None:
+        header = bytearray([0x80 | opcode])
+        n = len(data)
+        if n < 126:
+            header.append(0x80 | n)
+        elif n < 1 << 16:
+            header.append(0x80 | 126)
+            header += struct.pack(">H", n)
+        else:
+            header.append(0x80 | 127)
+            header += struct.pack(">Q", n)
+        mask = os.urandom(4)
+        self.sock.sendall(bytes(header) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+
+    def send(self, obj: dict) -> None:
+        self._send_frame(0x1, json.dumps(obj).encode())
+
+    def recv(self) -> dict:
+        parts: list[bytes] = []
+        while True:
+            b0, b1 = self._exact(2)
+            opcode, n = b0 & 0x0F, b1 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", self._exact(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", self._exact(8))[0]
+            mask = self._exact(4) if b1 & 0x80 else None
+            payload = self._exact(n)
+            if mask:
+                payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+            if opcode == 0x8:
+                code = struct.unpack(">H", payload[:2])[0] if len(payload) >= 2 else 0
+                raise ConnectionError(f"OBS closed the connection (code {code})")
+            if opcode == 0x9:
+                self._send_frame(0xA, payload)
+                continue
+            if opcode == 0xA:
+                continue
+            parts.append(payload)
+            if b0 & 0x80:
+                return json.loads(b"".join(parts))
+
+    def close(self) -> None:
+        try:
+            self._send_frame(0x8, struct.pack(">H", 1000))  # clean close, not a 1006 in OBS's log
+        except OSError:
+            pass
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+class OBS:
+    def __init__(self, port: int, password: str, timeout: float = 5.0) -> None:
+        self.ws = WebSocket("127.0.0.1", port, timeout)
+        hello = self.ws.recv()
+        ident: dict[str, Any] = {"rpcVersion": 1, "eventSubscriptions": 0}
+        auth = hello.get("d", {}).get("authentication")
+        if auth:
+            secret = base64.b64encode(hashlib.sha256((password + auth["salt"]).encode()).digest()).decode()
+            ident["authentication"] = base64.b64encode(
+                hashlib.sha256((secret + auth["challenge"]).encode()).digest()
+            ).decode()
+        self.ws.send({"op": 1, "d": ident})
+        if self.ws.recv().get("op") != 2:
+            raise ConnectionError("obs-websocket did not accept the identify message")
+        self.seq = 0
+
+    def call(self, request: str, data: Optional[dict] = None) -> dict:
+        self.seq += 1
+        rid = str(self.seq)
+        self.ws.send({"op": 6, "d": {"requestType": request, "requestId": rid, "requestData": data or {}}})
+        while True:
+            msg = self.ws.recv()
+            d = msg.get("d", {})
+            if msg.get("op") == 7 and d.get("requestId") == rid:
+                status = d.get("requestStatus", {})
+                if not status.get("result"):
+                    raise OBSError(f"{request}: code {status.get('code')} {status.get('comment', '')}".strip())
+                return d.get("responseData") or {}
+
+    def close(self) -> None:
+        self.ws.close()
+
+
+# ── state, config, machine probes ────────────────────────────────────────────
+
+
+def load_state() -> dict:
+    try:
+        return json.loads(STATE_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state: dict) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=1, sort_keys=True))
+    tmp.replace(STATE_FILE)
+
+
+def read_ws_config() -> dict:
+    try:
+        return json.loads(WS_CONFIG.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def obs_pids() -> list[int]:
+    forced = os.environ.get("OBS_WATCHDOG_ASSUME_PIDS")
+    if forced is not None:
+        return [int(p) for p in forced.split(",") if p]
+    out = subprocess.run(["/usr/bin/pgrep", "-x", "OBS"], capture_output=True, text=True, check=False)
+    return [int(p) for p in out.stdout.split()]
+
+
+def display_asleep() -> bool:
+    forced = os.environ.get("OBS_WATCHDOG_DISPLAY_ASLEEP")
+    if forced is not None:
+        return forced == "1"
+    try:
+        cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cg.CGMainDisplayID.restype = ctypes.c_uint32
+        cg.CGDisplayIsAsleep.argtypes = [ctypes.c_uint32]
+        cg.CGDisplayIsAsleep.restype = ctypes.c_int
+        return bool(cg.CGDisplayIsAsleep(cg.CGMainDisplayID()))
+    except (OSError, AttributeError):
+        return False  # unknown: pressing the restart button while asleep is retried anyway
+
+
+def notify(message: str) -> None:
+    if os.environ.get("OBS_WATCHDOG_NO_NOTIFY"):
+        return
+    script = f"display notification {json.dumps(message)} with title \"OBS watchdog\""
+    subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, check=False, timeout=10)
+
+
+# ── decisions (pure, unit-tested) ────────────────────────────────────────────
+
+
+def newest_obs_log() -> Optional[Path]:
+    logs = list(LOG_DIR.glob("*.txt")) if LOG_DIR.is_dir() else []
+    return max(logs, key=lambda p: p.stat().st_mtime) if logs else None
+
+
+def pending_screen_stop(log_name: str, text: str, handled: dict) -> Optional[int]:
+    """Offset of the latest screen-stream stop not yet handled, else None."""
+    idx = text.rfind(SCREEN_STOP)
+    if idx < 0:
+        return None
+    if handled.get("log") == log_name and handled.get("offset", -1) >= idx:
+        return None
+    return idx
+
+
+def bmp_pixels(data_uri: str) -> tuple[bytes, int]:
+    """Pixel bytes and bytes per pixel of a BMP data URI."""
+    raw = base64.b64decode(data_uri.split(",", 1)[-1])
+    if raw[:2] != b"BM":
+        raise ValueError("screenshot is not a BMP")
+    bpp = struct.unpack("<H", raw[28:30])[0] // 8 if len(raw) >= 30 else 3
+    return raw[struct.unpack("<I", raw[10:14])[0] :], max(bpp, 1)
+
+
+def is_flat(pixels: bytes, stride: int = 3) -> bool:
+    """True when every colour channel is near-constant across the frame (a solid colour counts)."""
+    step = stride * 7  # sample every 7th pixel, each channel on its own
+    return all(
+        statistics.pstdev(pixels[c::step] or b"\0") < FLAT_STDDEV for c in range(min(stride, 3))
+    )
+
+
+def frame_verdict(pixels: bytes, cam: dict, stride: int = 3) -> str:
+    """Update one camera's tracking dict; return 'flat', 'live', 'same' or 'frozen'."""
+    if is_flat(pixels, stride):
+        cam.update(hash=None, same=0)
+        return "flat"
+    digest = hashlib.sha1(pixels).hexdigest()
+    if cam.get("hash") == digest:
+        cam["same"] = cam.get("same", 0) + 1
+    else:
+        cam.update(hash=digest, same=0)
+        return "live"
+    return "frozen" if cam["same"] >= FREEZE_TICKS - 1 else "same"
+
+
+# ── actions ──────────────────────────────────────────────────────────────────
+
+
+def inputs_of(obs: OBS, kinds: tuple) -> list[str]:
+    names: list[str] = []
+    for kind in kinds:
+        try:
+            names += [i["inputName"] for i in obs.call("GetInputList", {"inputKind": kind}).get("inputs", [])]
+        except OBSError:
+            pass
+    return names
+
+
+def restart_screen_source(obs: OBS, name: str) -> None:
+    """Rebuild the ScreenCaptureKit stream by changing a setting and changing it back."""
+    settings = obs.call("GetInputSettings", {"inputName": name}).get("inputSettings", {})
+    shown = bool(settings.get("show_cursor", True))
+    for value in (not shown, shown):
+        obs.call("SetInputSettings", {"inputName": name, "inputSettings": {"show_cursor": value}, "overlay": True})
+        time.sleep(0.5)
+
+
+def check_screen(obs: OBS, state: dict, dry_run: bool) -> None:
+    log_path = newest_obs_log()
+    if log_path is None:
+        return
+    text = log_path.read_text(errors="replace")
+    idx = pending_screen_stop(log_path.name, text, state.get("screen_handled", {}))
+    if idx is None:
+        return
+    if display_asleep():
+        return  # restart once the display is back; the stream would stop again now
+    names = inputs_of(obs, SCREEN_KINDS)
+    ok = bool(names)
+    for name in names:
+        if dry_run:
+            log(f"would restart screen source '{name}' (stop at offset {idx} in {log_path.name})")
+            continue
+        try:
+            restart_screen_source(obs, name)
+            log(f"screen capture stopped (display sleep); restarted '{name}'")
+        except OBSError as e:
+            ok = False
+            log(f"could not restart screen source '{name}': {e}")
+    if ok and not dry_run:  # a failed restart keeps the stop pending for the next check
+        state["screen_handled"] = {"log": log_path.name, "offset": idx}
+        state.setdefault("events", []).append({"t": int(time.time()), "what": "screen-restart"})
+
+
+def visible_cameras(obs: OBS) -> list[str]:
+    cameras = set(inputs_of(obs, CAMERA_KINDS))
+    if not cameras:
+        return []
+    scene = obs.call("GetCurrentProgramScene").get("currentProgramSceneName")
+    items = obs.call("GetSceneItemList", {"sceneName": scene}).get("sceneItems", [])
+    return [i["sourceName"] for i in items if i.get("sceneItemEnabled") and i.get("sourceName") in cameras]
+
+
+def effect_ticks(seconds: int = 40) -> Optional[int]:
+    """Per-second video-effects log lines from OBS in the last `seconds`, or None if unknown.
+
+    With macOS Video Effects on (Portrait, Studio Light, background replacement)
+    the camera thread in OBS logs one `effect duration` line a second while frames
+    arrive; on 2026-11-25 those lines stopped at the moment the camera froze.
+    Background replacement with nobody in frame gives bit-identical frames from a
+    live camera, so identical screenshots alone are not proof of a freeze.
+    """
+    forced = os.environ.get("OBS_WATCHDOG_EFFECT_TICKS")
+    if forced is not None:
+        return int(forced) if forced else None
+    pids = obs_pids()
+    if not pids:
+        return None
+    try:
+        out = subprocess.run(
+            ["/usr/bin/log", "show", "--last", f"{seconds}s", "--style", "compact", "--predicate",
+             f'processID == {pids[0]} && subsystem == "com.apple.cmio" && eventMessage CONTAINS "effect duration"'],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.count("effect duration")
+
+
+def check_camera(obs: OBS, state: dict, dry_run: bool) -> Optional[str]:
+    """Return the name of a frozen camera source, else None."""
+    tracking = state.setdefault("camera", {})
+    if not obs.call("GetVirtualCamStatus").get("outputActive"):
+        tracking.clear()
+        return None
+    frozen = None
+    for name in visible_cameras(obs):
+        shot = obs.call(
+            "GetSourceScreenshot", {"sourceName": name, "imageFormat": "bmp", "imageWidth": SHOT_WIDTH}
+        )
+        cam = tracking.setdefault(name, {})
+        pixels, stride = bmp_pixels(shot["imageData"])
+        verdict = frame_verdict(pixels, cam, stride)
+        if verdict == "frozen":
+            ticks = effect_ticks()
+            if ticks is None or ticks > 0:
+                # Effects still processing frames (a static background-replaced
+                # scene), or no way to tell: not frozen. Start counting again.
+                verdict = "static" if ticks else "unknown"
+                cam["same"] = 0
+        if dry_run:
+            log(f"camera '{name}': {verdict} (identical for {tracking[name].get('same', 0)} more checks)")
+        if verdict == "frozen":
+            frozen = name
+    return frozen
+
+
+def restart_blocker(obs: OBS) -> Optional[str]:
+    """Why quitting OBS now would hurt something other than the frozen camera, if it would."""
+    if obs.call("GetRecordStatus").get("outputActive"):
+        return "OBS is recording"
+    if obs.call("GetStreamStatus").get("outputActive"):
+        return "OBS is streaming"
+    # Relaunch onto whatever is running now: on 2026-11-25 Yulong's everyday OBS
+    # ran the Untitled collection, not Focusmate.
+    collection = obs.call("GetSceneCollectionList").get("currentSceneCollectionName") or ""
+    profile = obs.call("GetProfileList").get("currentProfileName") or ""
+    if not collection or not (OBS_DIR / "basic" / "scenes" / f"{collection}.json").is_file():
+        return f"no local file for scene collection '{collection}' to relaunch with"
+    if len(obs_pids()) != 1:
+        return "more than one OBS process is running"
+    obs.relaunch_args = ["--profile", profile, "--collection", collection] if profile else ["--collection", collection]
+    return None
+
+
+def relaunch(state: dict, args: Optional[list] = None) -> bool:
+    """Run obs-start and wait for OBS to come up; record a pending relaunch if it does not."""
+    args = args if args is not None else state.get("relaunch_args", [])
+    state["relaunch_args"] = args
+    rc = subprocess.run([str(OBS_START), *args], capture_output=True, check=False, timeout=30).returncode
+    deadline = time.time() + 20
+    while not obs_pids() and time.time() < deadline:
+        time.sleep(0.5)
+    if rc == 0 and obs_pids():
+        state.pop("pending_relaunch", None)
+        return True
+    pending = state.setdefault("pending_relaunch", {"since": int(time.time()), "tries": 0})
+    pending["tries"] += 1
+    log(f"relaunching OBS failed (obs-start exit {rc}, try {pending['tries']})")
+    return False
+
+
+def retry_pending_relaunch(state: dict) -> None:
+    """OBS is down after a watchdog restart that failed to relaunch it: try again, a few times."""
+    pending = state.get("pending_relaunch")
+    if not pending or pending.get("tries", 0) >= RELAUNCH_TRIES:
+        return
+    if relaunch(state):
+        log("OBS relaunched on retry")
+        notify("OBS is back after a failed relaunch.")
+    elif pending["tries"] >= RELAUNCH_TRIES:
+        notify(f"OBS is down: the watchdog quit it and {RELAUNCH_TRIES} relaunches failed. Run obs-start.")
+
+
+def restart_obs(obs: OBS, state: dict, camera: str, dry_run: bool) -> None:
+    now = int(time.time())
+    last = state.get("last_restart", 0)
+    if now - last < RESTART_COOLDOWN_S:
+        if state.get("cooldown_notified") != last:
+            log(f"camera '{camera}' frozen again within {RESTART_COOLDOWN_S // 60} min of a restart; not restarting")
+            notify(f"Camera '{camera}' froze again soon after a restart. Restart OBS by hand.")
+            state["cooldown_notified"] = last
+        return
+    blocker = restart_blocker(obs)
+    if blocker:
+        if state.get("blocked_notified") != blocker:
+            log(f"camera '{camera}' frozen, but not restarting: {blocker}")
+            notify(f"Camera '{camera}' froze; not restarting OBS because {blocker}.")
+            state["blocked_notified"] = blocker
+        return
+    state.pop("blocked_notified", None)
+    if dry_run:
+        log(f"would save a thread sample and restart OBS: camera '{camera}' frozen")
+        return
+    pid = obs_pids()[0]
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    sample = STATE_DIR / f"sample-{time.strftime('%Y%m%d-%H%M%S')}.txt"
+    subprocess.run(["/usr/bin/sample", str(pid), "3", "-file", str(sample)], capture_output=True, check=False, timeout=60)
+    log(f"camera '{camera}' frozen; thread sample saved to {sample}; restarting OBS (pid {pid})")
+    obs.close()
+    state.update(last_restart=now, camera={})
+    save_state(state)  # a restart this run cannot finish is still on record for the next one
+
+    def alive() -> bool:
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
+    subprocess.run(["/usr/bin/osascript", "-e", 'tell application "OBS" to quit'], capture_output=True, check=False, timeout=30)
+    for sig, wait in ((None, 20), (signal.SIGTERM, 5), (signal.SIGKILL, 5)):
+        if sig is not None:
+            try:
+                os.kill(pid, sig)  # only the instance that was checked, never every OBS
+            except ProcessLookupError:
+                pass
+            log(f"OBS did not quit; sent {sig.name}")
+        deadline = time.time() + wait
+        while alive() and time.time() < deadline:
+            time.sleep(0.5)
+        if not alive():
+            break
+    time.sleep(3)  # a relaunch within a second of quitting found no camera on 2026-11-25
+    ok = relaunch(state, getattr(obs, "relaunch_args", []))
+    state.setdefault("events", []).append(
+        {"t": now, "what": "obs-restart" if ok else "obs-restart-relaunch-failed", "camera": camera, "sample": str(sample)}
+    )
+    if ok:
+        notify(f"Camera '{camera}' froze, so OBS was restarted. Thread sample: {sample.name}")
+    else:
+        notify(f"Camera '{camera}' froze; OBS was quit but did not relaunch. Retrying; or run obs-start.")
+
+
+# ── commands ─────────────────────────────────────────────────────────────────
+
+
+def connect(state: dict, quiet: bool) -> Optional[OBS]:
+    cfg = read_ws_config()
+    error = None
+    if not cfg.get("server_enabled"):
+        error = "obs-websocket is disabled; run: obs-watchdog --setup, then restart OBS"
+    else:
+        try:
+            return OBS(int(cfg.get("server_port", 4455)), cfg.get("server_password", ""))
+        except (OSError, ConnectionError, ValueError) as e:
+            error = f"cannot reach obs-websocket ({e}); restart OBS once after --setup"
+    if not quiet and state.get("last_error") != error:
+        log(error)  # log each distinct error once, not every 20 s
+    state["last_error"] = error
+    return None
+
+
+def run_check(dry_run: bool) -> int:
+    if not obs_pids():
+        state = load_state()
+        if state.get("pending_relaunch") and not dry_run:
+            retry_pending_relaunch(state)
+            save_state(state)
+        return 0
+    state = load_state()
+    state.pop("pending_relaunch", None)
+    obs = connect(state, quiet=False)
+    if obs is None:
+        save_state(state)
+        return 0
+    state["last_error"] = None
+    try:
+        check_screen(obs, state, dry_run)
+        frozen = check_camera(obs, state, dry_run)
+        if frozen:
+            restart_obs(obs, state, frozen, dry_run)
+    except (OBSError, ConnectionError, OSError, ValueError, KeyError) as e:
+        log(f"check failed: {e}")
+    finally:
+        obs.close()
+    state["events"] = state.get("events", [])[-50:]
+    if not dry_run:
+        save_state(state)
+    return 0
+
+
+def setup() -> int:
+    cfg = read_ws_config()
+    before = dict(cfg)
+    cfg["server_enabled"] = True
+    cfg["auth_required"] = True
+    cfg.setdefault("server_port", 4455)
+    cfg.setdefault("alerts_enabled", False)
+    cfg["first_load"] = False
+    if not cfg.get("server_password"):
+        cfg["server_password"] = secrets.token_urlsafe(24)
+    if cfg == before:
+        print(paint("obs-websocket already enabled", "green") + " (password auth, port " + str(cfg["server_port"]) + ")")
+        return 0
+    WS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = WS_CONFIG.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cfg, indent=4))
+    os.chmod(tmp, 0o600)
+    tmp.replace(WS_CONFIG)
+    msg = paint("obs-websocket enabled", "green") + f" (password auth, port {cfg['server_port']})"
+    if obs_pids():
+        msg += "; " + paint("restart OBS once", "yellow") + " for it to take effect"
+    print(msg)
+    return 0
+
+
+def status() -> int:
+    cfg = read_ws_config()
+    state = load_state()
+    enabled = bool(cfg.get("server_enabled"))
+    print(f"{paint('websocket', 'bold')}: " + (paint("enabled", "green") if enabled else paint("disabled", "red")))
+    if not obs_pids():
+        print(f"{paint('OBS', 'bold')}: " + paint("not running", "yellow"))
+    else:
+        obs = connect({}, quiet=True) if enabled else None
+        link = paint("connected", "green") if obs else paint("unreachable (restart OBS after --setup)" if enabled else "off", "red")
+        print(f"{paint('OBS', 'bold')}: running, websocket {link}")
+        if obs:
+            vcam = obs.call("GetVirtualCamStatus").get("outputActive")
+            print(f"{paint('virtual camera', 'bold')}: " + (paint("on", "green") if vcam else paint("off", "yellow")))
+            print(f"{paint('cameras watched', 'bold')}: {', '.join(visible_cameras(obs)) or 'none'}")
+            obs.close()
+    for ev in state.get("events", [])[-5:]:
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(ev["t"]))
+        print(paint(f"  {when} {ev['what']} {ev.get('camera', '')}".rstrip(), "dim"))
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="obs-watchdog",
+        description="Restart OBS's screen capture after display sleep, and restart OBS when its camera feed freezes.",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--dry-run", action="store_true", help="report what a check would do, change nothing")
+    group.add_argument("--status", action="store_true", help="show websocket, connection and recent actions")
+    group.add_argument("--setup", action="store_true", help="enable obs-websocket with password auth")
+    args = parser.parse_args()
+    if sys.platform != "darwin":
+        print("obs-watchdog: macOS only", file=sys.stderr)
+        return 69
+    if args.setup:
+        return setup()
+    if args.status:
+        return status()
+    return run_check(args.dry_run)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
