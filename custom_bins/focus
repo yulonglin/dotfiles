@@ -157,6 +157,7 @@ import argparse
 import copy
 import datetime as dt
 import fcntl
+import fnmatch
 import hashlib
 import json
 import math
@@ -596,14 +597,47 @@ def is_blocklist(cfg: dict, mode: str) -> bool:
     return (cfg["modes"].get(mode) or {}).get("kind") == "blocklist"
 
 
+def _host_path(pattern: str) -> tuple[str, str]:
+    """A site pattern's host, without a scheme or a leading '*.', and its path."""
+    p = pattern.split("://", 1)[-1]
+    host, _, path = p.partition("/")
+    return host.removeprefix("*.").lower(), path
+
+
+def touches_ban(allowed: str, banned: str) -> bool:
+    """Whether an exception for `allowed` could open part of the ban `banned`.
+
+    Cold Turkey matches subdomains and '*' patterns, so this is conservative: the
+    hosts touch when they are equal, one sits under the other, or one '*' pattern
+    matches the other. The one safe case kept out is a path exception on a parent
+    domain ('google.com/travel*') beside a ban on a different subdomain
+    ('news.google.com'), since the path cannot open that subdomain's pages."""
+    a_host, a_path = _host_path(allowed)
+    b_host, _ = _host_path(banned)
+    if a_path and b_host != a_host and b_host.endswith("." + a_host):
+        return False
+    return (
+        a_host == b_host
+        or a_host.endswith("." + b_host)
+        or b_host.endswith("." + a_host)
+        or fnmatch.fnmatch(a_host, b_host)
+        or fnmatch.fnmatch(b_host, a_host)
+    )
+
+
 def ct_exceptions(cfg: dict, mode: str) -> list[str]:
-    """The exceptions of a mode's Cold Turkey block. An exception overrides its own
-    block, and a pattern ban ('*.wikipedia.org') cannot be checked against an allowed
-    entry ('en.wikipedia.org') by string, so a blocklist mode takes only `always_allow`
-    as exceptions: its own `allow` groups feed '✅ focus: shared' and nothing else."""
-    if is_blocklist(cfg, mode):
-        return group_items(cfg, cfg.get("always_allow") or [], "sites")
-    return desired_exceptions(cfg, mode)
+    """The exceptions of a mode's Cold Turkey block. For a blocklist mode they are
+    `always_allow` plus its own `allow` groups (Yulong, 2026-11-26: admin keeps its
+    allowed sites), less any allowed site that touches one of its bans, because an
+    exception overrides its own block and would undo that ban."""
+    if not is_blocklist(cfg, mode):
+        return desired_exceptions(cfg, mode)
+    keep = group_items(cfg, cfg.get("always_allow") or [], "sites")
+    bans = group_items(cfg, cfg["modes"][mode].get("block") or [], "sites")
+    for site in group_items(cfg, cfg["modes"][mode].get("allow") or [], "sites"):
+        if site not in keep and not any(touches_ban(site, b) for b in bans):
+            keep.append(site)
+    return keep
 
 
 def desired_web(cfg: dict, mode: str) -> list[str]:
@@ -2309,6 +2343,12 @@ def cmd_sync(cfg: dict, gated: bool = True) -> None:
                 f"  {paint(name, '1')}: {count} site(s). Blocks > edit '{name}' > "
                 f"{tab} tab > Import > Websites from file... > {path}"
             )
+        # The Blocks page has its own Import, which takes only a .ctbbl and calls a
+        # .txt an invalid file (Yulong hit it, 2026-11-26).
+        print(
+            "  Use the Import inside the block's editor, not the one on the Blocks "
+            "page: that one takes only .ctbbl files."
+        )
     for line in held:
         print(paint(line, "33"))
     # One command applies the note everywhere: ScreenZen too, for the running mode.

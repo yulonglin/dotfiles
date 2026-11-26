@@ -3975,9 +3975,8 @@ def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
         )
     )
     cfg = ct.load_config(p)
-    # only always_allow becomes an exception, so no allow pattern can undo a pattern ban
-    # ('*.wikipedia.org' against 'en.wikipedia.org'); found by the second review round
-    assert ct.ct_exceptions(cfg, "admin") == ["file://*.*", "localhost"]
+    # its allowed sites are exceptions too (2026-11-26), except those that touch a ban
+    assert ct.ct_exceptions(cfg, "admin") == ["file://*.*", "localhost", "opentable.com"]
     assert "nytimes.com" in ct.sz_allow_sites(cfg, [])
     assert "opentable.com" in ct.sz_allow_sites(cfg, [])
     # a leftover exception for a banned site is flagged for hand removal
@@ -3990,13 +3989,30 @@ def test_a_site_both_allowed_and_banned_stays_banned_in_a_blocklist_mode(
         }
     }
     assert ct.drift(cfg, blocks, "admin")["extra_exc"] == [
-        "opentable.com",
         "nytimes.com",
         "wikipedia.org",
     ]
     out = tmp_path / "x.ctbbl"
     ct.cmd_export(cfg, out)
     assert "nytimes.com" not in json.loads(out.read_text())["mode: admin"]["exceptions"]
+
+
+@pytest.mark.parametrize(
+    "allowed, banned, touches",
+    [
+        ("nytimes.com", "nytimes.com", True),
+        ("en.wikipedia.org", "*.wikipedia.org", True),  # under a pattern ban
+        ("*.wikipedia.org", "wikipedia.org", True),
+        ("google.com", "news.google.com", True),  # a parent opens the subdomain
+        ("google.com/travel*", "news.google.com", False),  # a path cannot
+        ("news.google.com/x", "news.google.com", True),
+        ("airbnb.*", "airbnb.com", True),
+        ("opentable.com", "nytimes.com", False),
+        ("*.gov", "whitehouse.gov", True),
+    ],
+)
+def test_touches_ban(allowed, banned, touches):
+    assert ct.touches_ban(allowed, banned) is touches
 
 
 def test_an_unread_command_is_taken_back_so_it_cannot_run_hours_later(cfg, monkeypatch):
