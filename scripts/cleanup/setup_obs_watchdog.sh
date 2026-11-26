@@ -46,6 +46,13 @@ install() {
         return 1
     fi
 
+    # obs-start relaunches OBS on this collection; without it a restart would
+    # leave OBS down, so wait for deploy.sh --obs to install it first.
+    if [[ ! -f "$HOME/Library/Application Support/obs-studio/basic/scenes/Focusmate.json" ]]; then
+        _sched_log_warn "No local Focusmate scene collection yet; OBS watchdog not installed (quit OBS, rerun deploy.sh --obs)."
+        return 0
+    fi
+
     chmod +x "$WATCHDOG"
     "$WATCHDOG" --setup
     schedule_interval "$JOB_ID" "$WATCHDOG" "$INTERVAL_SECONDS"

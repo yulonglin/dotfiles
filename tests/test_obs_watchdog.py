@@ -32,7 +32,8 @@ wd = _load()
 
 
 def _bmp(pixels: bytes) -> str:
-    header = b"BM" + b"\0" * 8 + struct.pack("<I", 54) + b"\0" * 40
+    # 14-byte file header (pixel offset 54) + 40-byte info header with 24 bits per pixel at offset 28
+    header = b"BM" + b"\0" * 8 + struct.pack("<I", 54) + b"\0" * 14 + struct.pack("<H", 24) + b"\0" * 24
     return "data:image/bmp;base64," + base64.b64encode(header + pixels).decode()
 
 
@@ -67,8 +68,16 @@ def test_a_new_frame_resets_the_count():
     assert verdicts == ["live", "same", "live", "same", "frozen"]
 
 
+def test_solid_colour_is_flat_not_frozen():
+    # Codex review: a uniform (16, 32, 64) frame has high stddev across interleaved
+    # channel bytes, but no spatial variation; it must never trigger a restart.
+    cam: dict = {}
+    solid = bytes([16, 32, 64]) * (480 * 270)
+    assert [wd.frame_verdict(solid, cam) for _ in range(3)] == ["flat"] * 3
+
+
 def test_bmp_pixels_skips_the_header():
-    assert wd.bmp_pixels(_bmp(b"\x01\x02\x03")) == b"\x01\x02\x03"
+    assert wd.bmp_pixels(_bmp(b"\x01\x02\x03")) == (b"\x01\x02\x03", 3)
     with pytest.raises(ValueError):
         wd.bmp_pixels("data:image/png;base64," + base64.b64encode(b"\x89PNG....").decode())
 
@@ -210,6 +219,67 @@ def test_identical_frames_need_silent_effects_to_be_frozen(monkeypatch, ticks, f
     results = [wd.check_camera(obs, state, dry_run=False) for _ in range(3)]
     assert results[-1] == ("Cam" if frozen else None)
     assert results[:2] == [None, None]
+
+
+class StatusOBS:
+    def __init__(self, record=False, stream=False, collection="Focusmate"):
+        self.r, self.s, self.c = record, stream, collection
+
+    def call(self, request, data=None):
+        return {
+            "GetRecordStatus": {"outputActive": self.r},
+            "GetStreamStatus": {"outputActive": self.s},
+            "GetSceneCollectionList": {"currentSceneCollectionName": self.c},
+            "GetProfileList": {"currentProfileName": "Focusmate"},
+        }[request]
+
+
+@pytest.fixture
+def focusmate_dir(tmp_path, monkeypatch):
+    (tmp_path / "basic" / "scenes").mkdir(parents=True)
+    (tmp_path / "basic" / "scenes" / "Focusmate.json").write_text("{}")
+    monkeypatch.setattr(wd, "OBS_DIR", tmp_path)
+    monkeypatch.setenv("OBS_WATCHDOG_ASSUME_PIDS", "123")
+    return tmp_path
+
+
+@pytest.mark.parametrize(
+    "obs,reason",
+    [
+        (StatusOBS(), None),
+        (StatusOBS(record=True), "recording"),
+        (StatusOBS(stream=True), "streaming"),
+        (StatusOBS(collection="Missing"), "Missing"),
+    ],
+)
+def test_restart_is_blocked_by_recording_streaming_or_missing_collection(focusmate_dir, obs, reason):
+    blocker = wd.restart_blocker(obs)
+    assert (blocker is None) if reason is None else (reason in blocker)
+
+
+def test_restart_relaunches_onto_the_running_collection(focusmate_dir):
+    (focusmate_dir / "basic" / "scenes" / "Untitled.json").write_text("{}")
+    obs = StatusOBS(collection="Untitled")
+    assert wd.restart_blocker(obs) is None
+    assert obs.relaunch_args == ["--profile", "Focusmate", "--collection", "Untitled"]
+
+
+def test_failed_screen_restart_keeps_the_stop_pending(tmp_path, monkeypatch):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "a.txt").write_text(LOG)
+    monkeypatch.setattr(wd, "LOG_DIR", logs)
+    monkeypatch.setenv("OBS_WATCHDOG_DISPLAY_ASLEEP", "0")
+
+    class Failing:
+        def call(self, request, data=None):
+            if request == "GetInputList":
+                return {"inputs": [{"inputName": "Screen"}] if data["inputKind"] == "screen_capture" else []}
+            raise wd.OBSError("boom")
+
+    state: dict = {}
+    wd.check_screen(Failing(), state, dry_run=False)
+    assert "screen_handled" not in state
 
 
 # ── setup ────────────────────────────────────────────────────────────────────
