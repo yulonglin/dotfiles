@@ -180,6 +180,38 @@ def test_failed_request_raises_obs_error():
     obs.close()
 
 
+# ── check_camera: identical frames count as frozen only without effect ticks ──
+
+
+class FakeOBS:
+    def __init__(self, frame: bytes):
+        self.frame = frame
+
+    def call(self, request, data=None):
+        if request == "GetVirtualCamStatus":
+            return {"outputActive": True}
+        if request == "GetInputList":
+            return {"inputs": [{"inputName": "Cam"}] if data["inputKind"] == "macos-avcapture" else []}
+        if request == "GetCurrentProgramScene":
+            return {"currentProgramSceneName": "Scene"}
+        if request == "GetSceneItemList":
+            return {"sceneItems": [{"sourceName": "Cam", "sceneItemEnabled": True}]}
+        if request == "GetSourceScreenshot":
+            return {"imageData": _bmp(self.frame)}
+        raise AssertionError(request)
+
+
+@pytest.mark.parametrize("ticks,frozen", [("0", True), ("39", False), ("", False)])
+def test_identical_frames_need_silent_effects_to_be_frozen(monkeypatch, ticks, frozen):
+    # 39 ticks: background replacement with nobody in frame (live, static image).
+    # "" : the log could not be read, so never restart on a guess.
+    monkeypatch.setenv("OBS_WATCHDOG_EFFECT_TICKS", ticks)
+    obs, state = FakeOBS(_noisy(7)), {}
+    results = [wd.check_camera(obs, state, dry_run=False) for _ in range(3)]
+    assert results[-1] == ("Cam" if frozen else None)
+    assert results[:2] == [None, None]
+
+
 # ── setup ────────────────────────────────────────────────────────────────────
 
 

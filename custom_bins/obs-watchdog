@@ -6,18 +6,24 @@ kept rendering (861k frames, 13 late):
 
 1. Screen overlay. When the display sleeps, macOS stops OBS's ScreenCaptureKit
    stream (`[ mac-screencapture ]: Stream stopped ...` in the OBS log) and OBS
-   never restarts it. The source has a "Restart capture" button
-   (`reactivate_capture`) for exactly this; the watchdog presses it through
-   obs-websocket once the display is awake again.
+   never restarts it. Once the display is awake the watchdog flips the
+   source's `show_cursor` setting and back through obs-websocket: OBS treats a
+   changed setting as a reason to rebuild the stream. (Its "Restart capture"
+   button would do the same, but pressing a property button builds the source's
+   properties on a websocket thread, and listing this source's display property
+   that way segfaulted OBS 33.0.3 on 2026-11-25; the settings path is the one
+   OBS's own UI uses.)
 2. Camera. The Studio Display Camera feed stopped arriving with no error, once
    at a display wake (13:58) and once with no display event (21:31), the second
    time while the macOS video-effects thread was in a Neural Engine call. Only a
    full OBS restart has been shown to clear it. The watchdog takes a screenshot
-   of each visible camera source every tick; a frame that stays bit-identical
-   for FREEZE_TICKS ticks is frozen (a live sensor never repeats a frame
-   exactly), so it saves a `sample` of OBS's threads for diagnosis and restarts
-   OBS through obs-start. Near-uniform frames (lens covered, dark room) are
-   skipped, and restarts are rate-limited.
+   of each visible camera source every tick. A frame that stays bit-identical
+   for FREEZE_TICKS ticks is frozen only if OBS's per-second video-effects log
+   lines have also stopped: a raw sensor never repeats a frame exactly, but
+   background replacement with nobody in frame does, from a live camera. Then it
+   saves a `sample` of OBS's threads for diagnosis and restarts OBS through
+   obs-start. Near-uniform frames (lens covered, dark room) are skipped, and
+   restarts are rate-limited.
 
 Runs every 20 s from the com.user.obs-watchdog LaunchAgent
 (scripts/cleanup/setup_obs_watchdog.sh, part of `deploy.sh --obs`). Each run is
@@ -163,6 +169,10 @@ class WebSocket:
 
     def close(self) -> None:
         try:
+            self._send_frame(0x8, struct.pack(">H", 1000))  # clean close, not a 1006 in OBS's log
+        except OSError:
+            pass
+        try:
             self.sock.close()
         except OSError:
             pass
@@ -306,6 +316,15 @@ def inputs_of(obs: OBS, kinds: tuple) -> list[str]:
     return names
 
 
+def restart_screen_source(obs: OBS, name: str) -> None:
+    """Rebuild the ScreenCaptureKit stream by changing a setting and changing it back."""
+    settings = obs.call("GetInputSettings", {"inputName": name}).get("inputSettings", {})
+    shown = bool(settings.get("show_cursor", True))
+    for value in (not shown, shown):
+        obs.call("SetInputSettings", {"inputName": name, "inputSettings": {"show_cursor": value}, "overlay": True})
+        time.sleep(0.5)
+
+
 def check_screen(obs: OBS, state: dict, dry_run: bool) -> None:
     log_path = newest_obs_log()
     if log_path is None:
@@ -318,10 +337,10 @@ def check_screen(obs: OBS, state: dict, dry_run: bool) -> None:
         return  # restart once the display is back; the stream would stop again now
     for name in inputs_of(obs, SCREEN_KINDS):
         if dry_run:
-            log(f"would press 'Restart capture' on screen source '{name}' (stop at offset {idx} in {log_path.name})")
+            log(f"would restart screen source '{name}' (stop at offset {idx} in {log_path.name})")
             continue
         try:
-            obs.call("PressInputPropertiesButton", {"inputName": name, "propertyName": "reactivate_capture"})
+            restart_screen_source(obs, name)
             log(f"screen capture stopped (display sleep); restarted '{name}'")
         except OBSError as e:
             log(f"could not restart screen source '{name}': {e}")
@@ -339,6 +358,34 @@ def visible_cameras(obs: OBS) -> list[str]:
     return [i["sourceName"] for i in items if i.get("sceneItemEnabled") and i.get("sourceName") in cameras]
 
 
+def effect_ticks(seconds: int = 40) -> Optional[int]:
+    """Per-second video-effects log lines from OBS in the last `seconds`, or None if unknown.
+
+    With macOS Video Effects on (Portrait, Studio Light, background replacement)
+    the camera thread in OBS logs one `effect duration` line a second while frames
+    arrive; on 2026-11-25 those lines stopped at the moment the camera froze.
+    Background replacement with nobody in frame gives bit-identical frames from a
+    live camera, so identical screenshots alone are not proof of a freeze.
+    """
+    forced = os.environ.get("OBS_WATCHDOG_EFFECT_TICKS")
+    if forced is not None:
+        return int(forced) if forced else None
+    pids = obs_pids()
+    if not pids:
+        return None
+    try:
+        out = subprocess.run(
+            ["/usr/bin/log", "show", "--last", f"{seconds}s", "--style", "compact", "--predicate",
+             f'processID == {pids[0]} && subsystem == "com.apple.cmio" && eventMessage CONTAINS "effect duration"'],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.count("effect duration")
+
+
 def check_camera(obs: OBS, state: dict, dry_run: bool) -> Optional[str]:
     """Return the name of a frozen camera source, else None."""
     tracking = state.setdefault("camera", {})
@@ -350,7 +397,15 @@ def check_camera(obs: OBS, state: dict, dry_run: bool) -> Optional[str]:
         shot = obs.call(
             "GetSourceScreenshot", {"sourceName": name, "imageFormat": "bmp", "imageWidth": SHOT_WIDTH}
         )
-        verdict = frame_verdict(bmp_pixels(shot["imageData"]), tracking.setdefault(name, {}))
+        cam = tracking.setdefault(name, {})
+        verdict = frame_verdict(bmp_pixels(shot["imageData"]), cam)
+        if verdict == "frozen":
+            ticks = effect_ticks()
+            if ticks is None or ticks > 0:
+                # Effects still processing frames (a static background-replaced
+                # scene), or no way to tell: not frozen. Start counting again.
+                verdict = "static" if ticks else "unknown"
+                cam["same"] = 0
         if dry_run:
             log(f"camera '{name}': {verdict} (identical for {tracking[name].get('same', 0)} more checks)")
         if verdict == "frozen":
@@ -388,6 +443,7 @@ def restart_obs(state: dict, camera: str, dry_run: bool) -> None:
             time.sleep(0.5)
         if not obs_pids():
             break
+    time.sleep(3)  # a relaunch within a second of quitting found no camera on 2026-11-25
     subprocess.run([str(OBS_START)], capture_output=True, check=False, timeout=30)
     state.update(last_restart=now, camera={})
     state.setdefault("events", []).append({"t": now, "what": "obs-restart", "camera": camera, "sample": str(sample)})
