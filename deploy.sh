@@ -1174,6 +1174,10 @@ if [[ "$DEPLOY_OBS" == "true" ]]; then
             else
                 log_warning "OBS Focusmate config deploy failed"
             fi
+            # Restarts the screen capture after display sleep and OBS itself
+            # when the camera feed freezes (custom_bins/obs-watchdog).
+            bash "$DOT_DIR/scripts/cleanup/setup_obs_watchdog.sh" \
+                || log_warning "OBS watchdog setup failed"
         fi
     else
         log_info "OBS config deploy is macOS-only, skipping"
