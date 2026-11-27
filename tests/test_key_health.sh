@@ -150,10 +150,44 @@ sleep 1
 out=$(KEY_HEALTH_MAX_AGE=0 ds shell OPENROUTER_API_KEY 2>/dev/null)
 has "stale cache falls back to the conf" "$out" "fake-or-mats"
 
+out=$(ds shell-bindings "OPENROUTER_API_KEY=bws-id:id1" 2>"$T/err")
+has "UUID pin follows the order like a label pin" "$out" "fake-or-personal"
+out=$(DOTFILES_SECRETS_EXACT=1 ds shell-bindings "OPENROUTER_API_KEY=bws-id:id1" 2>/dev/null)
+has "DOTFILES_SECRETS_EXACT keeps a UUID pin" "$out" "fake-or-mats"
+
+KEY_HEALTH_STUB='{"OPENROUTER_API_KEY - mats": "no_credit", "OPENROUTER_API_KEY - personal": "no_credit"}' \
+    "$KH" --force --no-gateway >/dev/null
+out=$(ds shell OPENROUTER_API_KEY 2>"$T/err"); rc=$?
+eq "exhausted priority list fails resolution" "$rc" "1"
+hasnt "exhausted list does not fall back to the conf key" "$out" "fake-or-mats"
+has "exhausted error says what to do" "$(cat "$T/err")" "secrets check"
+
 KEY_HEALTH_STUB='{}' "$KH" --force --no-gateway >/dev/null
 out=$(ds shell OPENROUTER_API_KEY 2>"$T/err")
 has "healthy top resolves to top" "$out" "fake-or-mats"
 eq "no notice when top is used" "$(cat "$T/err")" ""
+
+echo "key-health: classification and gateway rollback"
+cls=$(python3 - "$KH" <<'EOF'
+import importlib.machinery, importlib.util, sys
+loader = importlib.machinery.SourceFileLoader("kh", sys.argv[1])
+spec = importlib.util.spec_from_loader("kh", loader)
+kh = importlib.util.module_from_spec(spec); loader.exec_module(kh)
+print(kh.classify(403, '{"error":"model not available to this project"}')[0],
+      kh.classify(403, '{"error":"Invalid API key provided"}')[0],
+      kh.classify(401, "")[0],
+      kh.classify(429, '{"error":{"code":"insufficient_quota"}}')[0],
+      kh.classify(429, "slow down")[0])
+EOF
+)
+eq "403 model denial is inconclusive; bad-key 403 and 401 are revoked; quota vs rate limit" \
+    "$cls" "unknown revoked revoked no_credit rate_limited"
+
+printf '[openai-providers]\nopenrouter = "fake-or-mats"\n' > "$T/gateway.toml"
+out=$(KEY_HEALTH_GATEWAY_RESTART="false" KEY_HEALTH_STUB='{"OPENROUTER_API_KEY - mats": "no_credit"}' "$KH" --hook --force)
+grep -q '^openrouter = "fake-or-mats"$' "$T/gateway.toml" && ok "failed restart rolls the gateway key back" \
+    || bad "failed restart rolls the gateway key back" "$(cat "$T/gateway.toml")"
+has "failed restart is reported" "$out" "router restart failed"
 
 echo
 echo "passed: $PASS  failed: $FAIL"

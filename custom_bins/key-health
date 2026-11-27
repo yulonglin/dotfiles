@@ -65,10 +65,13 @@ PRIORITY_KEY = "KEY_PRIORITY"
 CACHE = Path(os.environ.get("KEY_HEALTH_CACHE") or Path.home() / ".cache/dotfiles-secrets/key-health.tsv")
 ALERTS = CACHE.with_name("key-health-alerted.json")
 GATEWAY_SECRETS = Path(os.environ.get("KEY_HEALTH_GATEWAY_SECRETS") or Path.home() / ".config/model-router/secrets.toml")
-GATEWAY_LABEL = "com.alignment-hive.model-router"
+GATEWAY_LABEL = "com.alignment-hive.model-router"   # macOS launchd
+GATEWAY_UNIT = "model-router.service"               # Linux systemd --user
 REUSE_SECONDS = int(os.environ.get("KEY_HEALTH_REUSE", "300"))
 ALERT_EVERY = int(os.environ.get("KEY_HEALTH_ALERT_EVERY", str(6 * 3600)))
-TIMEOUT = 8.0
+# Per request. Worst case is an OpenRouter team key (3 sequential requests) plus
+# the BWS fetch, which must fit the 25 s SessionStart timeout in settings.json.
+TIMEOUT = 5.0
 
 SWITCH_STATES = {"no_credit", "revoked", "rate_limited", "missing"}
 LOUD_STATES = {"revoked", "missing"}
@@ -114,8 +117,10 @@ def load_dump() -> dict[str, str]:
     out: dict[str, str] = {}
     for line in text.splitlines():
         parts = line.split("\t")
-        if len(parts) >= 2 and parts[0]:
-            out[parts[0]] = base64.b64decode(parts[1]).decode("utf-8") if parts[1] else ""
+        # The first record wins on a duplicate label, matching bws_value_for_key
+        # in dotfiles-secrets, so the probed key is the key that gets exported.
+        if len(parts) >= 2 and parts[0] and parts[0] not in out:
+            out[parts[0]] =base64.b64decode(parts[1]).decode("utf-8") if parts[1] else ""
     return out
 
 
@@ -173,8 +178,14 @@ def classify(code: int, body: str) -> tuple[str, str]:
         return "ok", "HTTP 200"
     if code == 402 or "insufficient_quota" in low or "credit balance" in low or "insufficient credits" in low:
         return "no_credit", f"HTTP {code}"
-    if code in (401, 403):
-        return "revoked", f"HTTP {code}"
+    if code == 401:
+        return "revoked", "HTTP 401"
+    if code == 403:
+        # A restricted key can be refused the probe model or endpoint and still
+        # serve its real workload: only an explicit bad-key message is revoked.
+        if any(s in low for s in ("invalid api key", "invalid_api_key", "incorrect api key", "api key not valid", "revoked", "disabled")):
+            return "revoked", "HTTP 403 invalid key"
+        return "unknown", "HTTP 403 (no access to the probe model; key may still work)"
     if code == 429:
         return "rate_limited", "HTTP 429"
     if code == 400 and ("api key not valid" in low or "api_key_invalid" in low):
@@ -378,6 +389,7 @@ def hook_output(loud, switches, exhausted) -> dict | None:
     if switches:
         user.append("⚠️ API key fallback this session (priority order from BWS KEY_PRIORITY):")
         user += [f"   • {m}" for m in switches]
+        user.append("   New shells and `secrets run` use it now; a shell or direnv env loaded earlier keeps the old key until `direnv reload`.")
         model.append(
             "API key fallback is active this session; mention it once when you first use that provider: "
             + " | ".join(switches)
@@ -401,16 +413,31 @@ def sync_gateway(choice, dump) -> str | None:
     if not m or m.group(2) == want:
         return None
     new = pat.sub(lambda mm: f'{mm.group(1)}"{want}"', text, count=1)
-    fd, tmp = tempfile.mkstemp(dir=GATEWAY_SECRETS.parent, prefix=".secrets.")
-    with os.fdopen(fd, "w") as f:
-        f.write(new)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, GATEWAY_SECRETS)
+
+    def write(content: str) -> None:
+        fd, tmp = tempfile.mkstemp(dir=GATEWAY_SECRETS.parent, prefix=".secrets.")
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, GATEWAY_SECRETS)
+
+    write(new)
     restart = os.environ.get("KEY_HEALTH_GATEWAY_RESTART")
-    cmd = shlex.split(restart) if restart else ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{GATEWAY_LABEL}"]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-    if r.returncode != 0:
-        return f"gateway key switched to {label(chosen)} but restart failed: {r.stderr.strip()[:200]}"
+    if restart:
+        cmd = shlex.split(restart)
+    elif sys.platform == "darwin":
+        cmd = ["/bin/launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{GATEWAY_LABEL}"]
+    else:
+        cmd = ["systemctl", "--user", "restart", GATEWAY_UNIT]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        err = (r.stderr.strip()[:200] or f"exit {r.returncode}") if r.returncode != 0 else ""
+    except (OSError, subprocess.SubprocessError) as e:
+        err = f"{type(e).__name__}: {e}"[:200]
+    if err:
+        # Roll back so the next check sees the mismatch and retries the restart.
+        write(text)
+        return f"gateway still on the old OpenRouter key: router restart failed ({err}); will retry next check"
     return f"gateway (model-router) now uses OPENROUTER_API_KEY {label(chosen)}; router restarted"
 
 

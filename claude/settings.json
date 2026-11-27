@@ -630,7 +630,7 @@
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.key-health -- $HOME/.claude/hooks/key_health_hook.sh",
-            "timeout": 20
+            "timeout": 25
           },
           {
             "type": "command",
