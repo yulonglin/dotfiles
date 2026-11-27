@@ -1,0 +1,195 @@
+#!/usr/bin/env zsh
+# ssh-key-only — check, and enforce, that an ssh server accepts keys and nothing else.
+#
+#   ssh-key-only check [HOST]      what does HOST's sshd offer? (default: this machine)
+#   ssh-key-only install           install config/sshd/01-key-only.conf (needs root)
+#   ssh-key-only install --dry-run run the lockout guard and say what install would do
+#
+# `check` needs no privilege. It connects with every client auth method switched off,
+# so the server answers "Permission denied (<methods>)" with the methods it would
+# accept, and nothing is ever tried. That is the ground truth: it catches a drop-in
+# that a distro file overrides, which reading files alone would miss.
+#
+# Exit codes for check: 0 keys only · 1 password or keyboard-interactive offered ·
+# 2 could not tell · 3 no ssh server answering on that host and port.
+# Exit codes for install: 0 key-only afterwards · 1 refused or failed · 2 usage.
+#
+# Why this exists: hn sat on the internet with password login on and 12k guesses a
+# day (2026-11-03); the Mac offered passwords to anyone on the same Wi-Fi. See
+# docs/ssh-key-only.md.
+
+emulate -L zsh
+setopt pipe_fail
+
+SELF=${0:A}
+DOT_DIR=${SELF:h:h}
+DROPIN_SRC="$DOT_DIR/config/sshd/01-key-only.conf"
+DROPIN_DIR=/etc/ssh/sshd_config.d
+DROPIN_DST="$DROPIN_DIR/01-key-only.conf"
+
+if [[ -t 1 && -z ${NO_COLOR:-} ]]; then
+  paint() { print -P -- "%F{$1}$2%f"; }
+  bold() { print -P -- "%B$1%b"; }
+else
+  paint() { print -r -- "$2"; }
+  bold() { print -r -- "$1"; }
+fi
+ok()   { paint green  "ok:      $1"; }
+warn() { paint yellow "warning: $1"; }
+fail() { paint red    "error:   $1" >&2; }
+
+usage() {
+  print "usage: ssh-key-only check [HOST] [-p PORT]
+       ssh-key-only install [--dry-run]
+
+check    Report which login methods HOST's ssh server offers (default: this machine).
+         Needs no privilege. Exit 0 keys only, 1 passwords offered, 2 unknown,
+         3 no ssh server answering.
+install  Copy config/sshd/01-key-only.conf to $DROPIN_DST, validate it,
+         reload sshd and re-check. Needs root. Refuses when the login user has no
+         key in ~/.ssh/authorized_keys, so it cannot lock you out.
+         --dry-run runs that guard without root and changes nothing."
+}
+
+# --- check -------------------------------------------------------------------
+
+# Print the methods the server offers, comma-separated, or a status word.
+probe_methods() {
+  local host=$1 port=$2 out
+  local -a opts=(
+    -o BatchMode=yes -o ConnectTimeout=5 -o LogLevel=ERROR
+    -o ControlMaster=no -o ControlPath=none
+    -o PubkeyAuthentication=no -o PasswordAuthentication=no
+    -o KbdInteractiveAuthentication=no -o GSSAPIAuthentication=no
+    -o HostbasedAuthentication=no -o IdentitiesOnly=yes -o IdentityFile=none
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+  )
+  # This machine: ignore ~/.ssh/config so an alias for localhost cannot redirect it.
+  [[ $host == localhost || $host == 127.0.0.1 ]] && opts=(-F /dev/null $opts)
+  [[ -n $port ]] && opts+=(-p "$port")
+  out=$(ssh $opts "$host" true 2>&1 </dev/null)
+  if [[ $out =~ 'Permission denied \(([^)]*)\)' ]]; then
+    print -r -- "${match[1]}"
+  elif [[ $out == *"Connection refused"* || $out == *"No route to host"* || $out == *"timed out"* ]]; then
+    print -r -- "no-server"
+  else
+    print -r -- "unknown:${out//$'\n'/ }"
+  fi
+}
+
+cmd_check() {
+  local host=localhost port=
+  while (( $# )); do
+    case $1 in
+      -p) port=$2; shift 2 ;;
+      -h|--help) usage; return 0 ;;
+      -*) fail "unknown option $1"; return 2 ;;
+      *) host=$1; shift ;;
+    esac
+  done
+  local methods; methods=$(probe_methods "$host" "$port")
+  case $methods in
+    no-server)
+      print -r -- "$(bold "$host"): no ssh server answering"
+      return 3 ;;
+    unknown:*)
+      warn "$host: could not read the offered methods (${methods#unknown:})"
+      return 2 ;;
+  esac
+  local -a list=(${(s:,:)methods})
+  if (( ${list[(I)password]} || ${list[(I)keyboard-interactive]} )); then
+    print -r -- "$(bold "$host"): $(paint red 'accepts passwords') (offers: $methods)"
+    [[ $host == localhost ]] && print -r -- "  fix: sudo $SELF install"
+    return 1
+  fi
+  print -r -- "$(bold "$host"): $(paint green 'keys only') (offers: $methods)"
+  return 0
+}
+
+# --- install -----------------------------------------------------------------
+
+# A line in authorized_keys that holds a public key, with or without options.
+has_usable_key() {
+  local file=$1
+  [[ -r $file ]] || return 1
+  grep -Eq '(^|[[:space:]])(ssh-(ed25519|rsa|dss)|ecdsa-sha2-nistp[0-9]+|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com) AAAA' "$file"
+}
+
+reload_sshd() {
+  if [[ $OSTYPE == darwin* ]]; then
+    # launchd starts a fresh `sshd -i` for every connection, which reads the
+    # config anew, so there is nothing to reload.
+    return 0
+  fi
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl reload ssh.service 2>/dev/null && return 0
+    systemctl reload sshd.service 2>/dev/null && return 0
+  fi
+  # No systemd (containers such as RunPod): SIGHUP the listener so it re-reads.
+  pkill -HUP -o -x sshd 2>/dev/null && return 0
+  return 1
+}
+
+cmd_install() {
+  local dry=0
+  case ${1:-} in
+    --dry-run) dry=1 ;;
+    -h|--help) usage; return 0 ;;
+    "") ;;
+    *) fail "unknown option $1"; return 2 ;;
+  esac
+
+  local user=${SUDO_USER:-$USER}
+  local home; home=$(eval print -r -- "~$user" 2>/dev/null)
+  (( dry )) && [[ -z ${SUDO_USER:-} ]] && home=$HOME
+  local keys="$home/.ssh/authorized_keys"
+
+  [[ -f $DROPIN_SRC ]] || { fail "missing $DROPIN_SRC"; return 1; }
+  if ! has_usable_key "$keys"; then
+    fail "$keys has no public key, so key-only ssh would lock $user out. Add a key first."
+    return 1
+  fi
+  ok "$user has a key in $keys"
+
+  if (( dry )); then
+    print -r -- "would install $DROPIN_SRC -> $DROPIN_DST, validate with sshd -t, reload sshd"
+    return 0
+  fi
+  if (( EUID != 0 )); then
+    fail "install needs root: sudo $SELF install"
+    return 1
+  fi
+
+  local sshd=/usr/sbin/sshd
+  [[ -x $sshd ]] || sshd=$(command -v sshd 2>/dev/null)
+  [[ -n $sshd ]] || { fail "no sshd binary found"; return 1; }
+  if ! grep -Eqi '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config 2>/dev/null; then
+    fail "/etc/ssh/sshd_config has no Include for $DROPIN_DIR, so a drop-in would be ignored. Set PasswordAuthentication no and KbdInteractiveAuthentication no there by hand."
+    return 1
+  fi
+
+  mkdir -p "$DROPIN_DIR"
+  install -m 0644 "$DROPIN_SRC" "$DROPIN_DST"
+  if ! "$sshd" -t 2>/dev/null; then
+    rm -f "$DROPIN_DST"
+    fail "sshd -t rejected the config; removed $DROPIN_DST again"
+    return 1
+  fi
+  local effective; effective=$("$sshd" -T 2>/dev/null | grep -Ei '^(passwordauthentication|kbdinteractiveauthentication) ')
+  if [[ $effective == *" yes"* ]]; then
+    fail "installed, but another file still wins: ${effective//$'\n'/; }"
+    return 1
+  fi
+  ok "installed $DROPIN_DST"
+  reload_sshd || warn "could not reload sshd; it takes effect at its next restart"
+  cmd_check localhost
+}
+
+# --- main --------------------------------------------------------------------
+
+case ${1:-} in
+  check) shift; cmd_check "$@" ;;
+  install) shift; cmd_install "$@" ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
