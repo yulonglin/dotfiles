@@ -2,6 +2,7 @@
 
 import importlib.machinery
 import importlib.util
+import os
 import pathlib
 import random
 import subprocess
@@ -47,7 +48,7 @@ def test_seeded_cli_is_deterministic():
         ).stdout
     )
     assert run() == run()
-    assert run().startswith(("HEADS:", "TAILS:"))
+    assert "HEADS" in run() or "TAILS" in run()
 
 
 def test_list_command_prints_both_sides():
@@ -55,3 +56,30 @@ def test_list_command_prints_both_sides():
         [sys.executable, str(PATH), "list"], capture_output=True, text=True, check=True
     ).stdout
     assert "Heads" in out and "Tails" in out and "messages" in out and "nap" in out
+
+
+def _run(*args, **env):
+    full_env = {
+        k: v for k, v in os.environ.items() if k not in ("NO_COLOR", "FORCE_COLOR")
+    }
+    full_env.update(env)
+    return subprocess.run(
+        [sys.executable, str(PATH), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=full_env,
+    ).stdout
+
+
+def test_piped_output_has_no_colour_codes():
+    assert "\033[" not in _run("--seed", "1")
+
+
+def test_force_colour_adds_codes_and_no_color_wins():
+    assert "\033[" in _run("--seed", "1", FORCE_COLOR="1")
+    assert "\033[" not in _run("--seed", "1", FORCE_COLOR="1", NO_COLOR="1")
+
+
+def test_every_option_has_an_emoji():
+    assert set(reward.EMOJI) == set(reward.HEADS) | set(reward.TAILS)
