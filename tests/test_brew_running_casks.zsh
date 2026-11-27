@@ -144,8 +144,10 @@ run_wrapper() {
     /bin/rm -f "$EVENTS.upgraded" "$EVENTS.ps-seen"
     print -r -- "$1" | PATH="$BIN:/usr/bin:/bin" OSTYPE=darwin25 STUB_EVENTS="$EVENTS" \
         HOMEBREW_NO_AUTO_UPDATE= zsh -fc "source '$WRAPPER'; brew ${2}" 2>&1
+    local rc=$?
     # Later helper calls must see the fixture's full outdated set again.
     /bin/rm -f "$EVENTS.upgraded"
+    return "$rc"
 }
 
 out="$(run_wrapper y 'upgrade --greedy --dry-run')"
@@ -246,18 +248,54 @@ has "an app quit at the prompt is upgraded" "$(cat "$EVENTS")" "brew upgrade --c
 has "telegram was in the first scan's prompt" "${out%%Not upgraded*}" "  telegram"
 lacks "but is not reported as not upgraded" "${out#*Not upgraded}" "  telegram"
 
-print "17. 'a' quits the running apps first, then upgrades them"
+print "17. 'a' quits the running apps first, upgrades them, then restarts the ones that quit"
 cat > "$BIN/osascript" <<EOF
 #!/bin/zsh
 print -r -- "osascript \$*" >> "$EVENTS"
 EOF
-chmod +x "$BIN/osascript"
+cat > "$BIN/open" <<EOF
+#!/bin/zsh
+print -r -- "open \$*" >> "$EVENTS"
+EOF
+chmod +x "$BIN/osascript" "$BIN/open"
 out="$(BREW_QUIT_WAIT=0 STUB_PS_QUIT_AFTER_FIRST=1 run_wrapper a 'upgrade --greedy')"
 ev="$(cat "$EVENTS")"
 has "telegram is asked to quit by name" "$ev" 'osascript -e quit app "Telegram"'
 has "the zoom pkg cask is asked to quit too" "$ev" 'osascript -e quit app "zoom.us"'
+lacks "unknown bundle is never passed to osascript" "$ev" 'bundle not found'
 has "quit telegram is then upgraded" "$ev" "brew upgrade --cask --greedy telegram slack"
 lacks "an app that is still running is not upgraded" "$(print -r -- "$ev" | rg '^brew upgrade')" "zoom"
+has "quit telegram is restarted in the background after the upgrade" "$ev" "open -g /Applications/Telegram.app"
+lacks "an app that stayed running is not restarted" "$ev" "open -g /Applications/zoom.us.app"
+lacks "an app that was never running is not started" "$ev" "open -g /Applications/Slack.app"
+# Verify ordering: restart happens strictly after brew upgrade --cask.
+upgrade_line="$(print -r -- "$ev" | grep -n '^brew upgrade --cask' | head -n1 | cut -d: -f1)"
+reopen_line="$(print -r -- "$ev" | grep -n '^open -g /Applications/Telegram.app$' | head -n1 | cut -d: -f1)"
+[[ -n "$upgrade_line" && -n "$reopen_line" ]] && (( reopen_line > upgrade_line )) \
+    && pass "relaunch runs after brew upgrade --cask" \
+    || fail "relaunch order wrong (upgrade=$upgrade_line reopen=$reopen_line)"
+
+print "17b. 'y' (skip) never restarts apps, even if the user quit one at the prompt"
+out="$(STUB_PS_QUIT_AFTER_FIRST=1 run_wrapper y 'upgrade --greedy')"
+lacks "skip path never calls open" "$(cat "$EVENTS")" "open -g"
+
+print "17c. 'a' still restarts apps it quit if brew upgrade fails"
+mv "$BIN/brew" "$BIN/brew-real"
+cat > "$BIN/brew" <<EOF
+#!/bin/zsh
+if [[ "\${STUB_CASK_UPGRADE_FAIL:-0}" == 1 && "\$1" == upgrade && "\$2" == --cask ]]; then
+  print -r -- "brew \$*" >> "\$STUB_EVENTS"
+  exit 1
+fi
+exec "$BIN/brew-real" "\$@"
+EOF
+chmod +x "$BIN/brew"
+STUB_CASK_UPGRADE_FAIL=1 BREW_QUIT_WAIT=0 STUB_PS_QUIT_AFTER_FIRST=1 run_wrapper a 'upgrade --greedy' >/dev/null
+rc=$?
+ev="$(cat "$EVENTS")"
+(( rc != 0 )) && pass "failed cask upgrade still returns non-zero" || fail "failed cask upgrade returned 0"
+has "quit telegram is still restarted after a failed upgrade" "$ev" "open -g /Applications/Telegram.app"
+lacks "still-running zoom is not restarted after a failed upgrade" "$ev" "open -g /Applications/zoom.us.app"
 
 print "18. the app hosting this shell is never quit"
 quit_one() {   # $1 = app path, $2 = its pid expression, evaluated in the wrapper's shell

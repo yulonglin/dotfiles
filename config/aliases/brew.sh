@@ -5,9 +5,10 @@
 # CoreAudio and, through it, Safari, Chrome and Spark (docs/macos-media-wedge.md).
 # This wrapper only changes a bare `brew upgrade` on macOS: it lists outdated
 # casks whose app is running (brew-running-casks), offers to skip them or quit
-# them first, and runs `reset-mac-media --check` afterwards. `command brew upgrade` bypasses it,
-# and an upgrade that names packages passes straight through. After a formula
-# upgrade it also offers to remove formulae nothing needs (_brew_tidy).
+# and relaunch them around the upgrade, and runs `reset-mac-media --check` afterwards.
+# `command brew upgrade` bypasses it, and an upgrade that names packages passes
+# straight through. After a formula upgrade it also offers to remove formulae
+# nothing needs (_brew_tidy).
 
 if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
     brew() {
@@ -63,7 +64,8 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
             fi
         done
         local answer=""
-        read "answer?Skip them and upgrade everything else? [Y/n/q, a = quit them first] "
+        local -a quit_tokens=() quit_apps=() quit_pids=()
+        read "answer?Skip them and upgrade everything else? [Y/n/q, a = quit, upgrade & restart] "
         if [[ "$answer" == [aA] ]]; then
             _brew_quit_running "$running"
             answer=y
@@ -72,19 +74,29 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
             q|Q) return 1 ;;
             n|N) command brew upgrade "$@" || return ;;
             *)
+                local rc=0 scanned=0
+                local -a safe=()
                 if [[ "$only" != cask ]]; then
-                    command brew upgrade --formula "${flags[@]}" || return
+                    command brew upgrade --formula "${flags[@]}" || rc=$?
                 fi
-                local safe_out=""
-                if ! safe_out="$(brew-running-casks "${greedy[@]}" --outdated-names)"; then
-                    print -u2 "brew: running-app scan failed; skipped all cask upgrades."
-                    return 1
+                if (( rc == 0 )); then
+                    local safe_out=""
+                    if ! safe_out="$(brew-running-casks "${greedy[@]}" --outdated-names)"; then
+                        print -u2 "brew: running-app scan failed; skipped all cask upgrades."
+                        rc=1
+                    else
+                        scanned=1
+                        safe=("${(@f)safe_out}")
+                        safe=(${safe:#})
+                        if (( ${#safe} )); then
+                            command brew upgrade --cask "${greedy[@]}" "${flags[@]}" "${safe[@]}" || rc=$?
+                        fi
+                    fi
                 fi
-                local -a safe=("${(@f)safe_out}")
-                safe=(${safe:#})
-                if (( ${#safe} )); then
-                    command brew upgrade --cask "${greedy[@]}" "${flags[@]}" "${safe[@]}" || return
+                if (( ${#quit_apps} )); then
+                    _brew_relaunch_quit
                 fi
+                (( rc == 0 )) || return "$rc"
                 # Ask brew what is still outdated rather than reprinting the first
                 # scan: an app quit at the prompt is upgraded by the second scan.
                 local still=""
@@ -124,10 +136,12 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
     }
 
     # Quit each listed app the normal way (it may ask to save), then wait up to
-    # BREW_QUIT_WAIT (30) s for its processes to exit. The default branch
-    # rescans afterwards, so an app that refused to quit is skipped and
-    # reported, never swapped live. The app hosting this shell is left alone:
-    # quitting it would kill the upgrade.
+    # BREW_QUIT_WAIT (30) s for its processes to exit. Populates the caller's
+    # quit_tokens/quit_apps/quit_pids with each app asked to quit so
+    # _brew_relaunch_quit can reopen the ones that actually stopped after the
+    # upgrade. The default branch rescans afterwards, so an app that refused to
+    # quit is skipped and reported, never swapped live. The app hosting this
+    # shell is left alone: quitting it would kill the upgrade.
     _brew_quit_running() {
         local -a ancestors=()
         local p=$$
@@ -140,6 +154,13 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
         local token app pids pid hosting
         local -a waiting=()
         while IFS=$'\t' read -r token app pids _; do
+            [[ -n "$token" ]] || continue
+            # A cask whose bundle path could not be resolved has no app to quit
+            # or relaunch; leave it for the rescan to report.
+            if [[ "$app" != /* || "$pids" == "?" ]]; then
+                print "  $token: bundle path unknown, left running"
+                continue
+            fi
             # A tmux pane's parent is the tmux server, not the terminal attached
             # to it now, so neither check below can find that terminal. Never
             # quit a terminal app; the rescan reports it as not upgraded.
@@ -165,6 +186,9 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
             print "  quitting ${app:t:r}"
             osascript -e "quit app \"${app:t:r}\"" >/dev/null 2>&1 \
                 || print -u2 "  ${app:t:r}: quit request failed"
+            quit_tokens+=("$token")
+            quit_apps+=("$app")
+            quit_pids+=("$pids")
             for pid in ${(s:,:)pids}; do
                 [[ "$pid" == <-> ]] && waiting+=("$pid")
             done
@@ -177,6 +201,32 @@ if [[ "$OSTYPE" == darwin* ]] && [ -n "${ZSH_VERSION:-}" ]; then
                 kill -0 "$pid" 2>/dev/null || waiting=(${waiting:#$pid})
             done
             (( ${#waiting} )) && sleep 1
+        done
+    }
+
+    # Relaunch apps that _brew_quit_running quit, in the background so they do
+    # not steal terminal focus. When the rescan ran, only apps confirmed no
+    # longer running (present in safe) are relaunched, so an app that refused
+    # to quit is never touched. If an earlier step failed before the rescan,
+    # fall back to checking whether the app's tracked PIDs exited so quit apps
+    # are not left closed.
+    _brew_relaunch_quit() {
+        local idx token app pid alive
+        for (( idx = 1; idx <= ${#quit_apps}; idx++ )); do
+            token="${quit_tokens[$idx]}"
+            app="${quit_apps[$idx]}"
+            if (( scanned )); then
+                (( ${safe[(Ie)$token]} )) || continue
+            else
+                alive=0
+                for pid in ${(s:,:)quit_pids[$idx]}; do
+                    [[ "$pid" == <-> ]] && kill -0 "$pid" 2>/dev/null && alive=1
+                done
+                (( alive )) && continue
+            fi
+            print "  restarting ${app:t:r}"
+            open -g "$app" >/dev/null 2>&1 \
+                || print -u2 "  ${app:t:r}: restart failed"
         done
     }
 fi
