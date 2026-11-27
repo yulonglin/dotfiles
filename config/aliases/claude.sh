@@ -264,6 +264,33 @@ claude() {
         fi
     fi
 
+    # Global memory toggle: `claude-memory minimal|none` (or CLAUDE_MEMORY=...
+    # for one launch) excludes ~/.claude/rules and/or ~/.claude/CLAUDE.md via
+    # a generated --settings file. Sessions only, print mode included; skipped
+    # for --version/--help (the subcommand probe above calls the wrapper
+    # recursively) and when a --settings is already present, because Claude
+    # Code honours only the last --settings flag (measured 2.1.304), so adding
+    # ours would silently drop the caller's or the RC override's. Prepended
+    # for the same `--` reason as the RC override.
+    if [[ "$_is_session" == true ]] && command -v claude-memory &>/dev/null; then
+        local _mem_add=true _m
+        for _m in "${args[@]}"; do
+            case "$_m" in
+                --) break ;;
+                -v|--version|-h|--help) _mem_add=false; break ;;
+                --settings|--settings=*)
+                    [[ "${CLAUDE_MEMORY:-}" != "" && "$CLAUDE_MEMORY" != full ]] &&
+                        echo "claude: --settings given; CLAUDE_MEMORY=$CLAUDE_MEMORY not applied" >&2
+                    _mem_add=false; break ;;
+            esac
+        done
+        if [[ "$_mem_add" == true ]]; then
+            local _mem_settings
+            _mem_settings=$(claude-memory settings-path 2>/dev/null) || _mem_settings=""
+            [[ -n "$_mem_settings" ]] && args=(--settings="$_mem_settings" "${args[@]}")
+        fi
+    fi
+
     # Task lists: the wrapper does NOT auto-generate an ID, deliberately.
     #
     # Claude Code already gives every session its own list when
