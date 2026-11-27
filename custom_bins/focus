@@ -882,7 +882,9 @@ def switch(name: str, on: bool) -> None:
     if ct_apply(args, block_is(name, on)) or ct_apply(args, block_is(name, on)):
         return
     verb = "start" if on else "stop"
-    if not from_alfred():  # from Alfred, the exit below shows a dialog instead
+    # From Alfred, the exit below shows a dialog instead. A tick step that fails again
+    # each minute notified on its first failure; the rest go to the tick log.
+    if not from_alfred() and first_failure(f"{verb} {name}"):
         notify(f"Cold Turkey did not {verb} {name!r}. Run focus status.")
     sys.exit(f"focus: Cold Turkey did not {verb} {name!r}: {CT_DROPPED}")
 
@@ -936,6 +938,48 @@ EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a
 
 
 _LOCKS_HELD: dict[str, int] = {}
+
+# A launchd step that keeps failing (the display asleep through a window, 21 Nov 2026)
+# retries every minute; it notifies once, on its first failure (Yulong, 27 Nov 2026).
+NOTIFIED_FILE = PENDING.parent / "notified.json"  # failures already notified, by key
+_NOTIFY_SCOPE: str | None = None  # "step@occurrence" of the automatic step running now
+
+
+@contextmanager
+def notify_once(step: str, occurrence: str | None = None):
+    """Run one automatic step (a tick step, or the detached waiter or keeper that runs
+    the same step) so that a Cold Turkey failure inside it notifies only the first time
+    for this occurrence (today, unless given: a window passes its date and span). A run
+    where the step finishes without failing forgets that, so the next failure notifies
+    again. Outside a step, as for a person's own command, every failure notifies."""
+    global _NOTIFY_SCOPE
+    _NOTIFY_SCOPE = f"{step}@{occurrence or dt.date.today().isoformat()}"
+    try:
+        yield
+    except SystemExit:
+        raise
+    else:
+        with file_lock(NOTIFIED_FILE.with_suffix(".lock")):
+            seen = read_state(NOTIFIED_FILE) or {}
+            kept = {k: v for k, v in seen.items() if not k.startswith(f"{step}@")}
+            if kept != seen:
+                write_state(NOTIFIED_FILE, kept)
+    finally:
+        _NOTIFY_SCOPE = None
+
+
+def first_failure(what: str) -> bool:
+    """Whether a failure should notify: always outside an automatic step, else only when
+    this step has not notified it yet for this occurrence; records it."""
+    if _NOTIFY_SCOPE is None:
+        return True
+    key = f"{_NOTIFY_SCOPE}:{what}"
+    with file_lock(NOTIFIED_FILE.with_suffix(".lock")):
+        seen = read_state(NOTIFIED_FILE) or {}
+        if key in seen:
+            return False
+        write_state(NOTIFIED_FILE, {**seen, key: time.time()})
+    return True
 
 
 @contextmanager
@@ -1417,7 +1461,8 @@ def cmd_resume(cfg: dict) -> None:
     """Wait for the break to end, then start its modes again (run detached by 'break')."""
     while (b := read_break()) and time.time() < b["until"]:
         time.sleep(min(20, max(1, b["until"] - time.time())))
-    end_break(cfg)
+    with notify_once("end_break"):  # shares the tick's notification for this step
+        end_break(cfg)
 
 
 def read_capped() -> dict | None:
@@ -1542,7 +1587,8 @@ def cmd_capped_wait(cfg: dict) -> None:
     detached by a capped start)."""
     while (c := read_capped()) and time.time() < c["until"]:
         time.sleep(min(20, max(1, c["until"] - time.time())))
-    end_capped(cfg)
+    with notify_once("end_capped"):
+        end_capped(cfg)
 
 
 def cmd_capped(cfg: dict, mode: str, args: list[str], day: bool = False) -> None:
@@ -1803,9 +1849,12 @@ def cmd_tick(cfg: dict) -> None:
     is due, else silent; then makes ScreenZen follow Cold Turkey."""
     try:
         catch_up(cfg)
-        default_start(cfg)
-        scheduled_start(cfg)
-        window_start(cfg)
+        now = dt.datetime.now()
+        for step in (default_start, scheduled_start, window_start):
+            # each window is its own occurrence, so lunch's failure cannot hide dinner's
+            occ = f"{now:%Y-%m-%d} {in_window(cfg, now)}" if step is window_start else None
+            with notify_once(step.__name__, occ):
+                step(cfg)
     finally:
         # A Cold Turkey command that is not read exits before ScreenZen is written,
         # and the queued command can land minutes later, so ScreenZen kept the old
@@ -3395,7 +3444,8 @@ def cmd_only_wait(cfg: dict) -> None:
     """Wait for the session's end, which can move, then end it (run detached)."""
     while (s := read_only()) and time.time() < s["until"]:
         time.sleep(min(20, max(1, s["until"] - time.time())))
-    end_only(cfg)
+    with notify_once("end_only"):
+        end_only(cfg)
 
 
 def cmd_only(cfg: dict, args: list[str]) -> None:
@@ -3960,7 +4010,8 @@ def cmd_commit_wait(cfg: dict) -> None:
                 s = read_commit()
                 b = read_blocks().get(s["block"], {}) if s else {}
                 if s and s["pending"] and lock_ran_out(b):
-                    apply_pending(cfg, s, b)
+                    with notify_once("commit_tick"):  # the tick and keeper share it
+                        apply_pending(cfg, s, b)
             return
         lock_to = current_lock_to(b, s) or time.time()
         time.sleep(max(2, min(30, lock_to - time.time() - 10)))
@@ -3975,7 +4026,8 @@ def cmd_commit_keep(cfg: dict) -> None:
     cannot outlive a restart; the launchd job covers that."""
     while read_commit() is not None:
         try:
-            commit_tick(cfg)
+            with notify_once("commit_tick"):  # one notification, shared with the tick
+                commit_tick(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
             print(f"focus keeper: {e}")
         if read_commit() is None:
@@ -4758,7 +4810,8 @@ def catch_up(cfg: dict) -> None:
     other."""
     for step in (commit_tick, end_break, end_only, end_capped, window_end):
         try:
-            step(cfg)
+            with notify_once(step.__name__):
+                step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
             print(f"focus: {step.__name__} could not finish: {e}")
 
