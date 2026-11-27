@@ -1,0 +1,18 @@
+{"type": "attachment", "attachment": {"type": "model", "identity": {"modelId": "gemini"}}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_001", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_001", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_002", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_002", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_003", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_003", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_004", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_004", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "api-request", "params": {"model": "gemini"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_005", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "requestedModel": "gemini", "message": {"id": "msg_005", "role": "assistant", "model": "claude-opus-5-5"}}
+{"type": "assistant", "isApiErrorMessage": true, "message": {"id": "err_1", "role": "assistant", "model": "<synthetic>"}}
+{"type": "assistant", "message": {"id": "syn_1", "role": "assistant", "model": "<synthetic>"}}

@@ -1,0 +1,30 @@
+{"type": "attachment", "attachment": {"type": "model", "identity": {"modelId": "astra", "marketingName": null, "knowledgeCutoff": null}}}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "assistant", "message": {"id": "msg_001", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_002", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_003", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_004", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_005", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "assistant", "message": {"id": "msg_006", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_007", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "assistant", "message": {"id": "msg_008", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_009", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_010", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_011", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "assistant", "message": {"id": "msg_011", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "api-request", "params": {"model": "astra"}}
+{"type": "assistant", "message": {"id": "msg_012", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}
+{"type": "assistant", "message": {"id": "msg_012", "role": "assistant", "model": "gpt-6.2-astra"}, "requestedModel": "astra"}

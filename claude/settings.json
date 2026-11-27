@@ -263,6 +263,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.elapsed-stamp -- $HOME/.claude/hooks/elapsed_stamp.sh",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$(ls -A \"${XDG_STATE_HOME:-$HOME/.local/state}/model-router/agent-model-pending\" 2>/dev/null)\" ] || { cat >/dev/null; exit 0; }; bash $HOME/.claude/hooks/hook_feature.sh run agents.verify-model -- python3 $HOME/.claude/hooks/verify_subagent_model.py",
+            "timeout": 5
           }
         ]
       },
@@ -727,6 +732,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run nudges.computer-use-esc -- python3 $HOME/.claude/hooks/nudge_computer_use_esc.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$(ls -A \"${XDG_STATE_HOME:-$HOME/.local/state}/model-router/agent-model-pending\" 2>/dev/null)\" ] || { cat >/dev/null; exit 0; }; bash $HOME/.claude/hooks/hook_feature.sh run agents.verify-model -- python3 $HOME/.claude/hooks/verify_subagent_model.py",
+            "timeout": 5
           }
         ]
       }
@@ -756,6 +766,18 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hook_feature.sh run time.prompt-stamp -- $HOME/.claude/hooks/inject_timestamp.sh",
             "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": ".+",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hook_feature.sh run agents.verify-model -- python3 $HOME/.claude/hooks/verify_subagent_model.py",
+            "timeout": 10
           }
         ]
       }
