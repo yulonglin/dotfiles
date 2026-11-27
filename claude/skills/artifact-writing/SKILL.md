@@ -102,7 +102,7 @@ A page-initiated file save — a blob URL on an `<a download>` — is inert in t
 - the draft is finished and the risk is being **misread**: the `reduce-ambiguity` skill, run once per page
 - the page is published and needs **recording or reconciling** in `ARTIFACTS.md`: the `artifacts-sync` skill
 - the sentences themselves are the problem: `~/.claude/checklists/writing.md`
-- a chart is going on the page: the built-in `dataviz` skill (`house-plots` is for papers)
+- a chart is going on the page: the built-in `dataviz` skill (`house-plots` is for papers), plus the clickable-legend default in `~/.claude/checklists/presentation.md` (Legends filter series)
 
 ## Why this file is thin
 
