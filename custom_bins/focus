@@ -4010,7 +4010,8 @@ def cmd_commit_wait(cfg: dict) -> None:
                 s = read_commit()
                 b = read_blocks().get(s["block"], {}) if s else {}
                 if s and s["pending"] and lock_ran_out(b):
-                    apply_pending(cfg, s, b)
+                    with notify_once("commit_tick"):  # the tick and keeper share it
+                        apply_pending(cfg, s, b)
             return
         lock_to = current_lock_to(b, s) or time.time()
         time.sleep(max(2, min(30, lock_to - time.time() - 10)))
