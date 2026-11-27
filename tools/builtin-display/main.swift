@@ -4,11 +4,19 @@
 // no windows or cursor are lost on a dark panel, unlike brightness zero.
 //
 // Mechanism: CGSConfigureDisplayEnabled, a private CoreGraphics call (SkyLight
-// exports it as SLSConfigureDisplayEnabled), applied inside a normal
-// CGBeginDisplayConfiguration transaction. It is the same call display utilities
-// use for "disconnect display"; being private, any macOS update can break it.
-// The change is committed .forSession, so logging out or rebooting always brings
-// the screen back.
+// exports it as SLSConfigureDisplayEnabled), applied in a CGBeginDisplayConfiguration
+// transaction committed `.forAppOnly`, as LightsOut does (AlonX2/LightsOut,
+// DisplaysViewModel.swift). Only one long-lived "holder" process ever turns the
+// screen off, and it turns the screen back on itself before it exits: the same
+// private call with `true`, from the same process, then the public
+// CGRestorePermanentDisplayConfiguration. Apple documents that `.forAppOnly`
+// changes revert when the process exits; whether that also holds for the private
+// call (so a killed holder still brings the screen back) is NOT verified yet.
+//
+// Why not `.forSession` (the first version, 2026-11-18): there a later, separate
+// process sent the enable call, and on 2026-11-22 (macOS 26, M5 Pro) it returned
+// success twice while the panel stayed dark. Lid cycles did not help (the log
+// shows several); the screen came back only after the monitor disconnected.
 //
 // Compiled by custom_bins/builtin-display on first run; see that file for usage.
 
@@ -37,6 +45,12 @@ func paint(_ text: String, _ style: Style) -> String {
 func fail(_ message: String, code: Int32 = 1) -> Never {
     FileHandle.standardError.write(Data("builtin-display: \(message)\n".utf8))
     exit(code)
+}
+
+func log(_ message: String) {
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    print("\(stamp) \(message)")
+    fflush(stdout)
 }
 
 // MARK: private API
@@ -70,24 +84,6 @@ func displayList(_ getter: (UInt32, UnsafeMutablePointer<CGDirectDisplayID>?, Un
 
 func onlineDisplays() -> [CGDirectDisplayID] { displayList(CGGetOnlineDisplayList) }
 
-// The built-in panel's ID is remembered when it is turned off, because a
-// disabled display can drop out of both the active and the online list.
-let stateFile: URL = {
-    let base = ProcessInfo.processInfo.environment["XDG_STATE_HOME"].map { URL(fileURLWithPath: $0) }
-        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/state")
-    return base.appendingPathComponent("builtin-display/display-id")
-}()
-
-func savedBuiltinID() -> CGDirectDisplayID? {
-    guard let text = try? String(contentsOf: stateFile, encoding: .utf8) else { return nil }
-    return CGDirectDisplayID(text.trimmingCharacters(in: .whitespacesAndNewlines))
-}
-
-func saveBuiltinID(_ id: CGDirectDisplayID) {
-    try? FileManager.default.createDirectory(at: stateFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try? "\(id)\n".write(to: stateFile, atomically: true, encoding: .utf8)
-}
-
 // "On" means online, not active: a built-in screen mirroring an external one is
 // online but not in the active list (measured 2026-11-18, macOS 26).
 func onlineBuiltinID() -> CGDirectDisplayID? {
@@ -99,8 +95,7 @@ func builtinIsOn() -> Bool { onlineBuiltinID() != nil }
 // With the built-in disabled and the last real monitor unplugged, WindowServer
 // does not report zero displays: it brings up a placeholder whose vendor and
 // model read as ASCII "unkn" / "virt" (0x756E6B6E / 0x76697274), serial 0. It
-// shows nothing, so it must not count as an external, or the watcher never sees
-// "last external gone" and leaves the screen dark (seen 2026-11-19, macOS 26).
+// shows nothing, so it must not count as an external (seen 2026-11-19, macOS 26).
 func isPlaceholder(_ id: CGDirectDisplayID) -> Bool {
     CGDisplayVendorNumber(id) == 0x756E_6B6E && CGDisplayModelNumber(id) == 0x7669_7274
 }
@@ -136,46 +131,6 @@ func describe(_ id: CGDirectDisplayID) -> String {
     return "\(paint(name, .bold)) id=\(id) \(paint(detail, .dim))"
 }
 
-// MARK: actions
-
-// Returns nil on success, else what went wrong. The watcher logs the error and
-// keeps running; the one-shot commands exit on it. Retries, because applying a
-// configuration while the previous one is still settling fails with CGError
-// 1001 (seen 3 s after an `off`, 2026-11-18).
-func trySetEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) -> String? {
-    var error: String?
-    for attempt in 1...5 {
-        error = setEnabledOnce(id, enabled)
-        if error == nil { return nil }
-        if attempt < 5 { sleep(1) }
-    }
-    return error
-}
-
-func setEnabledOnce(_ id: CGDirectDisplayID, _ enabled: Bool) -> String? {
-    guard let configure = loadConfigureEnabled() else {
-        return "this macOS no longer exports CGSConfigureDisplayEnabled; the private API is gone"
-    }
-    var config: CGDisplayConfigRef?
-    guard CGBeginDisplayConfiguration(&config) == .success, let config else {
-        return "could not begin a display configuration"
-    }
-    let err = configure(config, id, enabled)
-    guard err == .success else {
-        CGCancelDisplayConfiguration(config)
-        return "CGSConfigureDisplayEnabled(\(id), \(enabled)) returned CGError \(err.rawValue)"
-    }
-    let done = CGCompleteDisplayConfiguration(config, .forSession)
-    guard done == .success else {
-        return "could not apply the display configuration (CGError \(done.rawValue))"
-    }
-    return nil
-}
-
-func setEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) {
-    if let error = trySetEnabled(id, enabled) { fail(error) }
-}
-
 func waitFor(_ condition: () -> Bool, seconds: Double = 5) -> Bool {
     let deadline = Date().addingTimeInterval(seconds)
     while Date() < deadline {
@@ -185,169 +140,269 @@ func waitFor(_ condition: () -> Bool, seconds: Double = 5) -> Bool {
     return condition()
 }
 
-func turnOff() {
-    requireWindowServer()
-    guard let id = onlineBuiltinID() else {
-        let why = lidClosed() ? "the lid is closed" : "already off"
-        print("built-in screen: \(paint("off", .yellow)) (\(why))")
+// MARK: holder bookkeeping
+
+let stateDir: URL = {
+    let base = ProcessInfo.processInfo.environment["XDG_STATE_HOME"].map { URL(fileURLWithPath: $0) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/state")
+    return base.appendingPathComponent("builtin-display")
+}()
+let pidFile = stateDir.appendingPathComponent("holder.pid")
+let logFile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/builtin-display.log")
+
+func processName(_ pid: pid_t) -> String {
+    var buf = [CChar](repeating: 0, count: 256)
+    return proc_name(pid, &buf, UInt32(buf.count)) > 0 ? String(cString: buf) : ""
+}
+
+// The running holder's PID, or nil. Checks the name too, so a stale PID file
+// whose number the system has reused never gets someone else's process killed.
+func holderPID() -> pid_t? {
+    guard let text = try? String(contentsOf: pidFile, encoding: .utf8),
+          let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0,
+          kill(pid, 0) == 0, processName(pid) == "builtin-display"
+    else { return nil }
+    return pid
+}
+
+// Start `builtin-display hold` as its own process, logging to the agent log.
+// It outlives this process. Whether launchd's bootout of the watcher also ends
+// it is not verified; `builtin-display on` always does.
+func spawnHolder() -> String? {
+    guard let exe = Bundle.main.executableURL else { return "cannot find own executable" }
+    try? FileManager.default.createDirectory(at: logFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    if !FileManager.default.fileExists(atPath: logFile.path) {
+        FileManager.default.createFile(atPath: logFile.path, contents: nil)
+    }
+    let task = Process()
+    task.executableURL = exe
+    task.arguments = ["hold"]
+    task.standardInput = FileHandle.nullDevice
+    if let out = try? FileHandle(forWritingTo: logFile) {
+        out.seekToEndOfFile()
+        task.standardOutput = out
+        task.standardError = out
+    }
+    do { try task.run() } catch { return "could not start the holder: \(error.localizedDescription)" }
+    return nil
+}
+
+// MARK: restore paths
+
+// Fallbacks for when no holder is left but the panel is still dark: first the
+// public reset, then the old private enable, which is what a panel turned off
+// `.forSession` by the first version of this tool needs.
+func forceRestore() {
+    CGRestorePermanentDisplayConfiguration()
+    if waitFor({ builtinIsOn() }, seconds: 3) { return }
+    guard let configure = loadConfigureEnabled() else { return }
+    var config: CGDisplayConfigRef?
+    guard CGBeginDisplayConfiguration(&config) == .success, let config else { return }
+    // ID 1 is the built-in's usual ID on Apple silicon; a dark panel is not listed.
+    guard configure(config, onlineBuiltinID() ?? 1, true) == .success else {
+        CGCancelDisplayConfiguration(config)
         return
+    }
+    _ = CGCompleteDisplayConfiguration(config, .forSession)
+}
+
+// MARK: hold
+
+// The only code that turns the screen off. Stays running while it holds the
+// change, and exits when any of these happen, which brings the screen back:
+//   - no real external display is present (checked every second)
+//   - SIGTERM / SIGINT / SIGHUP (`on`, Ctrl-C, launchd bootout)
+//   - the optional time limit runs out (`try`)
+// It runs as a faceless NSApplication because a bare command-line process does
+// not see display changes made elsewhere (measured 2026-11-18).
+var holdActivity: NSObjectProtocol?
+var signalSources: [DispatchSourceSignal] = []
+var holdTimer: DispatchSourceTimer?
+
+var heldID: CGDirectDisplayID = 1
+var emptyPolls = 0
+
+// Turn the panel back on from this same process (what LightsOut's reconnect
+// does), then the public reset, then exit. Exiting may revert it as well.
+func releaseHold(_ why: String) -> Never {
+    log("hold: \(why); releasing, built-in screen back on")
+    if holderPID() == getpid() { try? FileManager.default.removeItem(at: pidFile) }
+    if let configure = loadConfigureEnabled() {
+        var config: CGDisplayConfigRef?
+        if CGBeginDisplayConfiguration(&config) == .success, let config {
+            if configure(config, heldID, true) == .success {
+                _ = CGCompleteDisplayConfiguration(config, .forAppOnly)
+            } else {
+                CGCancelDisplayConfiguration(config)
+            }
+        }
+    }
+    CGRestorePermanentDisplayConfiguration()
+    _ = waitFor({ builtinIsOn() }, seconds: 3)
+    log("hold: built-in \(builtinIsOn() ? "back online" : "still offline after release")")
+    exit(0)
+}
+
+func hold(seconds: Double?) -> Never {
+    requireWindowServer()
+    if let pid = holderPID() { fail("already off (holder pid \(pid))") }
+    guard let id = onlineBuiltinID() else {
+        fail(lidClosed() ? "the lid is closed" : "the built-in screen is not online")
     }
     guard !externals().isEmpty else {
         fail("refusing: no external display is connected, so turning the built-in screen off would leave nothing to see")
     }
-    saveBuiltinID(id)
-    setEnabled(id, false)
-    if waitFor({ !builtinIsOn() }) {
-        print("built-in screen: \(paint("off", .green)) — run `builtin-display on` (or log out) to bring it back")
-    } else {
-        fail("the call was accepted but the built-in screen is still listed online; if it went dark, `builtin-display on` restores it")
+    guard let configure = loadConfigureEnabled() else {
+        fail("this macOS no longer exports CGSConfigureDisplayEnabled; the private API is gone")
     }
+    var config: CGDisplayConfigRef?
+    guard CGBeginDisplayConfiguration(&config) == .success, let config else {
+        fail("could not begin a display configuration")
+    }
+    let err = configure(config, id, false)
+    guard err == .success else {
+        CGCancelDisplayConfiguration(config)
+        fail("CGSConfigureDisplayEnabled(\(id), false) returned CGError \(err.rawValue)")
+    }
+    let done = CGCompleteDisplayConfiguration(config, .forAppOnly)
+    guard done == .success else { fail("could not apply the display configuration (CGError \(done.rawValue))") }
+    heldID = id
+
+    try? FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
+    try? "\(getpid())\n".write(to: pidFile, atomically: true, encoding: .utf8)
+    log("hold: built-in screen off (pid \(getpid()))")
+
+    for sig in [SIGTERM, SIGINT, SIGHUP] {
+        signal(sig, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+        source.setEventHandler { releaseHold("signal \(sig)") }
+        source.resume()
+        signalSources.append(source)
+    }
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    holdActivity = ProcessInfo.processInfo.beginActivity(
+        options: .userInitiatedAllowingIdleSystemSleep, reason: "builtin-display holds the built-in screen off"
+    )
+    let started = Date()
+    let timer = DispatchSource.makeTimerSource(queue: .main)
+    timer.schedule(deadline: .now() + 1, repeating: 1)
+    timer.setEventHandler {
+        // Three empty reads in a row (3 s), so one bad read cannot flap the screen.
+        emptyPolls = externals().isEmpty ? emptyPolls + 1 : 0
+        if emptyPolls >= 3 { releaseHold("no external display") }
+        if let seconds, Date().timeIntervalSince(started) >= seconds { releaseHold("\(Int(seconds))s trial over") }
+    }
+    timer.resume()
+    holdTimer = timer
+    NSApplication.shared.run()
+    exit(0)
 }
 
-// Always sends the enable call, even when detection says the screen is on:
-// whether a disabled panel leaves the online list is not something to bet the
-// way back on. Enabling an already enabled display is a no-op.
-func turnOn() {
-    requireWindowServer()
-    if lidClosed() {
-        fail("the lid is closed; open it first")
-    }
-    guard let id = savedBuiltinID() ?? onlineBuiltinID() else {
-        fail("no remembered built-in display ID; log out and back in to restore the screen")
-    }
-    setEnabled(id, true)
-    if waitFor({ builtinIsOn() }) {
-        print("built-in screen: \(paint("on", .green))")
-    } else {
-        fail("the call succeeded but the built-in screen did not come back; close and reopen the lid, or log out")
-    }
-}
+// MARK: one-shot commands
 
 func status() {
     requireWindowServer()
     if builtinIsOn() {
         print("built-in screen: \(paint("on", .green))")
     } else {
-        let why = lidClosed() ? "lid closed" : "turned off"
+        let why = lidClosed() ? "lid closed" : (holderPID().map { "held off by pid \($0)" } ?? "off, no holder running")
         print("built-in screen: \(paint("off", .yellow)) (\(why))")
     }
     for id in onlineDisplays() { print("  \(describe(id))") }
 }
 
-// Turn off, wait, turn back on. Ctrl-C or SIGTERM during the wait also restores.
-// Never exits between the disable and the enable, whatever detection reports;
-// it prints what detection saw, which is the point of a first test.
-func trial(seconds: UInt32) {
+func turnOff() {
     requireWindowServer()
-    guard let id = onlineBuiltinID() else { fail("the built-in screen is not online (lid closed or already off)") }
-    guard !externals().isEmpty else { fail("refusing: no external display is connected") }
-    saveBuiltinID(id)
-    if let error = trySetEnabled(id, false) { fail(error) }
-    let gone = waitFor({ !builtinIsOn() }, seconds: 3)
-    print("disable sent; built-in \(gone ? paint("left the online list", .green) : paint("still listed online", .yellow))")
-    for sig in [SIGINT, SIGTERM] {
-        signal(sig) { _ in
-            if let id = savedBuiltinID(), let configure = loadConfigureEnabled() {
-                var config: CGDisplayConfigRef?
-                if CGBeginDisplayConfiguration(&config) == .success, let config {
-                    _ = configure(config, id, true)
-                    _ = CGCompleteDisplayConfiguration(config, .forSession)
-                }
-            }
-            exit(130)
+    if let pid = holderPID() {
+        print("built-in screen: \(paint("off", .yellow)) (already held by pid \(pid))")
+        return
+    }
+    guard builtinIsOn() else { fail(lidClosed() ? "the lid is closed" : "the built-in screen is already offline") }
+    guard !externals().isEmpty else {
+        fail("refusing: no external display is connected, so turning the built-in screen off would leave nothing to see")
+    }
+    if let error = spawnHolder() { fail(error) }
+    if waitFor({ !builtinIsOn() }) {
+        print("built-in screen: \(paint("off", .green)) — `builtin-display on`, unplugging the monitor, or ending the holder brings it back")
+    } else {
+        fail("the holder did not turn the screen off; see \(logFile.path)")
+    }
+}
+
+func turnOn() {
+    requireWindowServer()
+    if lidClosed() { fail("the lid is closed; open it first") }
+    if let pid = holderPID() {
+        kill(pid, SIGTERM)
+        if waitFor({ builtinIsOn() }) {
+            print("built-in screen: \(paint("on", .green))")
+            return
         }
+        kill(pid, SIGKILL)
     }
-    print(paint("restoring in \(seconds)s (Ctrl-C restores now)", .dim))
-    sleep(seconds)
-    if let error = trySetEnabled(id, true) {
-        fail("re-enable FAILED (\(error)); log out to restore the screen")
+    if !builtinIsOn() { forceRestore() }
+    if waitFor({ builtinIsOn() }) {
+        print("built-in screen: \(paint("on", .green))")
+    } else {
+        fail("the built-in screen did not come back; unplug the external monitor, or log out")
     }
-    let back = waitFor({ builtinIsOn() })
-    print("enable sent; built-in \(back ? paint("back online", .green) : paint("not listed online — if it is still dark, log out", .red))")
-    if !back { exit(1) }
 }
 
 // MARK: heal
 
 // One-shot safety net, run by launchd every 2 s as a fresh process (the
-// com.user.builtin-display-heal agent). It does not trust the long-lived
-// watcher: on 2026-11-20 the watcher, 17 h old, never saw an unplug and left
-// the screen dark, while a fresh `builtin-display on` read the state right at
-// once. Silent when there is nothing to do; logs only when it has to act,
-// which means the watcher missed an unplug.
+// com.user.builtin-display-heal agent). The holder already exits when the last
+// external goes; this covers a holder that hangs, and a panel left dark with no
+// holder at all (such as one turned off by the first version). Silent when
+// there is nothing to do.
 func heal() {
     // An empty list means no WindowServer access (a sandbox), not "no display".
     guard !onlineDisplays().isEmpty else { return }
     guard externals().isEmpty, !builtinIsOn(), !lidClosed() else { return }
-    let id = savedBuiltinID() ?? 1
-    if let error = trySetEnabled(id, true) {
-        log("heal: no external display and built-in off; turning it on FAILED: \(error)")
-        exit(1)
+    if let pid = holderPID() {
+        kill(pid, SIGKILL)
+        log("heal: no external display but holder \(pid) still running; killed it")
+        if waitFor({ builtinIsOn() }, seconds: 3) { return }
     }
-    log("heal: no external display and built-in off; built-in screen on (the watcher missed this)")
+    forceRestore()
+    log("heal: no external display and built-in off; restore \(builtinIsOn() ? "worked" : "FAILED")")
 }
 
 // MARK: watcher
 
-// Run by the login agent (`builtin-display auto on`). It acts only on two
-// transitions, so a manual choice sticks until the next plug event:
-//   - an external display that was not connected before appears -> screen off
-//   - no external display is present (lid open, built-in off) -> screen back
-//     on. This one is checked on every poll, not only on the unplug event, so
-//     you are never left with no visible screen
-// `builtin-display on` while the Studio Display stays connected is therefore
-// left alone. Reconfiguration events arrive in bursts, so each burst is handled
-// once, 2 s after it settles.
+// Run by the login agent (`builtin-display auto on`). It acts on one
+// transition: an external display that was not connected before appears, with
+// the lid open and the built-in on -> start a holder. Turning the screen back on
+// at unplug is the holder's job, so `builtin-display on` while the monitor stays
+// connected sticks until the next plug event. Reconfiguration events arrive in
+// bursts, so each burst is handled once, 2 s after it settles.
 
 // Externals are keyed by vendor/model/serial, not CGDirectDisplayID, in case a
-// reconfiguration (such as re-enabling the built-in) renumbers them and makes an
-// already connected monitor look new.
+// reconfiguration renumbers them and makes a connected monitor look new.
 var knownExternals: Set<String> = []
 var watchActivity: NSObjectProtocol?
 var pendingCheck: DispatchWorkItem?
+var lastSnapshot = ""
 
 func hardwareKey(_ id: CGDirectDisplayID) -> String {
     "\(CGDisplayVendorNumber(id))-\(CGDisplayModelNumber(id))-\(CGDisplaySerialNumber(id))"
 }
 
-func log(_ message: String) {
-    let stamp = ISO8601DateFormatter().string(from: Date())
-    print("\(stamp) \(message)")
-    fflush(stdout)
-}
-
-var lastSnapshot = ""
-
 func reconcile() {
     let now = Set(externals().map(hardwareKey))
     let added = now.subtracting(knownExternals)
-    let snapshot = "externals=\(now.sorted()) builtin=\(builtinIsOn() ? "on" : "off") lid=\(lidClosed() ? "closed" : "open")"
+    let holder = holderPID().map(String.init) ?? "none"
+    let snapshot = "externals=\(now.sorted()) builtin=\(builtinIsOn() ? "on" : "off") lid=\(lidClosed() ? "closed" : "open") holder=\(holder)"
     if snapshot != lastSnapshot {
         log("state: \(snapshot)")
         lastSnapshot = snapshot
     }
     defer { knownExternals = now }
-
-    if !added.isEmpty, let id = onlineBuiltinID(), !lidClosed() {
-        saveBuiltinID(id)
-        if let error = trySetEnabled(id, false) {
-            log("external display \(added.sorted()) connected; turning built-in off FAILED: \(error)")
-        } else {
-            log("external display \(added.sorted()) connected; built-in screen off")
-        }
-    } else if now.isEmpty, !builtinIsOn(), !lidClosed() {
-        // A state rule, not a transition: whenever no real external is present,
-        // the lid is open and the built-in is off, turn it on. The 2 s poll
-        // re-checks it, so a missed unplug event, a placeholder display, an
-        // agent restart while unplugged, or a failed enable all heal on the
-        // next tick instead of leaving the screen dark. ID 1 is the built-in's
-        // usual ID on Apple silicon, a fallback only if the state file is gone.
-        let id = savedBuiltinID() ?? 1
-        if let error = trySetEnabled(id, true) {
-            log("no external display; turning built-in on FAILED (retrying next poll): \(error)")
-        } else {
-            log("no external display; built-in screen on")
-        }
+    guard !added.isEmpty, builtinIsOn(), !lidClosed(), holderPID() == nil else { return }
+    if let error = spawnHolder() {
+        log("external display \(added.sorted()) connected; starting holder FAILED: \(error)")
+    } else {
+        log("external display \(added.sorted()) connected; holder started")
     }
 }
 
@@ -359,8 +414,8 @@ func scheduleReconcile() {
 }
 
 func watch() {
-    // At login the Studio Display may already be connected: knownExternals
-    // starts empty, so the first reconcile treats it as newly connected.
+    // At login the monitor may already be connected: knownExternals starts
+    // empty, so the first reconcile treats it as newly connected.
     log("watching for display changes")
     let callback: CGDisplayReconfigurationCallBack = { _, flags, _ in
         if flags.contains(.beginConfigurationFlag) { return }
@@ -368,17 +423,9 @@ func watch() {
     }
     CGDisplayRegisterReconfigurationCallback(callback, nil)
     scheduleReconcile()
-    // A bare command-line process never saw changes made elsewhere (unplugging
-    // the monitor, or `on` from another shell): not through the callback, and
-    // not by re-reading the display list, which stays cached until WindowServer
-    // events are processed. Measured 2026-11-18 under dispatchMain and
-    // CFRunLoopRun. Running as a faceless NSApplication (no Dock icon, no menu)
-    // gives the process a real WindowServer connection; the 2 s poll is a
-    // backstop in case a notification is missed.
+    // A faceless NSApplication gets a real WindowServer connection, so it sees
+    // changes made elsewhere; App Nap is held off because it throttles timers.
     NSApplication.shared.setActivationPolicy(.prohibited)
-    // A faceless app is a prime App Nap candidate, and App Nap throttles timers
-    // and event delivery. Suspected (not proven) cause of the 2026-11-20 miss.
-    // The activity token must live as long as the process, so it is kept global.
     watchActivity = ProcessInfo.processInfo.beginActivity(
         options: .userInitiatedAllowingIdleSystemSleep,
         reason: "builtin-display watches for display plug events"
@@ -400,36 +447,42 @@ Turn the MacBook's built-in screen off while the lid stays open, so the
 built-in keyboard and trackpad keep working with an external display.
 
 commands:
-  status          show whether the built-in screen is on, and the active displays
-  off             turn the built-in screen off (refuses unless an external display is active)
+  status          show whether the built-in screen is on, and the online displays
+  off             turn the built-in screen off (refuses unless an external display is present)
   on              turn the built-in screen back on
   toggle          off if on, on if off (bind this to a hotkey)
-  try [SECONDS]   turn off, then back on after SECONDS (default 10) — a safe first test
+  try [SECONDS]   hold the screen off for SECONDS (default 10) in the foreground,
+                  then exit, which must bring it back: the first test on a new macOS
   auto on|off|status
                   login agent that turns the screen off whenever an external display
-                  connects, and back on when the last one is unplugged. `on` or
-                  `toggle` still work while it runs; your choice holds until the
-                  next plug event
+                  connects; `on` or `toggle` still work while it runs
+  hold            what `off` starts in the background: keeps the screen off while it
+                  runs, and exits (screen back) when no external display is left
   watch           what the agent runs (foreground; logs each action)
-  heal            one-shot: turn the built-in on if no external display is
-                  present and the lid is open; `auto on` runs it every 2 s
+  heal            one-shot safety net that `auto on` runs every 2 s
 
-Uses a private macOS API, so an update can break it. The change lasts for the
-login session: logging out or rebooting always restores the screen.
-Agent log: ~/Library/Logs/builtin-display.log
+The screen stays off only while the holder process runs: `on`, Ctrl-C,
+unplugging the monitor, logging out or rebooting brings it back. Whether a
+crashed or killed holder also brings it back is not verified yet.
+Uses a private macOS API, so an update can break it.
+Log: ~/Library/Logs/builtin-display.log
 exit codes: 0 ok, 1 failed, 2 usage error
 """
+
+// MARK: main
 
 let args = Array(CommandLine.arguments.dropFirst())
 switch args.first {
 case "status": status()
 case "off": turnOff()
 case "on": turnOn()
-case "toggle": builtinIsOn() ? turnOff() : turnOn()
+case "toggle": if holderPID() != nil || !builtinIsOn() { turnOn() } else { turnOff() }
 case "try":
-    let seconds = args.count > 1 ? UInt32(args[1]) : 10
-    guard let seconds, seconds > 0 else { fail("try takes a positive number of seconds", code: 2) }
-    trial(seconds: seconds)
+    let seconds = args.count > 1 ? Double(args[1]) : 10
+    guard let seconds, seconds >= 1, seconds <= 120 else { fail("try takes SECONDS between 1 and 120", code: 2) }
+    print(paint("holding the built-in screen off for \(Int(seconds))s; it must come back by itself (fallback: `builtin-display on` from the external monitor, unplug it, or log out)", .dim))
+    hold(seconds: seconds)
+case "hold": hold(seconds: nil)
 case "watch": watch()
 case "heal": heal()
 case "-h", "--help", "help": print(usage)

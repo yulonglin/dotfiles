@@ -5,8 +5,9 @@
 # BlackOut, both paid. Logic lives in tools/builtin-display/main.swift; this
 # wrapper compiles it on first run (or when the source is newer) and execs it.
 # It also owns `auto on|off|status`: the login agents that run `watch` and `heal`.
+# The screen stays off only while a `hold` process runs; `on` ends it.
 #
-#   builtin-display status | off | on | toggle | try [SECONDS] | heal | auto on|off|status | --help
+#   builtin-display status | off | on | toggle | try [SECONDS] | hold | heal | auto on|off|status | --help
 set -euo pipefail
 
 if [[ $OSTYPE != darwin* ]]; then
@@ -27,9 +28,10 @@ say() {  # say <colour> <text>: coloured only on a terminal without NO_COLOR
     if [[ -t 1 && -z ${NO_COLOR:-} ]]; then print -P "%F{$1}$2%f"; else print -r -- "$2"; fi
 }
 
-# Two agents: the watcher reacts to plug events at once; the heal job is a
-# fresh process every 2 s (about 40 ms a run, so cheap) that turns the built-in back on if no external is
-# present, in case the long-lived watcher misses an unplug (it did, 2026-11-20).
+# Two agents: the watcher starts a holder when a monitor connects (the holder
+# itself lets go when the last one leaves); the heal job is a fresh process every
+# 2 s (about 40 ms a run, so cheap) that kills a hung holder and restores the
+# screen if no external is present.
 HEAL_LABEL="com.user.builtin-display-heal"
 HEAL_PLIST="${HOME}/Library/LaunchAgents/${HEAL_LABEL}.plist"
 
@@ -91,7 +93,7 @@ auto_on() {
 auto_off() {
     remove_agent "$LABEL" "$PLIST"
     remove_agent "$HEAL_LABEL" "$HEAL_PLIST"
-    say yellow "auto: off — agents removed; the screen stays as it is now (builtin-display on to restore)"
+    say yellow "auto: off — agents removed; if the screen is still off, run builtin-display on"
 }
 
 auto_status() {
