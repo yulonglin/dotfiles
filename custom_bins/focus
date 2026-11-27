@@ -882,7 +882,9 @@ def switch(name: str, on: bool) -> None:
     if ct_apply(args, block_is(name, on)) or ct_apply(args, block_is(name, on)):
         return
     verb = "start" if on else "stop"
-    if not from_alfred():  # from Alfred, the exit below shows a dialog instead
+    # From Alfred, the exit below shows a dialog instead. A tick step that fails again
+    # each minute notified on its first failure; the rest go to the tick log.
+    if not from_alfred() and first_failure(f"{verb} {name}"):
         notify(f"Cold Turkey did not {verb} {name!r}. Run focus status.")
     sys.exit(f"focus: Cold Turkey did not {verb} {name!r}: {CT_DROPPED}")
 
@@ -936,6 +938,45 @@ EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a
 
 
 _LOCKS_HELD: dict[str, int] = {}
+
+# A launchd step that keeps failing (the display asleep through a window, 21 Nov 2026)
+# retries every minute; it notifies once, on its first failure (Yulong, 27 Nov 2026).
+NOTIFIED_FILE = PENDING.parent / "notified.json"  # failures already notified, by key
+_NOTIFY_STEP: str | None = None  # the tick step running now, if any
+
+
+@contextmanager
+def notify_once(step: str):
+    """Run one tick step so that a Cold Turkey failure inside it notifies only the first
+    time; a later tick where the step finishes without failing forgets that, so the next
+    failure notifies again. Outside a step, as for a person's own command, every
+    failure notifies."""
+    global _NOTIFY_STEP
+    _NOTIFY_STEP = step
+    try:
+        yield
+    except SystemExit:
+        raise
+    else:
+        seen = read_state(NOTIFIED_FILE) or {}
+        kept = {k: v for k, v in seen.items() if not k.startswith(f"{step}:")}
+        if kept != seen:
+            write_state(NOTIFIED_FILE, kept)
+    finally:
+        _NOTIFY_STEP = None
+
+
+def first_failure(what: str) -> bool:
+    """Whether a failure should notify: always outside a tick step, else only when this
+    step has not already notified it; records it."""
+    if _NOTIFY_STEP is None:
+        return True
+    key = f"{_NOTIFY_STEP}:{what}"
+    seen = read_state(NOTIFIED_FILE) or {}
+    if key in seen:
+        return False
+    write_state(NOTIFIED_FILE, {**seen, key: time.time()})
+    return True
 
 
 @contextmanager
@@ -1803,9 +1844,9 @@ def cmd_tick(cfg: dict) -> None:
     is due, else silent; then makes ScreenZen follow Cold Turkey."""
     try:
         catch_up(cfg)
-        default_start(cfg)
-        scheduled_start(cfg)
-        window_start(cfg)
+        for step in (default_start, scheduled_start, window_start):
+            with notify_once(step.__name__):
+                step(cfg)
     finally:
         # A Cold Turkey command that is not read exits before ScreenZen is written,
         # and the queued command can land minutes later, so ScreenZen kept the old
@@ -4758,7 +4799,8 @@ def catch_up(cfg: dict) -> None:
     other."""
     for step in (commit_tick, end_break, end_only, end_capped, window_end):
         try:
-            step(cfg)
+            with notify_once(step.__name__):
+                step(cfg)
         except (OSError, sqlite3.Error, ValueError, SystemExit) as e:
             print(f"focus: {step.__name__} could not finish: {e}")
 
