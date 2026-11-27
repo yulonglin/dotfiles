@@ -1,0 +1,87 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Flip a coin at the start of a long break and assign what the break is for.
+
+    reward              # flip, then print the assigned break and what it may be swapped for
+    reward list         # print both lists and the swap rules
+    reward --seed 7     # deterministic flip (tests, or re-showing a result)
+
+Heads (50%) is a high-stimulation reward, tails (50%) a dry restoration break.
+Each side assigns one option at random. On heads the assigned reward may only
+be swapped for an option listed above it in HEADS; on tails any dry option may
+be chosen instead. The rules come from the "Dopamine Framework" Bear note.
+
+reward never changes blocking state: it does not call `focus` or touch Cold
+Turkey. Unlock anything a heads result needs by hand.
+"""
+
+import argparse
+import random
+import sys
+
+# Order matters: an assigned heads reward may be swapped only for an option
+# listed ABOVE it (closer to index 0). Edit the order to change what "higher" means.
+HEADS = ["messages", "Slack", "social media", "book", "shows or videos"]
+TAILS = ["nap", "stretch", "walk", "snack"]
+
+
+def flip(rng: random.Random) -> dict:
+    """Return the side, the assigned option and the options it may be swapped for."""
+    if rng.random() < 0.5:
+        i = rng.randrange(len(HEADS))
+        return {"side": "heads", "assigned": HEADS[i], "swaps": HEADS[:i]}
+    assigned = rng.choice(TAILS)
+    return {
+        "side": "tails",
+        "assigned": assigned,
+        "swaps": [t for t in TAILS if t != assigned],
+    }
+
+
+def render(result: dict) -> str:
+    if result["side"] == "heads":
+        head = f"HEADS: high-stimulation reward -> {result['assigned']}"
+        swaps = (
+            ", ".join(result["swaps"])
+            if result["swaps"]
+            else "none (already the top option)"
+        )
+        swap_line = f"May swap up to: {swaps}"
+    else:
+        head = f"TAILS: dry restoration -> {result['assigned']}"
+        swap_line = f"Or choose freely: {', '.join(result['swaps'])}"
+    return f"{head}\n{swap_line}\nLast 5 minutes: phone away, close loops, water, open only the next block's file."
+
+
+def render_list() -> str:
+    heads = "\n".join(f"  {n}. {h}" for n, h in enumerate(HEADS, 1))
+    tails = "\n".join(f"  - {t}" for t in TAILS)
+    return (
+        "Heads (high-stimulation; swap only to a lower number):\n"
+        f"{heads}\n"
+        "Tails (dry restoration; choose any):\n"
+        f"{tails}"
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="reward",
+        description="Coin-flip a long break: heads = high-stimulation reward, tails = dry restoration.",
+    )
+    parser.add_argument("command", nargs="?", choices=["flip", "list"], default="flip")
+    parser.add_argument(
+        "--seed", type=int, help="seed the flip for a reproducible result"
+    )
+    args = parser.parse_args(argv)
+    if args.command == "list":
+        print(render_list())
+        return 0
+    print(render(flip(random.Random(args.seed))))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
