@@ -11,7 +11,7 @@
 #
 # Blocked: paths under a gitignored directory, $TMPDIR, /tmp, or a path
 # containing /tmp/ or /scratch/. Allowed: anything git tracks or would track,
-# and any non-temporary path outside a git repo (e.g. ~/Documents/admin/<pack>/).
+# and any non-temporary path outside a git repo (e.g. a folder under ~/Documents).
 #
 # Gated: only `action` absent or "publish", and only when a `file_path` is
 # present. Every other action (read, list, comments, reply, watch,
@@ -71,7 +71,7 @@ source is the durable copy.
 Move the source to a durable path, then publish: in a repo, artifacts/<slug>/
 committed (build output may live in the gitignored artifacts/<slug>/build/; see
 artifacts/README.md and record the row in ARTIFACTS.md); outside a repo, any
-non-temporary folder, such as ~/Documents/admin/<pack>/.
+non-temporary folder, such as one under ~/Documents.
 EOF
   exit 2
 }
