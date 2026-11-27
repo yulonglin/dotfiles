@@ -1,0 +1,517 @@
+#!/usr/bin/env python3
+"""key-health: probe API keys in priority order and pick the first healthy one.
+
+WHY
+    Several BWS keys share one env name (OPENROUTER_API_KEY - mats, - personal).
+    The machine-wide priority order lives in ONE place, the BWS secret
+    KEY_PRIORITY, so every machine and project shares it:
+
+        OPENROUTER_API_KEY = mats, personal
+        OPENAI_API_KEY = work, personal
+
+    Each label expands to the BWS key "ENV - label". Every new Claude Code
+    session runs this at SessionStart: it probes each listed key (read-only, or
+    a 1-token request where the provider has no balance endpoint), picks the
+    first healthy key per env name, and writes the choice to a cache that
+    `dotfiles-secrets` reads for bare-name and .envrc resolution. Nothing is
+    sticky: the next session probes from the top again, so a replenished
+    top-priority key is used again automatically.
+
+WHAT SWITCHES
+    no_credit (402, insufficient_quota, zero balance), revoked (401/403),
+    rate_limited (429) and missing (listed in KEY_PRIORITY but absent from BWS)
+    all skip to the next key. A network error or unknown failure does NOT
+    switch: the key is treated as usable, so a flaky probe never moves spend.
+
+LOUD ALERTS
+    A revoked or missing key is a fix-it item, not just a fallback: it gets a
+    red banner in the session, an instruction to the model to raise it first,
+    and a macOS notification (throttled to once per KEY_HEALTH_ALERT_EVERY
+    seconds per key, default 6 h, so many sessions do not stack banners).
+
+GATEWAY
+    When the chosen OPENROUTER_API_KEY differs from the key in the
+    model-router's secrets.toml, the `openrouter` line is rewritten in place and
+    the router is restarted with launchctl kickstart.
+
+TEST SEAMS (never set in normal use)
+    KEY_HEALTH_DUMP_FILE   TSV "bws_key<TAB>b64(value)" instead of `dotfiles-secrets bws-dump`
+    KEY_HEALTH_PRIORITY    priority text instead of the KEY_PRIORITY secret
+    KEY_HEALTH_STUB        JSON {bws_key: state} instead of network probes
+    KEY_HEALTH_CACHE       cache path (default ~/.cache/dotfiles-secrets/key-health.tsv)
+    KEY_HEALTH_GATEWAY_SECRETS / KEY_HEALTH_GATEWAY_RESTART  gateway file / restart command
+    KEY_HEALTH_NO_NOTIFY=1 suppress the desktop notification
+"""
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+SECRETS_BIN = HERE / "dotfiles-secrets"
+PRIORITY_KEY = "KEY_PRIORITY"
+CACHE = Path(os.environ.get("KEY_HEALTH_CACHE") or Path.home() / ".cache/dotfiles-secrets/key-health.tsv")
+ALERTS = CACHE.with_name("key-health-alerted.json")
+GATEWAY_SECRETS = Path(os.environ.get("KEY_HEALTH_GATEWAY_SECRETS") or Path.home() / ".config/model-router/secrets.toml")
+GATEWAY_LABEL = "com.alignment-hive.model-router"   # macOS launchd
+GATEWAY_UNIT = "model-router.service"               # Linux systemd --user
+REUSE_SECONDS = int(os.environ.get("KEY_HEALTH_REUSE", "300"))
+ALERT_EVERY = int(os.environ.get("KEY_HEALTH_ALERT_EVERY", str(6 * 3600)))
+# Per request. Worst case is an OpenRouter team key (3 sequential requests) plus
+# the BWS fetch, which must fit the 25 s SessionStart timeout in settings.json.
+TIMEOUT = 5.0
+
+SWITCH_STATES = {"no_credit", "revoked", "rate_limited", "missing"}
+LOUD_STATES = {"revoked", "missing"}
+STATE_WORDS = {
+    "ok": "healthy",
+    "no_credit": "out of credit",
+    "revoked": "revoked or invalid",
+    "rate_limited": "rate-limited",
+    "missing": "missing from BWS",
+    "unknown": "unchecked (probe failed; still used)",
+}
+
+# Cheapest live models for the providers without a balance endpoint. One output
+# token per probe. Override per provider with KEY_HEALTH_MODEL_<PROVIDER>.
+PROBE_MODELS = {
+    "openai": os.environ.get("KEY_HEALTH_MODEL_OPENAI", "gpt-4o-mini"),
+    "openrouter": os.environ.get("KEY_HEALTH_MODEL_OPENROUTER", "openai/gpt-4o-mini"),
+    "anthropic": os.environ.get("KEY_HEALTH_MODEL_ANTHROPIC", "claude-haiku-4-5-20251001"),
+    "gemini": os.environ.get("KEY_HEALTH_MODEL_GEMINI", "gemini-2.5-flash-lite"),
+}
+
+
+# ── colour (TTY only, NO_COLOR respected) ─────────────────────────────────────
+def _tty() -> bool:
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def paint(text: str, code: str) -> str:
+    return f"\033[{code}m{text}\033[0m" if _tty() else text
+
+
+STATE_COLOUR = {"ok": "32", "unknown": "2", "rate_limited": "33", "no_credit": "33", "revoked": "1;31", "missing": "1;31"}
+
+
+# ── inputs ────────────────────────────────────────────────────────────────────
+def load_dump() -> dict[str, str]:
+    """bws_key -> value, from one BWS fetch."""
+    path = os.environ.get("KEY_HEALTH_DUMP_FILE")
+    if path:
+        text = Path(path).read_text()
+    else:
+        text = subprocess.run([str(SECRETS_BIN), "bws-dump"], check=True, capture_output=True, text=True).stdout
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        parts = line.split("\t")
+        # The first record wins on a duplicate label, matching bws_value_for_key
+        # in dotfiles-secrets, so the probed key is the key that gets exported.
+        if len(parts) >= 2 and parts[0] and parts[0] not in out:
+            out[parts[0]] =base64.b64decode(parts[1]).decode("utf-8") if parts[1] else ""
+    return out
+
+
+def parse_priority(text: str) -> dict[str, list[str]]:
+    """'ENV = a, b' lines -> {ENV: ['ENV - a', 'ENV - b']}. '#' starts a comment line."""
+    order: dict[str, list[str]] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        env, labels = (s.strip() for s in line.split("=", 1))
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env):
+            continue
+        keys = [f"{env} - {lab.strip()}" for lab in labels.split(",") if lab.strip()]
+        if keys:
+            order[env] = keys
+    return order
+
+
+def conf_blocked(env: str) -> set[str]:
+    """Keys hand-blocked with '!' in this machine's secrets-global.conf."""
+    if os.environ.get("KEY_HEALTH_DUMP_FILE"):  # hermetic test run
+        return set()
+    try:
+        out = subprocess.run([str(SECRETS_BIN), "scope-entries", env], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {ln.split("\t", 1)[1] for ln in out.splitlines() if ln.startswith("blocked\t")}
+
+
+# ── probes ────────────────────────────────────────────────────────────────────
+def provider_for(env: str) -> str | None:
+    return {
+        "OPENROUTER_API_KEY": "openrouter",
+        "OPENAI_API_KEY": "openai",
+        "ANTHROPIC_API_KEY": "anthropic",
+        "GEMINI_API_KEY": "gemini",
+        "GOOGLE_API_KEY": "gemini",
+    }.get(env)
+
+
+def _http(url: str, headers: dict[str, str], body: dict | None = None) -> tuple[int, str]:
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers={**headers, "content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+
+
+def classify(code: int, body: str) -> tuple[str, str]:
+    low = body.lower()
+    if code == 200:
+        return "ok", "HTTP 200"
+    if code == 402 or "insufficient_quota" in low or "credit balance" in low or "insufficient credits" in low:
+        return "no_credit", f"HTTP {code}"
+    if code == 401:
+        return "revoked", "HTTP 401"
+    if code == 403:
+        # A restricted key can be refused the probe model or endpoint and still
+        # serve its real workload: only an explicit bad-key message is revoked.
+        if any(s in low for s in ("invalid api key", "invalid_api_key", "incorrect api key", "api key not valid", "revoked", "disabled")):
+            return "revoked", "HTTP 403 invalid key"
+        return "unknown", "HTTP 403 (no access to the probe model; key may still work)"
+    if code == 429:
+        return "rate_limited", "HTTP 429"
+    if code == 400 and ("api key not valid" in low or "api_key_invalid" in low):
+        return "revoked", "HTTP 400 invalid key"
+    if code == 404:
+        return "unknown", "HTTP 404 — probe model retired? set KEY_HEALTH_MODEL_<PROVIDER>"
+    return "unknown", f"HTTP {code}"
+
+
+def probe(provider: str, key: str) -> tuple[str, str]:
+    try:
+        if provider == "openrouter":
+            auth = {"authorization": f"Bearer {key}"}
+            code, body = _http("https://openrouter.ai/api/v1/key", auth)
+            state, detail = classify(code, body)
+            if state != "ok":
+                return state, detail
+            d = json.loads(body).get("data", {})
+            rem = d.get("limit_remaining")
+            if rem is not None and rem <= 0:
+                return "no_credit", "key spend limit reached"
+            code, body = _http("https://openrouter.ai/api/v1/credits", auth)
+            if code == 200:
+                c = json.loads(body).get("data", {})
+                bal = float(c.get("total_credits") or 0) - float(c.get("total_usage") or 0)
+                if bal <= 0:
+                    return "no_credit", f"balance ${bal:.2f}"
+                return "ok", f"balance ${bal:.2f}"
+            # Team/org keys cannot read the org balance (403). A 1-token request
+            # is the only way to see an empty org wallet: it returns 402.
+            code, body = _http(
+                "https://openrouter.ai/api/v1/chat/completions", auth,
+                {"model": PROBE_MODELS["openrouter"], "max_tokens": 1,
+                 "messages": [{"role": "user", "content": "1"}]},
+            )
+            state, detail = classify(code, body)
+            if state == "ok":
+                return "ok", f"key limit ${rem:.2f} left" if rem is not None else "1-token request ok"
+            return state, detail
+        if provider == "openai":
+            return classify(*_http(
+                "https://api.openai.com/v1/chat/completions",
+                {"authorization": f"Bearer {key}"},
+                {"model": PROBE_MODELS["openai"], "max_completion_tokens": 1,
+                 "messages": [{"role": "user", "content": "1"}]},
+            ))
+        if provider == "anthropic":
+            return classify(*_http(
+                "https://api.anthropic.com/v1/messages",
+                {"x-api-key": key, "anthropic-version": "2023-06-01"},
+                {"model": PROBE_MODELS["anthropic"], "max_tokens": 1,
+                 "messages": [{"role": "user", "content": "1"}]},
+            ))
+        if provider == "gemini":
+            return classify(*_http(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{PROBE_MODELS['gemini']}:generateContent",
+                {"x-goog-api-key": key},
+                {"contents": [{"parts": [{"text": "1"}]}], "generationConfig": {"maxOutputTokens": 1}},
+            ))
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        return "unknown", type(e).__name__
+    return "unknown", "no probe for this provider"
+
+
+# ── decision ──────────────────────────────────────────────────────────────────
+def evaluate(order: dict[str, list[str]], dump: dict[str, str]) -> tuple[dict, dict]:
+    """Returns (status {bws_key: (state, detail)}, choice {env: (chosen|'', top, reason)})."""
+    stub = json.loads(os.environ["KEY_HEALTH_STUB"]) if os.environ.get("KEY_HEALTH_STUB") else None
+    jobs: dict[str, tuple[str, str]] = {}
+    status: dict[str, tuple[str, str]] = {}
+    blocked_by_env = {env: conf_blocked(env) for env in order}
+    for env, keys in order.items():
+        prov = provider_for(env)
+        for k in keys:
+            if k not in dump:
+                status[k] = ("missing", f"no BWS secret named '{k}'")
+            elif k in blocked_by_env[env]:
+                status[k] = ("blocked", "hand-blocked with ! in secrets-global.conf")
+            elif stub is not None:
+                st = stub.get(k, "ok")
+                status[k] = (st, "stubbed")
+            elif prov is None:
+                status[k] = ("unknown", "no probe for this provider")
+            else:
+                jobs[k] = (prov, dump[k])
+    with ThreadPoolExecutor(max_workers=max(1, len(jobs))) as pool:
+        futs = {k: pool.submit(probe, p, v) for k, (p, v) in jobs.items()}
+        for k, f in futs.items():
+            status[k] = f.result()
+
+    choice: dict[str, tuple[str, str, str]] = {}
+    for env, keys in order.items():
+        top = keys[0]
+        skipped = []
+        chosen = ""
+        for k in keys:
+            st = status[k][0]
+            if st in SWITCH_STATES or st == "blocked":
+                skipped.append(f"{label(k)}: {STATE_WORDS.get(st, st)} ({status[k][1]})")
+                continue
+            chosen = k
+            break
+        choice[env] = (chosen, top, "; ".join(skipped))
+    return status, choice
+
+
+def label(bws_key: str) -> str:
+    return bws_key.split(" - ", 1)[1] if " - " in bws_key else bws_key
+
+
+# ── cache ─────────────────────────────────────────────────────────────────────
+def write_cache(order, status, choice) -> None:
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"generated\t{int(time.time())}"]
+    for env, keys in order.items():
+        lines += [f"prio\t{env}\t{k}" for k in keys]
+    for k, (st, detail) in status.items():
+        lines.append(f"status\t{k}\t{st}\t{detail.replace(chr(9), ' ')}")
+    for env, (chosen, top, reason) in choice.items():
+        lines.append(f"choice\t{env}\t{chosen}\t{top}\t{reason.replace(chr(9), ' ')}")
+    fd, tmp = tempfile.mkstemp(dir=CACHE.parent, prefix=".key-health.")
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, CACHE)
+
+
+def read_cache() -> tuple[int, dict, dict, dict] | None:
+    try:
+        text = CACHE.read_text()
+    except OSError:
+        return None
+    gen, order, status, choice = 0, {}, {}, {}
+    for ln in text.splitlines():
+        p = ln.split("\t")
+        if p[0] == "generated":
+            gen = int(p[1])
+        elif p[0] == "prio" and len(p) >= 3:
+            order.setdefault(p[1], []).append(p[2])
+        elif p[0] == "status" and len(p) >= 4:
+            status[p[1]] = (p[2], p[3])
+        elif p[0] == "choice" and len(p) >= 5:
+            choice[p[1]] = (p[2], p[3], p[4])
+    return gen, order, status, choice
+
+
+# ── reporting ─────────────────────────────────────────────────────────────────
+def summarise(status, choice) -> tuple[list[str], list[str], list[str]]:
+    """(loud lines, switch lines, exhausted lines) — no key material, labels only."""
+    loud = [f"{k}: {STATE_WORDS[st]} ({d})" for k, (st, d) in status.items() if st in LOUD_STATES]
+    switches, exhausted = [], []
+    for env, (chosen, top, reason) in choice.items():
+        if not chosen:
+            exhausted.append(f"{env}: every key in the priority list is unusable — {reason}")
+        elif chosen != top:
+            switches.append(f"{env}: using {label(chosen)} instead of {label(top)} — {reason}")
+    return loud, switches, exhausted
+
+
+def notify(loud: list[str], exhausted: list[str]) -> None:
+    if os.environ.get("KEY_HEALTH_NO_NOTIFY") or not (loud or exhausted):
+        return
+    try:
+        seen = json.loads(ALERTS.read_text())
+    except (OSError, ValueError):
+        seen = {}
+    now = time.time()
+    fresh = [m for m in loud + exhausted if now - seen.get(m.split(":", 1)[0], 0) > ALERT_EVERY]
+    if not fresh:
+        return
+    for m in fresh:
+        seen[m.split(":", 1)[0]] = now
+    body = "; ".join(m.split(" (", 1)[0] for m in fresh)[:220]
+    title = "API key needs fixing"
+    if sys.platform == "darwin":
+        script = f"display notification {json.dumps(body)} with title {json.dumps(title)} sound name \"Basso\""
+        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=5)
+    elif shutil_which("notify-send"):
+        subprocess.run(["notify-send", "-u", "critical", title, body], capture_output=True, timeout=5)
+    ALERTS.parent.mkdir(parents=True, exist_ok=True)
+    ALERTS.write_text(json.dumps(seen))
+
+
+def shutil_which(cmd: str) -> str | None:
+    from shutil import which
+    return which(cmd)
+
+
+def hook_output(loud, switches, exhausted) -> dict | None:
+    if not (loud or switches or exhausted):
+        return None
+    user, model = [], []
+    if loud or exhausted:
+        user.append("❌ API KEY NEEDS FIXING — retire or replace:")
+        user += [f"   • {m}" for m in loud + exhausted]
+        model.append(
+            "IMPORTANT: one or more API keys are revoked, missing or exhausted. Open your next reply with a ❌ line "
+            "telling the user which (labels below), and that `secrets check` re-probes after a fix. "
+            + " | ".join(loud + exhausted)
+        )
+    if switches:
+        user.append("⚠️ API key fallback this session (priority order from BWS KEY_PRIORITY):")
+        user += [f"   • {m}" for m in switches]
+        user.append("   New shells and `secrets run` use it now; a shell or direnv env loaded earlier keeps the old key until `direnv reload`.")
+        model.append(
+            "API key fallback is active this session; mention it once when you first use that provider: "
+            + " | ".join(switches)
+        )
+    return {
+        "systemMessage": "\n".join(user),
+        "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(model)},
+    }
+
+
+# ── gateway ───────────────────────────────────────────────────────────────────
+def sync_gateway(choice, dump) -> str | None:
+    """Point the model-router's openrouter key at the chosen key; restart if it changed."""
+    chosen = choice.get("OPENROUTER_API_KEY", ("", "", ""))[0]
+    if not chosen or chosen not in dump or not GATEWAY_SECRETS.exists():
+        return None
+    text = GATEWAY_SECRETS.read_text()
+    want = dump[chosen]
+    pat = re.compile(r'^(openrouter\s*=\s*)"([^"]*)"\s*$', re.M)
+    m = pat.search(text)
+    if not m or m.group(2) == want:
+        return None
+    new = pat.sub(lambda mm: f'{mm.group(1)}"{want}"', text, count=1)
+
+    def write(content: str) -> None:
+        fd, tmp = tempfile.mkstemp(dir=GATEWAY_SECRETS.parent, prefix=".secrets.")
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, GATEWAY_SECRETS)
+
+    write(new)
+    restart = os.environ.get("KEY_HEALTH_GATEWAY_RESTART")
+    if restart:
+        cmd = shlex.split(restart)
+    elif sys.platform == "darwin":
+        cmd = ["/bin/launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{GATEWAY_LABEL}"]
+    else:
+        cmd = ["systemctl", "--user", "restart", GATEWAY_UNIT]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        err = (r.stderr.strip()[:200] or f"exit {r.returncode}") if r.returncode != 0 else ""
+    except (OSError, subprocess.SubprocessError) as e:
+        err = f"{type(e).__name__}: {e}"[:200]
+    if err:
+        # Roll back so the next check sees the mismatch and retries the restart.
+        write(text)
+        return f"gateway still on the old OpenRouter key: router restart failed ({err}); will retry next check"
+    return f"gateway (model-router) now uses OPENROUTER_API_KEY {label(chosen)}; router restarted"
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
+def run(force: bool) -> tuple[dict, dict, dict, dict, bool]:
+    cached = None if force else read_cache()
+    if cached and time.time() - cached[0] < REUSE_SECONDS:
+        _, order, status, choice = cached
+        return order, status, choice, {}, True
+    dump = load_dump()
+    ptext = os.environ.get("KEY_HEALTH_PRIORITY")
+    if ptext is None:
+        # The BWS key is "KEY_PRIORITY - <label>" (or bare); the first match wins.
+        ptext = next((v for k, v in sorted(dump.items())
+                      if k == PRIORITY_KEY or k.startswith(PRIORITY_KEY + " - ")), "")
+    order = parse_priority(ptext)
+    status, choice = evaluate(order, dump)
+    write_cache(order, status, choice)
+    return order, status, choice, dump, False
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="key-health",
+        description="Probe API keys in the BWS KEY_PRIORITY order and record the first healthy key per env name.",
+    )
+    ap.add_argument("--hook", action="store_true", help="SessionStart mode: JSON output, loud alerts, gateway sync; never fails the session")
+    ap.add_argument("--force", action="store_true", help=f"re-probe even if the cache is under {REUSE_SECONDS}s old")
+    ap.add_argument("--no-gateway", action="store_true", help="do not touch the model-router key")
+    ap.add_argument("--json", action="store_true", help="machine-readable status")
+    args = ap.parse_args()
+
+    if args.hook:
+        try:
+            order, status, choice, dump, reused = run(args.force)
+            loud, switches, exhausted = summarise(status, choice)
+            if not args.no_gateway and dump:
+                msg = sync_gateway(choice, dump)
+                if msg:
+                    switches.append(msg)
+            notify(loud, exhausted)
+            out = hook_output(loud, switches, exhausted)
+            if out:
+                print(json.dumps(out, ensure_ascii=False))
+        except Exception as e:  # fail open: never block a session start
+            print(json.dumps({"systemMessage": f"key-health: probe skipped ({type(e).__name__}: {str(e)[:160]})"}))
+        return 0
+
+    order, status, choice, dump, reused = run(args.force)
+    if not args.no_gateway and dump:
+        msg = sync_gateway(choice, dump)
+        if msg:
+            print(msg, file=sys.stderr)
+    if args.json:
+        print(json.dumps({"order": order, "status": {k: list(v) for k, v in status.items()},
+                          "choice": {e: {"chosen": c, "top": t, "reason": r} for e, (c, t, r) in choice.items()}}, indent=2))
+    else:
+        if not order:
+            print(paint("No priority list found.", "33") + f" Create the BWS secret {PRIORITY_KEY}, e.g.:\n"
+                  "  OPENROUTER_API_KEY = mats, personal")
+        for env, keys in order.items():
+            chosen = choice[env][0]
+            print(paint(env, "1"))
+            for i, k in enumerate(keys, 1):
+                st, detail = status.get(k, ("unknown", ""))
+                mark = "→" if k == chosen else " "
+                print(f"  {mark} {i}. {label(k):<28} {paint(STATE_WORDS.get(st, st), STATE_COLOUR.get(st, '0'))}  {paint(detail, '2')}")
+            if not chosen:
+                print("    " + paint("✗ no usable key", "1;31"))
+        if reused:
+            print(paint(f"(cached result, under {REUSE_SECONDS}s old; --force to re-probe)", "2"))
+    loud, _, exhausted = summarise(status, choice)
+    return 1 if (loud or exhausted) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
