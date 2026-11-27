@@ -6,7 +6,7 @@ fake `claude.use`), and the page-level comment button. The page must render
 and work with no `window.claude` at all, and with a `use()` that resolves
 null for everything — the platform's own top-level view.
 
-Needs Playwright and Chromium, like test_md2artifact_browser.py; skipped only
+Needs Playwright and Chromium; skipped only
 when there is genuinely no browser on the machine.
 """
 
@@ -27,8 +27,6 @@ import pytest
 playwright_api = pytest.importorskip("playwright.sync_api")
 sync_playwright = playwright_api.sync_playwright
 expect = playwright_api.expect
-
-from test_md2artifact_browser import layer_on_context  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 MD2ARTIFACT = ROOT / "custom_bins" / "md2artifact"
@@ -138,7 +136,7 @@ def browser():
 
 @pytest.fixture
 def ctx(browser):
-    c = layer_on_context(browser)  # the layer starts off; these tests need it on
+    c = browser.new_context()
     try:
         yield c
     finally:
@@ -522,75 +520,3 @@ def test_comment_button_hides_when_the_composer_is_unavailable(ctx, site):
     expect(btn).to_be_visible()
     btn.click()
     expect(btn).to_be_hidden()
-
-
-# ── the annotation layer still labels comments by their nearest heading ──
-
-
-def test_a_comment_under_an_h3_is_labelled_with_the_h3(ctx, site):
-    base, _ = site
-    page = _open(ctx, base + "index.html")
-    page.evaluate(
-        """() => {
-          const n = document.querySelector('#alpha-detail + p').firstChild;
-          const r = document.createRange(); r.setStart(n, 0); r.setEnd(n, 30);
-          const s = getSelection(); s.removeAllRanges(); s.addRange(r);
-        }"""
-    )
-    page.wait_for_function(POP_OPEN, timeout=3000)
-    page.fill("#anTxt", "a note")
-    page.press("#anTxt", "Enter")
-    page.wait_for_function(f"() => (JSON.parse(localStorage.getItem('{KEY}') || '[]')).length === 1")
-    stored = json.loads(page.evaluate(f"() => localStorage.getItem('{KEY}')"))
-    assert stored[0]["where"] == "Alpha detail"
-
-
-def test_a_comment_across_diff_rows_comes_back_after_a_reload(ctx, site):
-    """The layer re-finds a quote in the page's raw text with whitespace
-    collapsed. Selection text breaks lines between block rows, so the rows
-    must carry a real newline or a multi-row quote never matches again."""
-    base, _ = site
-    page = _open(ctx, base + "index.html")
-    quote = page.evaluate(
-        """() => {
-          const rows = document.querySelectorAll('pre.diff .dl .dc');
-          const r = document.createRange();
-          r.setStart(rows[0].firstChild, 5); r.setEnd(rows[2].firstChild, 8);
-          const s = getSelection(); s.removeAllRanges(); s.addRange(r);
-          return s.toString();
-        }"""
-    )
-    assert "\n" in quote
-    page.wait_for_function(POP_OPEN, timeout=3000)
-    page.fill("#anTxt", "a note on the diff")
-    page.press("#anTxt", "Enter")
-    expect(page.locator("mark.note")).not_to_have_count(0)
-    page.reload()
-    expect(page.locator("mark.note")).not_to_have_count(0)
-
-
-def test_a_comment_across_a_folded_section_comes_back_after_a_reload(ctx, site):
-    """Folded text is missing from the selected text but present in the text
-    the layer searches on reload, so the page opens a fold the selection
-    crosses before the layer reads it."""
-    base, _ = site
-    page = _open(ctx, base + "index.html")
-    page.click('.sec[data-sec="beta"] > .sec-toggle')
-    page.click("#alpha--body details.lower-tray > summary")
-    page.click("#alpha--body details.lower-tray > summary")  # closed again
-    page.evaluate(
-        """() => {
-          const a = document.querySelector('#alpha-detail + p').firstChild;
-          const z = document.querySelector('#gamma--body p').firstChild;
-          const r = document.createRange(); r.setStart(a, 0); r.setEnd(z, 5);
-          const s = getSelection(); s.removeAllRanges(); s.addRange(r);
-        }"""
-    )
-    page.wait_for_function(POP_OPEN, timeout=3000)
-    expect(page.locator("#beta--body")).to_be_visible()
-    assert page.locator("#alpha--body details.lower-tray").evaluate("d => d.open") is True
-    page.fill("#anTxt", "across a fold")
-    page.press("#anTxt", "Enter")
-    expect(page.locator("mark.note")).not_to_have_count(0)
-    page.reload()
-    expect(page.locator("mark.note")).not_to_have_count(0)

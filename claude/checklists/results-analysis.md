@@ -97,11 +97,9 @@ Model and tokenizer or chat template; dataset and split; prompt version and syst
 
 ## Annotation: commenting is the point of publishing
 
-Manual inspection is iterative, so reviewers must be able to leave notes by highlighting arbitrary text, images or other content. Select text, a comment box appears, type, press Enter, saved. Nothing implicit ever writes a comment.
+Manual inspection is iterative, so reviewers must be able to leave notes on arbitrary text of the page. The Artifact platform's built-in comments do this (select text, leave a thread); the session reads them with `ArtifactComments`. There is no custom comment layer to build or require.
 
-- **Copy all** — comments must be exportable to the clipboard to paste into Claude Code — and **Delete all** globally; **edit** and **delete** on each comment.
-- Comments survive refresh and republish, and never flicker or vanish when text is selected.
-- Bookmark or star examples, and record labels and hypotheses while reviewing — then export those the same way as comments, in a form that rejoins to the data.
+- Record labels and hypotheses while reviewing in a form that rejoins to the data (JSONL keyed by sample id), not only as free-text comments.
 - Destructive controls confirm through a mechanism that actually fires in the deployment environment; a guard that is silently inert is worse than no guard.
 
 ## The results page has a fixed shape
@@ -128,4 +126,4 @@ Scoring is computed from raw outputs, blind to labels and to condition. Analysis
 
 ## Related
 
-How the page communicates — plots, headings, attention, slides: `presentation.md`. Statistical machinery, nulls and slicing: the `results-artifact` skill. Judge construction and persistence: the `llm-judge` skill. Annotation mechanics and `md2artifact`: the `artifact-writing` skill. Always-on integrity rules: `claude/rules/research-core.md`.
+How the page communicates — plots, headings, attention, slides: `presentation.md`. Statistical machinery, nulls and slicing: the `results-artifact` skill. Judge construction and persistence: the `llm-judge` skill. Comment mechanics and `md2artifact`: the `artifact-writing` skill. Always-on integrity rules: `claude/rules/research-core.md`.

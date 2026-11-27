@@ -10,7 +10,8 @@
 # for exactly this reason.
 #
 # Blocked: paths under a gitignored directory, $TMPDIR, /tmp, or a path
-# containing /tmp/ or /scratch/. Allowed: anything git tracks or would track.
+# containing /tmp/ or /scratch/. Allowed: anything git tracks or would track,
+# and any non-temporary path outside a git repo (e.g. a folder under ~/Documents).
 #
 # Gated: only `action` absent or "publish", and only when a `file_path` is
 # present. Every other action (read, list, comments, reply, watch,
@@ -67,9 +68,10 @@ A published page can become unreachable without anything local changing — an
 account switch, an org's External-sharing toggle, a plan change. The committed
 source is the durable copy.
 
-Move the source under artifacts/<slug>/ and commit it, then publish. Build
-output may live in artifacts/<slug>/build/, which is gitignored. See
-artifacts/README.md, and record the row in ARTIFACTS.md.
+Move the source to a durable path, then publish: in a repo, artifacts/<slug>/
+committed (build output may live in the gitignored artifacts/<slug>/build/; see
+artifacts/README.md and record the row in ARTIFACTS.md); outside a repo, any
+non-temporary folder, such as one under ~/Documents.
 EOF
   exit 2
 }

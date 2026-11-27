@@ -541,15 +541,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hooks/block_unannotated_artifact.sh",
-            "timeout": 10,
-            "statusMessage": "Checking the page carries the annotation layer"
-          },
-          {
-            "type": "command",
             "command": "bash $HOME/.claude/hooks/block_throwaway_artifact_path.sh",
             "timeout": 10,
-            "statusMessage": "Checking the artifact source lives in artifacts/"
+            "statusMessage": "Checking the artifact source is not in a temporary path"
           }
         ]
       }

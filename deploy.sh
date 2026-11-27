@@ -766,7 +766,7 @@ fi
 
 # Off by default, and it is the download that decides that: Chromium plus its
 # headless shell is ~650MB, which is not something to pull onto every throwaway
-# pod. Machines that have to run the annotation-layer browser tests opt in with
+# pod. Machines that have to run the md2artifact browser tests opt in with
 # --playwright.
 #
 # The browsers are keyed to the package version that fetched them. A cache

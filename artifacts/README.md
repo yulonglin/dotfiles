@@ -22,7 +22,7 @@ artifacts/
   index-rows/             one file per row whose page has no directory (README.md there)
 ```
 
-**Commit the source and the built HTML, for every artifact** (Yulong, 2026-09-01 — this reversed the earlier inputs-only rule). The committed HTML is what the review round-trip runs on: the published page is where Yulong comments and suggests edits, the session applies them to the source, rebuilds, and republishes — and source, HTML and published page must stay one thing. Rebuild and republish update the committed HTML **in the same commit as the source change**, so the repo copy always matches what is live. `build/` remains gitignored scratch for intermediates that a build script regenerates.
+**Commit the source and the built HTML, for every artifact** (Yulong, 2026-09-01 — this reversed the earlier inputs-only rule). The committed HTML is what the review loop runs on: the published page is where Yulong leaves platform comments, the session reads them with `ArtifactComments`, applies them to the source, rebuilds, and republishes — and source, HTML and published page must stay one thing. Rebuild and republish update the committed HTML **in the same commit as the source change**, so the repo copy always matches what is live. `build/` remains gitignored scratch for intermediates that a build script regenerates.
 
 An input that is itself ephemeral — a scan of the live environment, a query result, an API response — cannot be regenerated later because the thing it measured has moved on. Snapshot that alongside the source and say in `meta.yml` when it was taken.
 
