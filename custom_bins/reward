@@ -18,6 +18,7 @@ Turkey. Unlock anything a heads result needs by hand.
 """
 
 import argparse
+import os
 import random
 import sys
 
@@ -40,28 +41,79 @@ def flip(rng: random.Random) -> dict:
     }
 
 
-def render(result: dict) -> str:
-    if result["side"] == "heads":
-        head = f"HEADS: high-stimulation reward -> {result['assigned']}"
+EMOJI = {
+    "messages": "💬",
+    "Slack": "💼",
+    "social media": "📱",
+    "book": "📖",
+    "shows or videos": "📺",
+    "nap": "😴",
+    "stretch": "🧘",
+    "walk": "🚶",
+    "snack": "🍎",
+}
+
+# ANSI styles. Colour only on a terminal, never when NO_COLOR is set
+# (https://no-color.org); FORCE_COLOR turns it on for pipes.
+STYLE = {
+    "heads": "\033[1;35m",  # bold magenta
+    "tails": "\033[1;32m",  # bold green
+    "bold": "\033[1m",
+    "dim": "\033[2m",
+}
+RESET = "\033[0m"
+
+
+def use_colour() -> bool:
+    if os.environ.get("NO_COLOR"):
+        return False
+    return bool(os.environ.get("FORCE_COLOR")) or sys.stdout.isatty()
+
+
+def paint(text: str, style: str, colour: bool) -> str:
+    return f"{STYLE[style]}{text}{RESET}" if colour else text
+
+
+def label(option: str) -> str:
+    return f"{EMOJI.get(option, '•')} {option}"
+
+
+def render(result: dict, colour: bool = False) -> str:
+    side = result["side"]
+    assigned = paint(label(result["assigned"]), "bold", colour)
+    if side == "heads":
+        head = (
+            paint("🪙 HEADS", "heads", colour)
+            + f"  high-stimulation reward → {assigned}"
+        )
         swaps = (
-            ", ".join(result["swaps"])
+            ", ".join(label(s) for s in result["swaps"])
             if result["swaps"]
             else "none (already the top option)"
         )
-        swap_line = f"May swap up to: {swaps}"
+        swap_line = f"⬆️  May swap up to: {swaps}"
     else:
-        head = f"TAILS: dry restoration -> {result['assigned']}"
-        swap_line = f"Or choose freely: {', '.join(result['swaps'])}"
-    return f"{head}\n{swap_line}\nLast 5 minutes: phone away, close loops, water, open only the next block's file."
+        head = paint("🌿 TAILS", "tails", colour) + f"  dry restoration → {assigned}"
+        swap_line = (
+            f"🔄 Or choose freely: {', '.join(label(s) for s in result['swaps'])}"
+        )
+    buffer = paint(
+        "⏳ Last 5 minutes: phone away, close loops, water, open only the next block's file.",
+        "dim",
+        colour,
+    )
+    return f"{head}\n{swap_line}\n{buffer}"
 
 
-def render_list() -> str:
-    heads = "\n".join(f"  {n}. {h}" for n, h in enumerate(HEADS, 1))
-    tails = "\n".join(f"  - {t}" for t in TAILS)
+def render_list(colour: bool = False) -> str:
+    heads = "\n".join(f"  {n}. {label(h)}" for n, h in enumerate(HEADS, 1))
+    tails = "\n".join(f"  - {label(t)}" for t in TAILS)
     return (
-        "Heads (high-stimulation; swap only to a lower number):\n"
+        paint("🪙 Heads", "heads", colour)
+        + " (high-stimulation; swap only to a lower number):\n"
         f"{heads}\n"
-        "Tails (dry restoration; choose any):\n"
+        + paint("🌿 Tails", "tails", colour)
+        + " (dry restoration; choose any):\n"
         f"{tails}"
     )
 
@@ -76,10 +128,11 @@ def main(argv: list[str] | None = None) -> int:
         "--seed", type=int, help="seed the flip for a reproducible result"
     )
     args = parser.parse_args(argv)
+    colour = use_colour()
     if args.command == "list":
-        print(render_list())
+        print(render_list(colour))
         return 0
-    print(render(flip(random.Random(args.seed))))
+    print(render(flip(random.Random(args.seed)), colour))
     return 0
 
 
