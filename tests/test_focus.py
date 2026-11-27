@@ -3511,6 +3511,37 @@ def test_a_tick_step_that_keeps_failing_notifies_once(capped_env, tmp_path, monk
     assert failures() == 1 and sum("did not start" in n for n in notes) == 2
 
 
+def test_each_window_gets_its_own_first_notification(capped_env, tmp_path, monkeypatch):
+    # Found by review: with the Mac asleep between windows, no clean tick cleared the
+    # key, so lunch's failure silenced dinner's.
+    _, _, clock, _, notes = capped_env
+    two = 'windows: ["12:30-13:00", "18:30-19:00"]'
+    cfg = ct.load_config(note_with(tmp_path, CAPPED + "\n" + two))
+    monkeypatch.setattr(ct, "from_alfred", lambda: False)
+    asleep_display(monkeypatch)
+    for hour, minute in ((12, 30), (12, 31), (18, 30), (18, 31)):
+        at = dt.datetime(2026, 11, 17, hour, minute)
+        clock.now = at.timestamp()
+        with pytest.raises(SystemExit):
+            with ct.notify_once("window_start", f"{at:%Y-%m-%d} {ct.in_window(cfg, at)}"):
+                ct.window_start(cfg, at)
+    assert sum("did not stop" in n for n in notes) == 2  # one per window
+
+
+def test_the_commit_keeper_notifies_a_failed_restart_once(cfg, monkeypatch):
+    # Found by review: the keeper retried commit_tick every 30 s outside the scope.
+    blocks = {"mode: research": mode_block(cfg, "research", "false")}
+    fake_cold_turkey(monkeypatch, blocks, refuse={"mode: research"})
+    notes = []
+    monkeypatch.setattr(ct, "notify", notes.append)
+    monkeypatch.setattr(ct, "from_alfred", lambda: False)
+    rounds = iter([{"mode": "research"}] * 6 + [None] * 2)
+    monkeypatch.setattr(ct, "read_commit", lambda: next(rounds))
+    monkeypatch.setattr(ct, "commit_tick", lambda c: ct.switch("mode: research", on=True))
+    ct.cmd_commit_keep(cfg)
+    assert len(notes) == 1
+
+
 def asleep_display(monkeypatch):
     """Drop every Cold Turkey command while asleep[0] is True, as the agent does with
     the display off (21 Nov 2026: the 21:30 start and the 22:00 stop were never read)."""
