@@ -17,7 +17,7 @@ Unless the user asks otherwise, a fork writes the debrief (Agent with `subagent_
 
 ## What differs from upstream
 
-- **Data dir**: `<data>` is `${DEBRIEF_DATA_DIR:-$HOME/.cache/debrief}`, passed as `--data` to every `hive debrief dir`, `render` and `capture` call. It is sandbox-writable and outside every repo; `block_unannotated_artifact.sh` lets pages under it publish without the md2artifact layer, because platform comments replace it.
+- **Data dir**: `<data>` is `${DEBRIEF_DATA_DIR:-$HOME/.cache/debrief}`, passed as `--data` to every `hive debrief dir`, `render` and `capture` call. It is sandbox-writable and outside every repo, which the artifact source-path hook accepts.
 - **Skip `hive debrief preflight`.** It needs the session-start commit stamp that only the hive plugin's SessionStart hook writes, and that plugin is deliberately not enabled (it pings alignment-hive.com on every session start). The `!` line above is the preflight.
 - **`base` is mandatory in the front matter**, for the same reason. Never use `git merge-base HEAD main`: once the branch is merged into `main` it returns HEAD and the diff comes out empty.
   - Work on a branch the session created (EnterWorktree, `cw`): the commit the branch was created from, the last line of `git reflog show --format='%h %gs' <branch>` ("branch: Created from …"). This holds after a merge, as long as the branch still exists.

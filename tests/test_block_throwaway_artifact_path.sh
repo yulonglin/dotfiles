@@ -53,6 +53,8 @@ check "list action" 0 \
   "$(run '{"tool_input":{"action":"list"}}')"
 check "path outside any repo is not blocked" 0 \
   "$(run '{"tool_input":{"file_path":"/nonexistent-root/elsewhere/page.html"}}')"
+check "non-repo, non-temporary folder (Documents/admin) is not blocked" 0 \
+  "$(run "{\"tool_input\":{\"file_path\":\"$HOME/Documents/admin/some-pack/page.html\"}}")"
 check "malformed json does not block work" 0 \
   "$(run 'not json at all')"
 

@@ -7,7 +7,7 @@ description: Statistical machinery for a research results or findings page — w
 
 The standard for what a results page must show, and how it is reviewed, lives in **`~/.claude/checklists/results-analysis.md`**. Read it when building or reviewing the page; it is the content, and this file adds only the statistical machinery it deliberately does not carry.
 
-The checklist covers the null-and-ceiling and interval principles, causal register, metric hygiene (ground truth, positive class, base rate and skew, judge-not-regex), the ingredients a reader needs to reconstruct the run, every aggregate being one click from its examples, sampled and rejoinable transcript review, provenance, the annotation layer, the fixed per-finding shape, and separation of concerns. Its `Related` section names this file as the home for what follows.
+The checklist covers the null-and-ceiling and interval principles, causal register, metric hygiene (ground truth, positive class, base rate and skew, judge-not-regex), the ingredients a reader needs to reconstruct the run, every aggregate being one click from its examples, sampled and rejoinable transcript review, provenance, review through platform comments, the fixed per-finding shape, and separation of concerns. Its `Related` section names this file as the home for what follows.
 
 ## Which interval, which test
 
@@ -40,9 +40,9 @@ State the factors the result can be sliced by, and slice by them when a slice co
 
 ## Reach for a neighbour instead when
 
-- the question is what the page must **show** or how it is reviewed — evidence links, provenance, transcript review, annotation, the per-finding shape: `~/.claude/checklists/results-analysis.md`
+- the question is what the page must **show** or how it is reviewed — evidence links, provenance, transcript review, commenting, the per-finding shape: `~/.claude/checklists/results-analysis.md`
 - the question is the page's **form** — headings as claims, numbers in plots, terminology and FAQ, attention and progressive disclosure, slides: `~/.claude/checklists/presentation.md`
-- you need **page mechanics** — collapsible units, transcript rendering, the annotation layer, `md2artifact`, publishing and republishing: the `artifact-writing` skill
+- you need **page mechanics** — collapsible units, transcript rendering, platform comments, `md2artifact`, publishing and republishing: the `artifact-writing` skill
 - the metric's ground truth is a **judge**: the `llm-judge` skill, for prompt design, blinding, fan-out and persistence
 - the thing being analysed is a **monitor or judge** — errors, disagreements, comparative advantage: `~/.claude/checklists/results-analysis/monitoring.md`
 - a chart needs drawing: `house-plots` for papers, the built-in `dataviz` for artifact pages

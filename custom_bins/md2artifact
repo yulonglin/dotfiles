@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """md2artifact - wrap a Markdown document in a reviewable HTML artifact.
 
-Renders Markdown to a self-contained page carrying the review affordances that
-the `artifact-writing` skill requires: a sticky table of contents built
-from the headings, select-to-comment annotation, per-comment edit and delete,
-task-list items that keep their state across a reload and travel with the
-export, an unexported-comments guard on tab close, and clipboard export. There is no
-file export: a page-initiated download is inert in the Artifact viewer.
+Renders Markdown to a self-contained page with a sticky table of contents
+built from the headings. Review happens through the Artifact platform's own
+comments (the ArtifactComments tool); this page carries no comment layer of its
+own (retired 2026-11-26). Task-list items render as read-only checkboxes.
 
 For review it also renders ```diff fences as numbered unified diffs, folds
 each H2 section, marks each section New / Changed / seen per reader, turns a
@@ -25,7 +23,6 @@ raw `.md` silently loses all of that. Run it through here first.
     md2artifact spec.md                  # -> spec.review.html
     md2artifact spec.md -o /tmp/out.html
     md2artifact spec.md --title "P1 spec" --no-toc
-    md2artifact spec.md --states approve,approve-pending-edits,deny
     md2artifact --capabilities           # JSON to pass when publishing
     md2artifact spec.md --no-mermaid-check
 
@@ -53,11 +50,6 @@ try:
     from markdown_it.token import Token
 except ImportError:  # pragma: no cover - depends on the host environment
     sys.exit("md2artifact needs markdown-it-py (uv pip install markdown-it-py)")
-
-# The annotation layer (select-to-comment, export, unload guard) is shared with
-# `annotate-html` so there is exactly one copy of it.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _annotation_layer  # noqa: E402
 
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -1167,10 +1159,8 @@ def _diff_rows_html(rows: list[tuple]) -> str:
             for n in (old, new)
         )
         sign_html = f'<span class="ds">{html.escape(sign) or " "}</span>' if kind in {"add", "del", "ctx"} else ""
-        # The trailing newline is real text on purpose. The annotation layer
-        # re-finds a quote by joining the page's text nodes, while a selection
-        # breaks lines between block rows; without a newline in the text the
-        # two never match and a comment spanning rows is lost on reload.
+        # The trailing newline is real text on purpose: a selection or copy
+        # spanning rows keeps its line breaks.
         out.append(
             f'<span class="dl dl-{kind}">{nums}{sign_html}'
             f'<span class="dc">{html.escape(text, quote=False)}</span>\n</span>'
@@ -1221,21 +1211,6 @@ def diff_passthrough(tokens: list[Token]) -> list[Token]:
 
 TASK_RE = re.compile(r"^\[([ xX])\]\s+")
 
-# A state is written into the brackets of a Markdown task line by Copy all
-# (`- [deny] the label`), so a state carrying a bracket or a newline produces a
-# line that no longer parses back as a task item -- silently, in the reviewer's
-# clipboard, long after the build that accepted it. Everything else is allowed:
-# the state is a word the author chose, and only these characters break it.
-BAD_STATE_CHARS = re.compile(r"[\[\]\x00-\x1f\x7f]")
-
-
-def _inline_plain(children: list[Token]) -> str:
-    """The item's visible text, used only to derive a stable control id."""
-    return "".join(
-        c.content for c in children if c.type in {"text", "code_inline"}
-    ).strip()
-
-
 def _allocate_id(stem: str, used: set[str]) -> str:
     """Hand out `stem`, suffixing until the result is genuinely unused.
 
@@ -1256,52 +1231,20 @@ def _allocate_id(stem: str, used: set[str]) -> str:
     return candidate
 
 
-def _state_control(sid: str, checked: bool, states: list[str] | None) -> str:
-    """The opening markup of one toggle control, up to the label span.
-
-    Two shapes, one contract. With no declared state set the control is a real
-    `<input type="checkbox">`, so Space toggles it and the browser supplies the
-    role; the page a reader already knows is unchanged. With a set declared it
-    is a `<button>` cycling through that set, which is keyboard-operable for
-    the same reason. Either way the wrapper carries `data-an-state-id`, which
-    is the only thing the annotation layer looks for — a hand-written page can
-    emit the same markup and get persistence and export for free.
-
-    `[ ]` selects the first declared state and `[x]` the last, which is exactly
-    checkbox semantics when the set has two members.
-    """
-    wrap_attrs = f' data-an-state-id="{html.escape(sid, quote=True)}"'
-    if states:
-        value = states[-1] if checked else states[0]
-        wrap_attrs += (
-            ' data-an-states="'
-            + html.escape(json.dumps(states), quote=True)
-            + '"'
-        )
-        control = (
-            '<button type="button" class="anstatebtn" data-an-state="'
-            + html.escape(value, quote=True)
-            + '">'
-            + html.escape(value)
-            + "</button>"
-        )
-    else:
-        control = '<input type="checkbox" class="anstatebox"' + (
-            " checked>" if checked else ">"
-        )
-    return f'<span class="anstate"{wrap_attrs}>{control}<span class="anstatelabel">'
+def _task_box(checked: bool) -> str:
+    """The opening markup of one read-only task checkbox, up to the label span."""
+    box = '<input type="checkbox" class="taskbox" disabled' + (" checked>" if checked else ">")
+    return f'<span class="task">{box}<span class="tasklabel">'
 
 
-def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[Token]:
-    """Turn `- [ ] item` into a real toggle control, keeping the text quotable.
+def task_list_controls(tokens: list[Token]) -> list[Token]:
+    """Turn `- [ ] item` into a read-only checkbox, keeping the text quotable.
 
     Only the FIRST paragraph of a list item is rewritten, and only when its
     first text child starts with a task marker, so an ordinary list item and a
     `[ ]` appearing mid-sentence are both left alone. The label text stays
-    ordinary escaped Markdown output — the annotation layer can still quote it
-    — while the control's own text sits in an element the layer skips.
+    ordinary escaped Markdown output.
     """
-    used: set[str] = set()
     for i, tok in enumerate(tokens):
         if tok.type != "list_item_open":
             continue
@@ -1318,11 +1261,10 @@ def task_list_controls(tokens: list[Token], states: list[str] | None) -> list[To
         if not m:
             continue
         kids[0].content = kids[0].content[m.end() :]
-        sid = _allocate_id(slugify(_inline_plain(kids))[:48] or "item", used)
-        opener = _state_control(sid, m.group(1).lower() == "x", states)
+        opener = _task_box(m.group(1).lower() == "x")
         kids.insert(0, Token("html_inline", "", 0, content=opener))
         kids.append(Token("html_inline", "", 0, content="</span></span>"))
-        tok.attrJoin("class", "antask")
+        tok.attrJoin("class", "task-item")
     return tokens
 
 
@@ -1485,21 +1427,15 @@ def section_hash(md: MarkdownIt, section: list[Token]) -> str:
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:12]
 
 
-ID_ATTR_RE = re.compile(r' (?:id|data-an-state-id)="[^"]*"')
+ID_ATTR_RE = re.compile(r' id="[^"]*"')
 
 
 def _section_tokens(section: list[Token], slug: str, digest: str) -> list[Token]:
     """Wrap one section in its collapsible container and controls.
 
-    A <div>, not a <section>: the annotation layer labels a comment with the
-    heading of its closest <section>, so a <section> here would report every
-    comment under an H3 as belonging to the H2. With a div the layer's
-    sibling walk still finds the nearest H3, and the H2 for prose directly
-    under it, because the H2 stays the body's previous heading sibling.
-
     Every label on these controls is CSS generated content from data-label,
-    never a text node: the layer re-anchors a comment by searching the page's
-    text, and a badge whose words change must not be part of that text.
+    never a text node, so a badge whose words change never lands in a
+    selection or a quoted comment.
     """
     body = f"{slug}--body"
     head = [
@@ -1534,16 +1470,14 @@ def _markdown() -> MarkdownIt:
 
 
 def render(
-    md_text: str, states: list[str] | None = None
+    md_text: str
 ) -> tuple[str, list[tuple[int, str, str]]]:
     """Return (html, headings) where headings are (level, slug, text)."""
     md = _markdown()
     tokens = md.parse(md_text)
     for passthrough in PASSTHROUGHS:
         tokens = passthrough(tokens)
-    # Not in PASSTHROUGHS: that list is token passes of one argument, and this
-    # one is parameterised by the document's declared state set.
-    tokens = task_list_controls(tokens, states)
+    tokens = task_list_controls(tokens)
     tokens = priority_tags(tokens)
 
     preamble, sections = split_sections(tokens)
@@ -1590,9 +1524,9 @@ def toc_html(headings: list[tuple[int, str, str]]) -> str:
 
 
 def build(
-    md_text: str, *, title: str, with_toc: bool, key: str, states: list[str] | None = None
+    md_text: str, *, title: str, with_toc: bool, key: str
 ) -> str:
-    body, headings = render(md_text, states)
+    body, headings = render(md_text)
     toc = toc_html(headings) if with_toc else ""
     shell_open = '<div class="shell has-toc">' if toc else '<div class="shell">'
     page = TEMPLATE.format(
@@ -1600,15 +1534,15 @@ def build(
         toc=toc,
         shell_open=shell_open,
         body=body,
+        key=html.escape(key, quote=True),
     )
-    return page + REVIEW_ASSETS + _annotation_layer.layer_html(key)
+    return page + REVIEW_ASSETS
 
 
-# What a publish of this page should declare, for the seen marks (db + user),
-# the page-level comment button (comments, composer only) and the "This page"
-# Download HTML button (downloads, owner only). Everything degrades without it:
-# seen marks fall back to localStorage, the comment button stays hidden, and
-# Download shows disabled with a pointer to Copy HTML. `seen/{self}` is each reader's own document; the rule
+# What a publish of this page should declare, for the seen marks (db + user)
+# and the page-level comment button (comments, composer only). Everything
+# degrades without it: seen marks fall back to localStorage and the comment
+# button stays hidden. `seen/{self}` is each reader's own document; the rule
 # at the `seen` prefix opens the siblings to `admin` readers only, so one
 # reader never sees another's marks.
 CAPABILITIES = {
@@ -1620,7 +1554,6 @@ CAPABILITIES = {
     },
     "user": {},
     "comments": {"composer_only": True},
-    "downloads": {},
 }
 
 
@@ -1628,6 +1561,9 @@ CAPABILITIES = {
 # Kept out of TEMPLATE so it needs no doubled braces. Every feature works with
 # no `window.claude` at all; the capabilities only light things up.
 REVIEW_ASSETS = r"""<style>
+.task-item{list-style:none}
+.task{display:inline-flex;align-items:baseline;gap:.45em}
+.taskbox{flex:none;align-self:center;width:1em;height:1em;margin:0}
 .page-tools{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;margin:0 0 1.4rem;font-size:.86rem}
 .page-tools:not(:has(> :not([hidden]))){display:none}
 .unseen-sum,.page-comment,.seen-btn,.chip{font:inherit}
@@ -1698,10 +1634,11 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
   }
 
   function init() {
-    // The annotation layer's key, read at run time (it is user input, so it
-    // is never interpolated into this script), with the layer's own fallback.
-    var layer = document.querySelector("[data-annotation-layer]");
-    var KEY = (layer && layer.dataset.key) || ("annot:" + document.title);
+    // The page's storage key, read at run time (it is user input, so it is
+    // never interpolated into this script). Same value the retired comment
+    // layer used, so readers keep their fold and seen state across a rebuild.
+    var doc = document.querySelector(".doc[data-key]");
+    var KEY = (doc && doc.dataset.key) || ("annot:" + document.title);
     var FOLD = "md2a-fold:" + KEY + ":";
     var SEEN = "md2a-seen:" + KEY;
     var secs = Array.prototype.slice.call(document.querySelectorAll(".doc .sec[data-sec]"));
@@ -1744,9 +1681,8 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
     revealHash();
 
     // A selection that crosses a folded section or a closed details element opens
-    // it before the annotation layer reads the selection. Folded text is left
-    // out of the selected text but kept in the text the layer searches on a
-    // reload, so a quote taken across a fold could never be found again.
+    // it, so a platform comment anchored on that selection quotes the text the
+    // reader actually sees.
     function unfoldSelection() {
       var sel = window.getSelection && window.getSelection();
       if (!sel || !sel.rangeCount || sel.isCollapsed) return;
@@ -1760,8 +1696,6 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
         }
       });
     }
-    // The layer reads a selection on a debounced selectionchange, or on a
-    // mouseup that this capture listener on window runs ahead of.
     document.addEventListener("selectionchange", unfoldSelection);
     window.addEventListener("mouseup", unfoldSelection, true);
 
@@ -1945,8 +1879,6 @@ pre.diff>code{display:inline-block;min-width:100%;padding:.35rem 0}
       });
     });
   }
-  // After DOMContentLoaded, so the layer's page snapshot (taken as its script
-  // starts) is the clean page rather than this reader's folded state.
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
@@ -2024,7 +1956,7 @@ details[open]>summary{{border-bottom:1px solid var(--rule);border-radius:7px 7px
 </style>
 {shell_open}
 {toc}
-<div class="doc">
+<div class="doc" data-key="{key}">
 {body}
 </div>
 </div>
@@ -2079,15 +2011,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--title", help="page title (default: first H1, else the filename stem)")
     ap.add_argument("--no-toc", action="store_true", help="omit the table of contents")
     ap.add_argument(
-        "--states",
-        metavar="A,B,C",
-        help="comma-separated state set for task-list items, cycled on click "
-        "(e.g. approve,approve-pending-edits,deny). Default: a plain checkbox. "
-        "`- [ ]` starts at the first state, `- [x]` at the last",
-    )
-    ap.add_argument(
         "--key",
-        help="localStorage key for comments (default: derived from the filename, "
+        help="localStorage key for fold and seen state (default: derived from the filename, "
         "qualified by the parent directory for a generic stem like spec.md, so "
         "republishing the same document keeps its comments and two specs never share them)",
     )
@@ -2108,21 +2033,6 @@ def main(argv: list[str] | None = None) -> int:
     if not args.source.is_file():
         ap.error(f"no such file: {args.source}")
 
-    states: list[str] | None = None
-    if args.states is not None:
-        states = [p.strip() for p in args.states.split(",") if p.strip()]
-        if len(states) < 2:
-            ap.error("--states needs at least two comma-separated states")
-        if len(set(states)) != len(states):
-            ap.error("--states must not repeat a state")
-        bad = [st for st in states if BAD_STATE_CHARS.search(st)]
-        if bad:
-            ap.error(
-                "--states must not contain '[', ']' or a control character "
-                f"({', '.join(repr(st) for st in bad)}): the export writes each "
-                "state inside the brackets of a Markdown task line, and those "
-                "characters stop that line parsing back"
-            )
     text = args.source.read_text(encoding="utf-8")
     if not args.no_mermaid_check:
         faults = mermaid_faults(text)
@@ -2143,15 +2053,8 @@ def main(argv: list[str] | None = None) -> int:
 
     out = args.output or args.source.with_suffix(".review.html")
     key = args.key or storage_key(args.source)
-    if not args.key and key != f"review-{slugify(args.source.stem)}":
-        print(
-            f"md2artifact: comment key qualified by directory: {key} "
-            "(a page published before 2026-09-02 from this filename keeps its "
-            f"comments only with --key review-{slugify(args.source.stem)})",
-            file=sys.stderr,
-        )
     out.write_text(
-        build(text, title=title, with_toc=not args.no_toc, key=key, states=states),
+        build(text, title=title, with_toc=not args.no_toc, key=key),
         encoding="utf-8",
     )
     print(out)

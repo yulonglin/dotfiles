@@ -137,7 +137,6 @@ state_only = {"simplify_track_reuse.py", "simplify_mark_dirty.sh"}
 safety = {
     "block_destructive_git.sh",
     "block_email_send.sh",
-    "block_unannotated_artifact.sh",
     "block_gws_delete.sh",
     "block_secret_expansion.sh",
     "block_tab_group_creation.sh",

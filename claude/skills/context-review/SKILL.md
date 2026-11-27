@@ -16,8 +16,8 @@ The monthly `context-review.timer` runs `context-review run`, which measures and
    - stale `remember.md` handoffs, and Learnings entries past two weeks;
    - auto-memory indexes that look bloated (many entries, or entries a rule or skill now covers).
 3. **Propose one state per item**: `keep`, `trim` or `drop`. Moving procedure out of an always-on rule into a skill is a `trim`: name the destination skill in the item. Before proposing `drop` for something unused, check the two blind spots the report names. Usage counts cover only this machine's transcripts. And a skill can be in use without being invoked: a rule may route to it by name, so `rg` the name across `claude/`.
-4. **Render the page.** Write the list to `artifacts/context-review-<date>/review.md` (the `block_throwaway_artifact_path.sh` hook refuses to publish from a scratch or `tmp/` path, and the page needs a `meta.yml` row per `artifacts-sync`), one `- [ ]` item per proposal with the lean first: "**`debrief`** (skill, ~156 tok, 0 uses / 90 d, added 2026-10-02) — lean drop: …". Then run `md2artifact --states keep,trim,drop <file>.md` and publish the HTML with the capabilities from `md2artifact --capabilities` (mechanics: `artifact-writing`). Put each item's starting state in the prose, since `[ ]` starts every item at `keep`.
-5. **Stop and hand back** the page link, plus a 3-5 line summary: how many items in each lean, and the largest token saving on offer. Wait for the user's export (`- [drop] …` lines) or a reply in chat. Do nothing to any file before that.
+4. **Render the page.** Write the list to `artifacts/context-review-<date>/review.md` (the `block_throwaway_artifact_path.sh` hook refuses to publish from a scratch or `tmp/` path, and the page needs a `meta.yml` row per `artifacts-sync`), one `-` bullet per proposal with the lean first: "**`debrief`** (skill, ~156 tok, 0 uses / 90 d, added 2026-10-02) — lean drop: …". Then run `md2artifact <file>.md` and publish the HTML with the capabilities from `md2artifact --capabilities` (mechanics: `artifact-writing`).
+5. **Stop and hand back** the page link, plus a 3-5 line summary: how many items in each lean, and the largest token saving on offer. Wait for the user's verdicts: platform comments on the items (read with `ArtifactComments`) or a reply in chat. An item with no verdict is not approved. Do nothing to any file before that.
 6. **Apply only the approved items**, each reversibly, then commit with explicit pathspecs:
    - dotfiles skill, `drop`: `git mv claude/skills/<name> archive/<YYYY-MM-DD>_<name>/`. Remove its row from `claude/skills/catalog/SKILL.md`, and fix any rule or skill that names it.
    - dotfiles agent, `drop`: `git mv claude/agents/<name>.md archive/<YYYY-MM-DD>_<name>/`. A **generated** agent (the report marks it) is switched off in `config/model-router.toml`, followed by `model-router-wire apply`. Never edit or move its `.md`.
@@ -29,7 +29,7 @@ The monthly `context-review.timer` runs `context-review run`, which measures and
 
 ## When to stop
 
-Stop at step 5 every time: the page is the decision point, and nothing is applied without the user's states. Also stop and ask before any change to `claude/settings.json`, hooks or a plugin. And stop when an item's evidence conflicts, for example zero uses but a rule routes to it.
+Stop at step 5 every time: the page is the decision point, and nothing is applied without the user's verdicts. Also stop and ask before any change to `claude/settings.json`, hooks or a plugin. And stop when an item's evidence conflicts, for example zero uses but a rule routes to it.
 
 ## What to hand back
 
