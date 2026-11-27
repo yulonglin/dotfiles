@@ -128,7 +128,7 @@ note (a plist on disk proves nothing), and it leaves a detached keeper that runs
 the same check every 30 s until the end. While it runs, 'break', 'off', 'only' and
 starting another mode refuse; 'focus deep' still runs. Only two commands change it,
 and only at a terminal: 'focus allow SITE…' and 'focus end'. Each shows a random
-text of `commit_text_chars` (default 300) characters to type back exactly, asks for
+text of `commit_text_chars` (default 150) characters to type back exactly, asks for
 a one-line reason (logged to ~/.local/state/focus/commit-log.jsonl), then stops
 extending the lock and leaves a waiter. When Cold Turkey's lock runs out and it
 stops the block, the waiter applies the request within a few seconds: for allow,
@@ -930,7 +930,7 @@ DEFAULT_MODE_TIMES = (("start", "09:00"), ("until", "12:00"))
 SCHEDULED_FILE = PENDING.parent / "scheduled.json"  # the day the scheduled mode fired
 WINDOW_FILE = PENDING.parent / "window.json"  # the open window: its key and end time
 DEFAULT_COMMIT_WAIT = 5  # how far ahead the rolling lock is kept, in minutes
-DEFAULT_COMMIT_TEXT = 300  # characters to type back before allow or end
+DEFAULT_COMMIT_TEXT = 150  # characters to type back before allow or end
 DEFAULT_EMERGENCY_TEXT = 100  # characters to type back for an emergency break
 EXTEND_AHEAD_S = 150  # extend once less lock than this remains: two ticks and a margin
 
