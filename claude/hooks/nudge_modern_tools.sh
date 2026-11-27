@@ -39,8 +39,7 @@ log_decision() {
 # Debounce: each distinct nudge fires at most once per DEBOUNCE_SECS across all
 # sessions. Without this the same handful of messages repeat on every Bash call —
 # measured at ~1275 fires / ~251K chars over 60 transcripts, the same 6 strings.
-# Mirrors the 30-min window in lib/codex-freshness.mjs and fails open the same
-# way: if the marker dir can't be written, nudge rather than go silently missing.
+# Fails open: if the marker dir can't be written, nudge rather than go silently missing.
 DEBOUNCE_DIR="${HOME}/.cache/claude/nudge-modern.d"
 DEBOUNCE_SECS=$((30 * 60))
 should_nudge() {

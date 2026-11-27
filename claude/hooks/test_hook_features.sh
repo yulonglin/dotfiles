@@ -107,12 +107,9 @@ settings_path = Path(sys.argv[1])
 hooks_dir = Path(sys.argv[2])
 settings = json.loads(settings_path.read_text())
 external = {
-    "codex_plan_write_reminder.mjs",
-    "codex_code_review_reminder.mjs",
     "nudge_modern_tools.sh",
     "nudge_experiment_jobs.sh",
     "nudge_uncapped_reader.sh",
-    "codex_git_add_reminder.mjs",
     "nudge_html_email.sh",
     "nudge_remember.sh",
     "simplify_nudge.sh",

@@ -1,6 +1,6 @@
 # Plan-Driven Implementation Guide
 
-Reference for delegating plan-driven implementation to `codex-companion` (Monitor tool), which runs from main context and cannot be wrapped by a subagent. Read it when a plan is approved and the steps are going out to Codex; `codex:codex-prompting` covers the prompt shape, and this file covers how to cut the plan into jobs.
+Reference for delegating plan-driven implementation to a GPT agent through model-router: the Agent tool with `subagent_type: "astra"` (or `sol` for long autonomous chunks), `effort` set. Run dependent chunks in the same checkout so each one sees the commits before it; give a chunk `isolation: "worktree"` only when it is independent, and then brief it with repo-relative paths. Read it when a plan is approved and the steps are going out to another model; `model-router:delegating-to-models` covers per-family prompt hygiene, and this file covers how to cut the plan into jobs.
 
 ## Plan-Aware Prompt Template
 
@@ -33,11 +33,11 @@ After implementing, run: <test command or verification step>
 
 ## Chunking Strategy
 
-Break plans into codex-companion-sized pieces based on step count:
+Break plans into agent-sized pieces based on step count:
 
 | Plan steps | Chunking | Rationale |
 |------------|----------|-----------|
-| 1-3 steps | Single codex-companion job | Small enough for one pass |
+| 1-3 steps | Single agent call | Small enough for one pass |
 | 4-7 steps | 2-3 chunks (2-3 steps each) | Keeps context manageable |
 | 8+ steps | Per-step invocations | Each step is self-contained |
 
@@ -69,7 +69,7 @@ Step 3: Add authentication middleware
 - Add tests in tests/middleware/auth.test.ts
 ```
 
-### codex-companion Prompt
+### Agent Prompt
 ```
 You are implementing step 3 of an approved plan. Do not explore or ask questions — implement directly.
 
