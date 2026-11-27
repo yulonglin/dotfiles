@@ -30,11 +30,11 @@ b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 {
     printf 'OPENROUTER_API_KEY - mats\t%s\n' "$(b64 fake-or-mats)"
     printf 'OPENROUTER_API_KEY - personal\t%s\n' "$(b64 fake-or-personal)"
-    printf 'OPENAI_API_KEY - tomek\t%s\n' "$(b64 fake-oa-tomek)"
+    printf 'OPENAI_API_KEY - collab\t%s\n' "$(b64 fake-oa-collab)"
     printf 'OPENAI_API_KEY - mats\t%s\n' "$(b64 fake-oa-mats)"
 } > "$T/dump.tsv"
 
-PRIO=$'OPENROUTER_API_KEY = mats, personal\nOPENAI_API_KEY = tomek, mats, ghost'
+PRIO=$'OPENROUTER_API_KEY = mats, personal\nOPENAI_API_KEY = collab, mats, ghost'
 
 export KEY_HEALTH_DUMP_FILE="$T/dump.tsv"
 export KEY_HEALTH_PRIORITY="$PRIO"
@@ -55,7 +55,7 @@ hasnt "no fallback when top keys are healthy" "$out" "fallback this session"
 hasnt "hook output carries no key material" "$out" "fake-"
 
 # Remove the ghost so the remaining cases test fallback alone.
-export KEY_HEALTH_PRIORITY=$'OPENROUTER_API_KEY = mats, personal\nOPENAI_API_KEY = tomek, mats'
+export KEY_HEALTH_PRIORITY=$'OPENROUTER_API_KEY = mats, personal\nOPENAI_API_KEY = collab, mats'
 out=$(hook '{}')
 eq "all healthy -> no hook output at all" "$out" ""
 
@@ -74,12 +74,12 @@ grep -q $'^choice\tOPENROUTER_API_KEY\tOPENROUTER_API_KEY - mats\t' "$T/cache.ts
     && ok "cache returns to the top key" || bad "cache returns to the top key"
 
 # 4. Rate limit switches; revoked switches and is loud.
-out=$(hook '{"OPENAI_API_KEY - tomek": "rate_limited"}')
-has "429 switches" "$out" "OPENAI_API_KEY: using mats instead of tomek"
+out=$(hook '{"OPENAI_API_KEY - collab": "rate_limited"}')
+has "429 switches" "$out" "OPENAI_API_KEY: using mats instead of collab"
 hasnt "429 alone is not loud" "$out" "❌"
-out=$(hook '{"OPENAI_API_KEY - tomek": "revoked"}')
-has "revoked switches" "$out" "using mats instead of tomek"
-has "revoked is loud" "$out" "OPENAI_API_KEY - tomek: revoked or invalid"
+out=$(hook '{"OPENAI_API_KEY - collab": "revoked"}')
+has "revoked switches" "$out" "using mats instead of collab"
+has "revoked is loud" "$out" "OPENAI_API_KEY - collab: revoked or invalid"
 
 # 5. Unknown (network) failure does not move spend.
 out=$(hook '{"OPENROUTER_API_KEY - mats": "unknown"}')

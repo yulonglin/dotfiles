@@ -7,7 +7,7 @@ WHY
     KEY_PRIORITY, so every machine and project shares it:
 
         OPENROUTER_API_KEY = mats, personal
-        OPENAI_API_KEY = tomek, mats, personal
+        OPENAI_API_KEY = work, personal
 
     Each label expands to the BWS key "ENV - label". Every new Claude Code
     session runs this at SessionStart: it probes each listed key (read-only, or
