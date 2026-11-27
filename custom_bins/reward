@@ -24,7 +24,9 @@ import sys
 
 # Order matters: an assigned heads reward may be swapped only for an option
 # listed ABOVE it (closer to index 0). Edit the order to change what "higher" means.
-HEADS = ["messages", "Slack", "social media", "book", "shows or videos"]
+# Work messages and Slack are deliberately absent: they belong to the ten-minute
+# message checks in the "Messaging Framework" note, not to break rewards.
+HEADS = ["messages from friends", "social media", "book", "shows or videos"]
 TAILS = ["nap", "stretch", "walk", "snack"]
 
 
@@ -42,8 +44,7 @@ def flip(rng: random.Random) -> dict:
 
 
 EMOJI = {
-    "messages": "💬",
-    "Slack": "💼",
+    "messages from friends": "💬",
     "social media": "📱",
     "book": "📖",
     "shows or videos": "📺",
