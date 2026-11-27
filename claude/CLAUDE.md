@@ -36,7 +36,7 @@ When uncertain, **ask rather than refuse silently**. Escalate anything that woul
 
 - **Use existing code** for experiments — correct hyperparams, full data, validated metrics; ad-hoc only for dry runs
 - **Test on real data** — a small real slice end-to-end (`limit=3-5`), not just unit tests. Never leave GPUs idle; 0% utilisation is a bug.
-- **Make work auditable** — the output directory or Artifact stands alone to a new colleague.
+- **Make work auditable** — the output directory or Artifact stands alone to a new colleague; a paper's body carries claims and figures, and the audit detail goes to its appendix.
 
 ## Where Things Live
 

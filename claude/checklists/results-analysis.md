@@ -2,27 +2,27 @@
 
 Turning a finished run into something a reader can check and inspect — the standard for evidence, review and annotation. The core principle: **optimise for manual inspection.** A human should be able to reconstruct exactly what happened without reading code — read transcripts, label them, and rebuild the full input and output of any example. Domain subskills live in `results-analysis/`: `monitoring.md` today, `jlens.md` and `sandbagging.md` beside it.
 
+**This file governs results pages, audit trails and data READMEs.** A paper or reader-facing report runs the same checks, but what they produce goes in figures and the appendix, not the body (`research-core.md`, "Detail goes where its reader is").
+
 ## Every number ships with its null and its ceiling
 
-What would this number be with no signal at all? Put that beside it, not in a footnote. What is the maximum it could reach given the task and the labels? Same. A number without both is uninterpretable, and a reader who has to reconstruct them will reconstruct them wrong.
+What would this number be with no signal at all, and what is the most it could reach given the task and the labels? Draw both on its figure. A number without both is uninterpretable, and a reader who has to reconstruct them will reconstruct them wrong.
 
-**Every estimate carries an interval, and the interval names what it covers** — which sources of variation it includes and which it omits, stated where the number is displayed. The failure mode is not a missing interval; it is a confidently narrow one.
+**Every estimate carries an interval that names what it covers** — which sources of variation it includes and omits, its unit of analysis and `n` at that unit, and how it was built (cluster bootstrap over questions, per-seed variance, analytic). The failure mode is not a missing interval but a confidently narrow one, usually from treating tokens, turns or several samples from one prompt as independent when the independent unit is the prompt, question or episode. Report at least two seeds, or say why across-seed variance is not reported.
 
-**Beside every interval: the unit of analysis, and `n` at that unit.** The usual way an interval in LLM work becomes confidently narrow is treating tokens, turns, resampled rollouts or several samples from one prompt as independent when the independent unit is the prompt, the question or the episode. Say which unit the interval is over, how many of them there are, what was resampled versus genuinely independent, and how the interval was constructed — cluster bootstrap over questions, per-seed variance, analytic. Report at least two seeds — two is the floor at which across-seed variance exists at all, and it is a house convention set here rather than a derived constant, so raise it for any project where seed variance is itself part of the finding — or say why across-seed variance is not reported. `results-analysis/sandbagging.md` works a concrete case: intervals omitting question-level clustering and threshold noise are narrower than the truth, and which way they bias is stated where the number appears.
+**Every comparison names its test, its effect size and `n` per condition.** A p-value alone says the difference is unlikely under the null, not that it is large enough to matter.
 
-**Every comparison names its test, its effect size and `n` per condition.** Which test — Fisher, McNemar, a bootstrap — and what its significance means for this comparison (`presentation.md`); how large the difference is in the units of the metric; and how many units of analysis sat in each arm. A p-value on its own is incomplete: it says the difference is unlikely under the null, not that it is large enough to matter.
-
-**Many uncorrected contrasts: put the count beside each hit.** When a page computes many contrasts without correction, state beside each number whose interval excludes 0 how many contrasts were computed and how many chance alone would give (about 5% of the count). Separate the expected hits (controls, or repeats of one identical result) from the unpredicted ones, and label a single unpredicted hit as a hypothesis, not a finding (Yulong, 2026-10-15).
+**Many uncorrected contrasts: state how many were computed** and how many hits chance alone would give (about 5% of the count). Separate expected hits (controls, repeats of one result) from unpredicted ones, and label a single unpredicted hit a hypothesis, not a finding (Yulong, 2026-10-15).
 
 **The null a detector is judged against is CHANCE, not a confound baseline.** Chance means the simulated chance band at that n, not an assumed 0.5. A behaviour-free baseline — a length or style classifier, a scaffold-only predictor, anything that cannot see the behaviour — is a **diagnostic of the model organism, not the bar the detector must clear**. Reporting “the detector failed to beat the style null” converts the organism’s leakiness into the detector’s failure, which is the wrong attribution and reads as a stronger negative result than the data supports. Report both, separately and labelled for what each is: *does it detect* (versus chance) and *can this dataset support a detection claim at all* (how high the behaviour-free baseline sits). A dataset whose style baseline is near ceiling cannot support attribution either way, and that is a finding about the organism to fix, not a verdict on the detector.
 
 **A baseline near its ceiling gets its headroom drawn.** On the comparison plot, draw the headroom (the most any condition could gain, 1 − baseline), and report each gain also as a share of that headroom. A null near the ceiling says little about the treatment, and the page must say so (Yulong, 2026-10-15).
 
-**A number appears only where it discriminates.** A failed attempt is “we could not get it to work”, not take-rates with Wilson bounds; precision on an uninformative quantity dresses a null in rigor it does not have. In prose, one measured quantity per paragraph, with its interval and n; further numbers are a figure or table not yet drawn, and each is attributed to its metric, method, setting and the dataset/model it was measured on.
+**A number appears only where it discriminates.** A failed attempt is “we could not get it to work”, not take-rates with Wilson bounds; precision on an uninformative quantity dresses a null in rigor it does not have. In prose, at most one headline number per paragraph, its interval in the figure; further numbers are a figure not yet drawn.
 
 **State each limitation once, in one dedicated place.** Measure with the imperfect instrument, then surface its issues together; a limitation relitigated beside every number drowns the findings. The per-finding caveat slot carries only what is specific to that finding. Cut caveats that restate the field's default design — keep only limitations a reader would act on — and if a section is mostly qualifications, invert it.
 
-**No pre-registration framing unless a registration exists that a reader can check.** “We pre-registered X” is a process claim, not evidence; state the comparison plainly.
+**No pre-registration framing unless a registration exists that a reader can check.** “We pre-registered X” or “written down before the first call” is a process claim, not evidence; state the comparison plainly, and keep run dates out of a paper body.
 
 **Causal claims match the evidence.** Default register: *associated with*, *consistent with*, *suggests*, *is higher in the X condition*, *we observe*. Reserve causal verbs for tested mechanism or RCT-style designs. When the evidence is strong, say it plainly.
 
@@ -53,7 +53,7 @@ Reviewers should never have to guess what the model actually saw or produced. Fo
 - the research question it answers
 - the models, datasets and hyperparameters — **what is held constant and what is varied**
 - full prompts and prompt templates, not summaries of them — templates clearly separated from filled-in variables, with the rendered prompt beside the template where useful
-- a complete example task or transcript, ideally one positive and one negative
+- a complete example task or transcript, ideally one positive and one negative; a qualitative claim about a pattern names the random sample read end to end and its size
 - agent and monitor affordances
 - the environment's components and how its state changes
 - sample size, and whether anything was resampled
@@ -106,13 +106,13 @@ Manual inspection is iterative, so reviewers must be able to leave notes by high
 
 ## The results page has a fixed shape
 
-At most **three highlighted claims**. For each: a title that states the claim, a figure supporting it, and explanatory text. Then caveats and next steps, with a note on which look promising and what research question each would answer.
+At most **three highlighted claims**, each checked against the data before it is written, whoever proposed it. For each: a title that states the claim, a figure supporting it, and explanatory text. Then caveats and next steps, with a note on which look promising and what research question each would answer.
 
 The cap is on what the page *foregrounds*, not on what it reports: **every run condition appears on the page and is linked, including the failures and the nulls** (`experiments.md`). Three claims hiding seven conditions is exactly the failure this shape exists to prevent.
 
-**Each reported finding is labelled *pre-specified* or *discovered in this data*.** Analysis carries more selection pressure than any other stage — slices, metrics, comparisons and re-judgings are all chosen after seeing the numbers — so state how many slices, metrics and comparisons were examined, not only the ones that survived. A discovered finding is a hypothesis: it is not quoted as a result until fresh episodes have tested it.
+**Each reported finding is labelled *pre-specified* or *discovered in this data*,** with how many slices, metrics and comparisons were examined, not only the ones that survived. A discovered finding is a hypothesis until fresh episodes test it.
 
-Per finding: **claim → figure → caption → setup → implications → caveats and uncertainty → next steps.**
+Per finding: **claim → figure → caption → setup → implications → next steps**; caveats sit together in one section.
 
 This is the page a reviewer opens. It links out to the others: the dataset explainer (tasks, affordances, sampling), the transcript review and labelling page, and the spec proposing what comes next.
 

@@ -55,7 +55,7 @@ Check which pipeline produced an interval before quoting it — the distinction 
 
 ## An interval names its omissions *and* which way they bias
 
-"Names what it covers" is not enough — say the direction. The intervals here omit **question-level clustering** (rows are roughly five to six paraphrases of one question, resampled as if independent), **threshold-estimation noise** (the dev threshold is held fixed across iterations), and **sampling over the set of sandbagging prompts**. All three push the same way: the stated intervals are **narrower than the true uncertainty**. Say that where the number is displayed, so a reader cannot mistake a narrow interval for a precise one.
+"Names what it covers" is not enough — say the direction. The intervals here omit **question-level clustering** (rows are roughly five to six paraphrases of one question, resampled as if independent), **threshold-estimation noise** (the dev threshold is held fixed across iterations), and **sampling over the set of sandbagging prompts**. All three push the same way: the stated intervals are **narrower than the true uncertainty**. Say so once, in the caption or Limitations, so a reader cannot mistake a narrow interval for a precise one.
 
 ## Labels come from the trajectory file, never from the score
 

@@ -37,7 +37,7 @@ Describe experimental paradigm with concrete instantiation.
 > "We investigate a setting in which we want to solve a sequence of programming problems without ever submitting subtly wrong code, using access to a powerful but untrusted model (in our case, GPT-4)..."
 
 ### 4. Key Results (2-3 sentences)
-Specific quantitative findings with baselines.
+State the comparison qualitatively, with at most one headline value. The quote below shows the move, not the number density: it is structure-only.
 > "We find that debate consistently helps both non-expert models and humans answer questions, achieving 76% and 88% accuracy respectively (naive baselines obtain 48% and 60%)."
 
 ### 5. Broader Implications (1 sentence)
@@ -47,7 +47,7 @@ State significance without overclaiming.
 **Key techniques:**
 - Parenthetical definitions: "(protocols)", "(in our case, GPT-4)"
 - Concrete instantiation of abstract concepts
-- Compare to baselines explicitly
+- Compare to baselines explicitly, in words; the figure carries the values
 
 ---
 
@@ -73,7 +73,7 @@ State significance without overclaiming.
 > "Towards addressing the challenge of evaluating models without ground truth, we investigate the question: can debate aid weaker judges in evaluating stronger models?"
 
 ### Contributions (enumerated list)
-Each item: **Bold claim** + supporting detail with numbers + baseline comparison
+Each item: **Bold claim** + one supporting sentence stating the comparison to the baseline in words, with at most one headline value. The quote below is structure-only; its number density is not the target.
 
 > "1. **Weak judges can supervise strong debaters.** The result holds both when using LLMs and when using humans to judge outputs. Specifically, for the most persuasive models we find that non-expert human judges achieve 88% and non-expert LLM judges achieve 76% accuracy with debate, where naive performance is 60% and 48% respectively."
 
@@ -167,8 +167,8 @@ Never use: "Notably", "Importantly", "Crucially", "Interestingly" as openers; "T
 
 ### Establishing Contribution
 - Enumerated findings with bold headers
-- Specific numbers in claims
-- Explicit baseline comparisons: "where naive performance is 60%"
+- At most one headline value per claim; the figure carries the rest
+- Explicit baseline comparisons, stated in words
 - State result AND implication
 
 ### Handling Limitations
@@ -206,7 +206,7 @@ When deciding how many pages to cut, count only the main content. Do not include
 
 ### Abstract
 - [ ] 5 clear parts: problem, question, method, results, implications
-- [ ] Concrete numbers with baseline comparisons
+- [ ] Comparisons to baselines stated in words, at most one headline value
 - [ ] Parenthetical definitions for new terms
 - [ ] ~200-250 words
 
@@ -214,7 +214,7 @@ When deciding how many pages to cut, count only the main content. Do not include
 - [ ] Opens with current practice → limitation pivot
 - [ ] Research question stated explicitly ("we ask", "we investigate")
 - [ ] Contributions enumerated with bold claims + specifics
-- [ ] Numbers include baseline comparisons
+- [ ] Each contribution names its baseline comparison, with at most one headline value
 - [ ] Limitations acknowledged with forward-looking framing
 
 ### Figures
