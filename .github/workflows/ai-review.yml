@@ -173,7 +173,9 @@ jobs:
           ALLOW_FIX: "true"
         run: |
           mkdir -p "$REVIEW_DIR"
-          OWN_SUITE="$(gh api "repos//actions/runs/" -q .check_suite_id)"; export OWN_SUITE
+          OWN_SUITE="$(gh api "repos/$REPO/actions/runs/$RUN_ID" -q .check_suite_id)"
+          [[ "$OWN_SUITE" =~ ^[0-9]+$ ]] || { echo "::error::no check suite id"; exit 1; }
+          export OWN_SUITE
           python3 .github/ai-loop/gate.py | tee -a "$GITHUB_OUTPUT"
           cat "$REVIEW_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -209,6 +211,11 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --quiet uv -r tests/requirements.txt
       - uses: anthropics/claude-code-action@4411a9e9b0283becf4b924f7bce360fd7756c78c # v1.0.290
+        env:
+          # The action authenticates git as the Claude App; its push wrapper only updates
+          # this branch, so the push fires `synchronize` and the loop reviews the new head.
+          CLAUDE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          CLAUDE_PUSH_BRANCH: ${{ github.event.pull_request.head.ref }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Only same-repo branches reach this job, and the fixer must be able to run the tests.
@@ -218,7 +225,7 @@ jobs:
           claude_args: >-
             --model opus
             --max-turns 60
-            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(python -m pytest:*),Bash(tests/run-all.sh:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*)"
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(python -m pytest:*),Bash(tests/run-all.sh:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(/home/runner/work/_actions/anthropics/claude-code-action/4411a9e9b0283becf4b924f7bce360fd7756c78c/scripts/git-add.sh:*),Bash(/home/runner/work/_actions/anthropics/claude-code-action/4411a9e9b0283becf4b924f7bce360fd7756c78c/scripts/git-commit.sh:*),Bash(/home/runner/work/_actions/anthropics/claude-code-action/4411a9e9b0283becf4b924f7bce360fd7756c78c/scripts/git-push.sh:*)"
           prompt: |
             You are fixing PR #${{ github.event.pull_request.number }} in ${{ github.repository }}, round ${{ needs.gate.outputs.round }}.
             Two reviewers (GPT and Gemini) and the CI checks produced the findings in
@@ -230,8 +237,26 @@ jobs:
                `tests/run-all.sh <name>`) and fix the cause.
             3. Follow CLAUDE.md and the rules under claude/rules/.
             4. Never edit .github/, claude/settings.json, claude/hooks/ or anything secret.
-            5. Run the tests, then commit and push to this PR's branch. End the commit message
-               with the line `AI-Loop-Round: ${{ needs.gate.outputs.round }}`.
+            5. Run the tests (`python -m pytest tests/ -q`), then publish with exactly these commands:
+               /home/runner/work/_actions/anthropics/claude-code-action/4411a9e9b0283becf4b924f7bce360fd7756c78c/scripts/git-add.sh -A
+               /home/runner/work/_actions/anthropics/claude-code-action/4411a9e9b0283becf4b924f7bce360fd7756c78c/scripts/git-commit.sh -m "<what you fixed>" -m "AI-Loop-Round: ${{ needs.gate.outputs.round }}"
+               /home/runner/work/_actions/anthropics/claude-code-action/4411a9e9b0283becf4b924f7bce360fd7756c78c/scripts/git-push.sh origin HEAD
+               If no finding was real, push nothing and explain why in your final message.
+
+      - name: Escalate if the fixer pushed nothing
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          OLD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          now=$(gh api "repos/$REPO/pulls/$PR" -q .head.sha)
+          if [ "$now" = "$OLD_SHA" ]; then
+            gh label create needs-yulong -R "$REPO" --color d93f0b --force
+            gh pr edit "$PR" -R "$REPO" --add-label needs-yulong
+            gh pr comment "$PR" -R "$REPO" --body "Claude pushed no change this round (it judged the findings not real, or failed). Its reasoning: $GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
+          fi
 
   merge:
     needs: gate
@@ -249,4 +274,10 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          # Labels and draft state can change while the gate waits on checks: read them again.
+          state=$(gh pr view "$PR" -R "$REPO" --json isDraft,headRefOid,labels \
+            -q '[.isDraft, .headRefOid, ([.labels[].name] | index("hold") != null)] | @tsv')
+          if [ "$state" != "$(printf 'false\t%s\tfalse' "$HEAD_SHA")" ]; then
+            echo "PR changed while the gate ran ($state); not merging."; exit 0
+          fi
           gh pr merge "$PR" -R "$REPO" --squash --delete-branch --match-head-commit "$HEAD_SHA"

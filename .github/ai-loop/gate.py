@@ -56,14 +56,18 @@ def load_findings(
             data = None
     if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
         return [], f"{reviewer}: output was not the findings JSON"
+    if data.get("verdict") not in ("approve", "changes-requested"):
+        return [], f"{reviewer}: verdict missing or invalid"
+    if not all(isinstance(f, dict) and f.get("summary") for f in data["findings"]):
+        return [], f"{reviewer}: a finding was malformed"
+    if data["verdict"] == "changes-requested" and not data["findings"]:
+        return [], f"{reviewer}: requested changes but listed no findings"
     seen = set(data.get("files_reviewed") or [])
     missed = [f for f in pr_files if f not in seen]
     if missed:
         return [], f"{reviewer}: did not review {len(missed)} changed file(s), e.g. `{missed[0]}`"
     out = []
     for f in data["findings"]:
-        if not isinstance(f, dict):
-            continue
         sev = f.get("severity") if f.get("severity") in SEVERITIES else "should-fix"
         out.append({**f, "severity": sev, "reviewer": reviewer})
     return out, None
@@ -149,12 +153,19 @@ def main() -> int:
 
     pr = gh_json(
         "pr", "view", pr_num, "-R", repo,
-        "--json", "isDraft,labels,headRefName,headRefOid,files,comments,state",
+        "--json", "isDraft,labels,headRefName,headRefOid,comments,state,changedFiles",
     )
     if pr["headRefOid"] != sha:
         print("decision=stale")
         return 0
-    files = [f["path"] for f in pr["files"]]
+    # Every file, past the first 100, and both sides of a rename: a file moved out of a
+    # protected path must still count as touching it.
+    entries = json.loads(gh("api", "--paginate", "--slurp",
+                            f"repos/{repo}/pulls/{pr_num}/files?per_page=100"))
+    entries = [e for page in entries for e in page]
+    if len(entries) != pr["changedFiles"]:
+        raise SystemExit(f"listed {len(entries)} files but the PR has {pr['changedFiles']}")
+    files = sorted({p for e in entries for p in (e["filename"], e.get("previous_filename")) if p})
 
     findings, errors = [], []
     for name, fname in (("GPT", "gpt.json"), ("Gemini", "gemini.json")):
@@ -185,6 +196,12 @@ def main() -> int:
         else:
             decision = "needs-yulong"
             why = f"{max_rounds} fix rounds used" if rounds >= max_rounds else "fixes run only on PR events"
+    elif fixable:
+        # should-fix findings are dealt with before anything merges, on every branch alike.
+        if allow_fix and rounds < max_rounds:
+            decision, why = "fix", f"should-fix findings; fix round {rounds + 1} of {max_rounds}"
+        else:
+            decision, why = "needs-yulong", f"should-fix findings left after {rounds} fix round(s)"
     else:
         reason = automerge_reason(cfg, pr, files)
         if reason is None:
@@ -193,8 +210,6 @@ def main() -> int:
             decision, why = "clean", reason
         else:
             decision, why = "needs-yulong", reason
-        if decision != "merge" and fixable and allow_fix and rounds < max_rounds:
-            decision, why = "fix", f"should-fix findings; fix round {rounds + 1} of {max_rounds}"
 
     # Findings file for the fixer, and the summary comment for people.
     body = [MARK_SUMMARY, f"### AI review of `{sha[:7]}`: **{decision}** ({why})", ""]
