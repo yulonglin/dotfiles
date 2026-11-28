@@ -1,0 +1,15 @@
+{
+  "required_checks": ["Budget and security guards", "pytest (ubuntu-latest)", "pytest (macos-latest)"],
+  "checks_timeout_s": 1800,
+  "max_fix_rounds": 2,
+  "automerge": {
+    "enabled": true,
+    "simple_rule": true,
+    "protected_globs": [
+      "claude/hooks/*", "claude/hooks/**", "claude/settings.json", ".claude/*", ".claude/**",
+      ".github/*", ".github/**", "config/git-hooks/*", "config/git-hooks/**",
+      "config/model-router.toml", "custom_bins/dotfiles-secrets", "custom_bins/model-router-wire",
+      ".envrc", "*/.envrc", "*secret*", "tools/claude-tools/*", "tools/claude-tools/**"
+    ]
+  }
+}
