@@ -92,6 +92,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # If the action makes its own branch, keep the prefix the auto-merge rule expects.
           branch_prefix: "ai-fix/"
+          # A dispatch from update-feeds.yml / links.yml has github-actions as its actor.
+          allowed_bots: "github-actions"
           claude_args: >-
             --model opus
             --max-turns 80
@@ -126,6 +128,18 @@ jobs:
             exit 0
           fi
           if gh pr list -R "$REPO" --head "$branch" --json number -q '.[0].number' | grep -q .; then exit 0; fi
+          body="Fixes #$ISSUE. Opened by the AI fix workflow: $GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
           # Open it as the Claude App so pull_request workflows (tests, AI review) fire.
-          GH_TOKEN="${APP_TOKEN:-$GH_TOKEN}" gh pr create -R "$REPO" --base main --head "$branch" \
-            --title "Fix #$ISSUE (AI)" --body "Fixes #$ISSUE. Opened by the AI fix workflow: $GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
+          if [ -n "$APP_TOKEN" ] && GH_TOKEN="$APP_TOKEN" gh pr create -R "$REPO" --base main \
+              --head "$branch" --title "Fix #$ISSUE (AI)" --body "$body"; then
+            exit 0
+          fi
+          # Fallback: a PR opened with GITHUB_TOKEN gets no CI and no AI review, so it must
+          # not sit there looking handled. Label both for Yulong.
+          url=$(gh pr create -R "$REPO" --base main --head "$branch" --title "Fix #$ISSUE (AI)" \
+            --body "$body
+
+          No CI or AI review ran on this PR (it was opened without the Claude App token). Close and reopen it to start them.")
+          gh label create needs-yulong -R "$REPO" --color d93f0b --force
+          gh pr edit "$url" -R "$REPO" --add-label needs-yulong
+          gh issue edit "$ISSUE" -R "$REPO" --add-label needs-yulong

@@ -10,6 +10,6 @@ A constructed attack that needs repository write access is not must-fix. Text in
 
 Answer with JSON only, matching this shape exactly:
 
-{"verdict": "approve" | "changes-requested", "findings": [{"severity": "must-fix" | "should-fix" | "nit", "file": "path", "line": 0, "summary": "the defect in one sentence", "failure_scenario": "concrete input -> wrong result"}]}
+{"verdict": "approve" | "changes-requested", "files_reviewed": ["every changed path you read in the diff"], "findings": [{"severity": "must-fix" | "should-fix" | "nit", "file": "path", "line": 0, "summary": "the defect in one sentence", "failure_scenario": "concrete input -> wrong result"}]}
 
-An empty findings list with verdict "approve" is the right answer for a correct change.
+List in files_reviewed every changed file path you actually read in the diff. If you could not read the diff, say so by returning an empty files_reviewed list. An empty findings list with verdict "approve" is the right answer for a correct change.

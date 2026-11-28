@@ -1,22 +1,59 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["verdict", "findings"],
+  "required": [
+    "verdict",
+    "files_reviewed",
+    "findings"
+  ],
   "properties": {
-    "verdict": {"type": "string", "enum": ["approve", "changes-requested"]},
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "changes-requested"
+      ]
+    },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["severity", "file", "line", "summary", "failure_scenario"],
+        "required": [
+          "severity",
+          "file",
+          "line",
+          "summary",
+          "failure_scenario"
+        ],
         "properties": {
-          "severity": {"type": "string", "enum": ["must-fix", "should-fix", "nit"]},
-          "file": {"type": "string"},
-          "line": {"type": "integer"},
-          "summary": {"type": "string"},
-          "failure_scenario": {"type": "string"}
+          "severity": {
+            "type": "string",
+            "enum": [
+              "must-fix",
+              "should-fix",
+              "nit"
+            ]
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "failure_scenario": {
+            "type": "string"
+          }
         }
+      }
+    },
+    "files_reviewed": {
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     }
   }

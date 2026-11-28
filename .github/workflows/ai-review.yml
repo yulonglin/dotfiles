@@ -213,6 +213,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Only same-repo branches reach this job, and the fixer must be able to run the tests.
           restrict_untrusted_prs: "false"
+          # Rounds after the first are started by the Claude App's own push.
+          allowed_bots: "claude"
           claude_args: >-
             --model opus
             --max-turns 60

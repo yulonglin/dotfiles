@@ -36,8 +36,12 @@ def gh_json(*args: str):
     return json.loads(gh(*args) or "null")
 
 
-def load_findings(path: Path, reviewer: str) -> tuple[list[dict], str | None]:
-    """Return (findings, error). A missing or malformed file means the reviewer was unavailable."""
+def load_findings(
+    path: Path, reviewer: str, pr_files: list[str]
+) -> tuple[list[dict], str | None]:
+    """Return (findings, error). A missing or malformed file, or a review that did not cover
+    every changed file, means the reviewer was unavailable: an empty review must never read
+    as a clean one."""
     if not path.is_file():
         return [], f"{reviewer}: no output (auth failure or crash; see the job log)"
     text = path.read_text()
@@ -52,6 +56,10 @@ def load_findings(path: Path, reviewer: str) -> tuple[list[dict], str | None]:
             data = None
     if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
         return [], f"{reviewer}: output was not the findings JSON"
+    seen = set(data.get("files_reviewed") or [])
+    missed = [f for f in pr_files if f not in seen]
+    if missed:
+        return [], f"{reviewer}: did not review {len(missed)} changed file(s), e.g. `{missed[0]}`"
     out = []
     for f in data["findings"]:
         if not isinstance(f, dict):
@@ -62,7 +70,10 @@ def load_findings(path: Path, reviewer: str) -> tuple[list[dict], str | None]:
 
 
 def wait_for_checks(repo: str, sha: str, required: list[str], own_suite: int, timeout: int):
-    """Poll check runs on `sha` until the required ones finish. Returns (ok, lines)."""
+    """Poll check runs on `sha` until the required ones finish.
+
+    Returns (ok, absent, lines): `absent` is True when a required check never ran or never
+    finished, which a code fix cannot cure, so the gate escalates instead of fixing."""
     deadline = time.time() + timeout
     while True:
         runs = gh_json(
@@ -76,14 +87,14 @@ def wait_for_checks(repo: str, sha: str, required: list[str], own_suite: int, ti
             break
         time.sleep(30)
 
-    lines, ok = [], True
+    lines, ok, absent = [], True, False
     for name in required:
         r = by_name.get(name)
         if r is None:
-            ok = False
+            ok, absent = False, True
             lines.append(f"- ❌ `{name}`: never ran on this SHA")
         elif r["status"] != "completed":
-            ok = False
+            ok, absent = False, True
             lines.append(f"- ❌ `{name}`: still {r['status']} after {timeout // 60} min")
         elif r["conclusion"] != "success":
             ok = False
@@ -99,7 +110,7 @@ def wait_for_checks(repo: str, sha: str, required: list[str], own_suite: int, ti
             lines.append(f"- ❌ `{r['name']}`: {r['conclusion']} ({r['html_url']})")
     if ok:
         lines.append(f"- ✅ checks green ({', '.join(required) or 'none required'})")
-    return ok, lines
+    return ok, absent, lines
 
 
 def automerge_reason(cfg: dict, pr: dict, files: list[str]) -> str | None:
@@ -147,12 +158,12 @@ def main() -> int:
 
     findings, errors = [], []
     for name, fname in (("GPT", "gpt.json"), ("Gemini", "gemini.json")):
-        got, err = load_findings(rdir / fname, name)
+        got, err = load_findings(rdir / fname, name, files)
         findings += got
         if err:
             errors.append(err)
 
-    checks_ok, check_lines = wait_for_checks(
+    checks_ok, checks_absent, check_lines = wait_for_checks(
         repo, sha, cfg.get("required_checks", []), int(os.environ["OWN_SUITE"]),
         int(cfg.get("checks_timeout_s", 1500)),
     )
@@ -165,6 +176,9 @@ def main() -> int:
     if errors:
         decision = "needs-yulong"
         why = "a reviewer was unavailable, so nothing merges on a half review"
+    elif checks_absent:
+        decision = "needs-yulong"
+        why = "a required check never ran or never finished, which a code fix cannot cure"
     elif must or not checks_ok:
         if allow_fix and rounds < max_rounds:
             decision, why = "fix", f"fix round {rounds + 1} of {max_rounds}"

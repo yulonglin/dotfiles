@@ -3,7 +3,7 @@
   "checks_timeout_s": 1800,
   "max_fix_rounds": 2,
   "automerge": {
-    "enabled": true,
+    "enabled": false,
     "simple_rule": true,
     "protected_globs": [
       "claude/hooks/*", "claude/hooks/**", "claude/settings.json", ".claude/*", ".claude/**",
